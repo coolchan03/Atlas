@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setOfficialLookup, setStudyMaterialLookup } from './authority';
-import { setKindLookup, setTaxLookup, taxFromText, type TaxKind, type TaxSource } from './taxSources';
+import { setTypeLookup } from './profiles';
+import { setKindLookup, setTaxLookup, taxFromText, TAX_KINDS, type TaxKind, type TaxSource } from './taxSources';
 
 /**
  * Documents Atlas treats as the standard itself, whatever they are called. Two ways in: the person marks one (the shield on a
@@ -25,8 +26,8 @@ interface S {
   roles: Record<string, 'teach' | 'reference'>;
   setRole: (name: string, role: 'teach' | 'reference' | null) => void;
   /** What the person said a document is (a statute, a court decision...), over what Atlas guessed. 'none' means it is not tax material. */
-  kinds: Record<string, TaxKind | 'none'>;
-  setKind: (name: string, kind: TaxKind | 'none' | null) => void;
+  kinds: Record<string, string>;
+  setKind: (name: string, kind: string | null) => void;
 }
 
 export const useOfficialDocs = create<S>()(
@@ -56,7 +57,11 @@ setStudyMaterialLookup((name) => (useOfficialDocs.getState().studyMaterial ?? []
 
 setTaxLookup((name) => useOfficialDocs.getState().tax[name]);
 
-setKindLookup((name) => (useOfficialDocs.getState().kinds ?? {})[name]);
+setKindLookup((name) => {
+  const chosen = (useOfficialDocs.getState().kinds ?? {})[name];
+  return chosen === 'none' || (chosen && TAX_KINDS.includes(chosen)) ? (chosen as TaxKind | 'none') : undefined; // a type of another profile is not a tax kind
+});
+setTypeLookup((name) => (useOfficialDocs.getState().kinds ?? {})[name]);
 
 /** Called when a document is added: remembers what kind of tax source its first pages show, and which year. */
 export function noteTaxSource(name: string, text: string): TaxSource | null {

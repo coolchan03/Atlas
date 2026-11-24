@@ -133,7 +133,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
         </View>
       )}
 
-      {kbDocs.length > 0 && <SourceRulesBox projectId={projectId} />}
+      {kbDocs.length > 0 && <SourceRulesBox projectId={projectId} names={kbDocs.map((d) => d.name)} />}
 
       {kbDocs.length === 0 && !indexingFile ? (
         <View style={styles.emptyState}>
@@ -147,7 +147,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
               <View style={styles.kbDocInfo}>
                 <Text style={styles.kbDocName} numberOfLines={1}>{doc.name}</Text>
                 <Text style={styles.kbDocSize}>{formatFileSize(doc.size)}</Text>
-                <DocRoleLine name={doc.name} names={kbDocs.map((d) => d.name)} />
+                <DocRoleLine name={doc.name} names={kbDocs.map((d) => d.name)} projectId={projectId} />
               </View>
               <OfficialStandardButton name={doc.name} size={14} />
               <Switch value={doc.enabled === 1} onValueChange={(val) => handleToggleDocument(doc.id, val)}

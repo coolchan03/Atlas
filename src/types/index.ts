@@ -411,6 +411,10 @@ export interface Project {
   citeBooks?: boolean;
   /** The person's own rules for reading this project's documents (which source wins, what binds), replacing the built-in order of authority. */
   sourceRules?: string;
+  /** Which source profile weighs this project's documents: 'auto' (tax when it holds tax material), 'federal-tax', a built-in field, or 'custom'. */
+  profileId?: string;
+  /** The person's own profile, written as lines (see standards/profiles.ts parseProfile), used when profileId is 'custom'. */
+  customProfile?: string;
   isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;

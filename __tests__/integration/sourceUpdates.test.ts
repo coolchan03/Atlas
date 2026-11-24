@@ -41,7 +41,7 @@ it('finds newer official pages marked in code, refuses other sites and PDFs, add
   const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => { buttons?.find((b) => b.text === 'Allow')?.onPress?.(); });
   const fetchMock = jest.fn(async () => ({ ok: true, url: 'https://www.irs.gov/publications/p17', text: async () => PAGE }));
   (global as unknown as { fetch: unknown }).fetch = fetchMock;
-  expect((await call('add_source', { url: 'https://taxblog.example.com/pub17' })).content).toMatch(/not one of the official sites/);
+  expect((await call('add_source', { url: 'https://taxblog.example.com/pub17' })).content).toMatch(/not one of this project's official sites/);
   expect((await call('add_source', { url: 'https://www.irs.gov/pub/irs-pdf/p17.pdf' })).content).toMatch(/is a PDF/);
   expect(alert).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();

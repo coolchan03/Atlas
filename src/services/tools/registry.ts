@@ -289,12 +289,12 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   },
   {
     id: 'source_updates', name: 'source_updates', displayName: 'Look for newer sources', icon: 'refresh-cw',
-    description: "Look on the official sites only (IRS, eCFR, the U.S. Code, the Federal Register, Congress, the courts) for a newer version of a source this project holds, or for a law, ruling or decision on a topic. Each page found is marked in code as NEWER, the same edition or OLDER than a document the project already has. Use when the user asks to look for updates, check whether a source is current, or find a newer ruling, regulation, Public Law or decision. Tell the user what was found and ask before adding anything. Atlas cannot check whether a court case is still good law: say so.",
-    parameters: { source: { type: 'string', description: 'What to look for: a document name in the project, a citation such as "Rev. Proc. 2024-40" or "26 CFR 1.199A", or a topic', required: true } },
+    description: "Look on the official sites of this project's field only (for tax: IRS, eCFR, the U.S. Code, Congress and the courts; for markets, accounting, law or a profile the user wrote: its own list of sites) for a newer version of a source the project holds, or for something new on a topic. Each page found is marked in code as NEWER, the same edition or OLDER than a document the project already has. Use when the user asks to look for updates, check whether a source is current, or find a newer rule, filing, standard, law or decision. Tell the user what was found and ask before adding anything. Atlas cannot check whether a court case is still good law, or that a price is live: say so.",
+    parameters: { source: { type: 'string', description: 'What to look for: a document name in the project, a citation such as "Rev. Proc. 2024-40", "ASC 842" or "10-K Apple", or a topic', required: true } },
   },
   {
     id: 'add_source', name: 'add_source', displayName: 'Add a source to the project', icon: 'plus-circle',
-    description: "Add one official web page (an address on irs.gov, ecfr.gov, uscode.house.gov, federalregister.gov, congress.gov, govinfo.gov or a court's own site) to this project as a document, after the user agrees in a dialog. Use only after source_updates found it and the user said to add it. A newer edition of a work the project holds replaces the older one in answers.",
+    description: "Add one web page from this project's official sites to the project as a document, after the user agrees in a dialog. Use only after source_updates found it and the user said to add it. A newer edition of a work the project holds replaces the older one in answers.",
     parameters: { url: { type: 'string', description: 'The full address of the page, exactly as source_updates showed it', required: true } },
   },
   {

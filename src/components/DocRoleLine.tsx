@@ -4,31 +4,36 @@ import { useTheme } from '../theme';
 import { TYPOGRAPHY } from '../constants';
 import { defaultRole, roleOf } from '../standards/docRoles';
 import { useOfficialDocs } from '../standards/officialDocs';
-import { classifyTaxSource, supersededEditions, type TaxKind } from '../standards/taxSources';
+import { classifyTaxSource, supersededEditions } from '../standards/taxSources';
+import { classifyIn, profileFor } from '../standards/profiles';
+import { useProjectStore } from '../stores';
 
-/** The types a person can give a document, in the order a tap steps through them; after the last, back to what Atlas guessed. */
-const KINDS: Array<{ kind: TaxKind | 'none'; label: string }> = [
+/** The types a person can give a document in federal tax. */
+const TAX_TYPES: Array<{ kind: string; label: string }> = [
   { kind: 'statute', label: 'Internal Revenue Code' }, { kind: 'publicLaw', label: 'Public Law' }, { kind: 'regulation', label: 'Treasury regulation' },
   { kind: 'court', label: 'Court decision' }, { kind: 'bulletin', label: 'IRS ruling, procedure or notice' }, { kind: 'publication', label: 'IRS publication' },
-  { kind: 'textbook', label: 'Textbook or notes' }, { kind: 'none', label: 'Not tax material' },
+  { kind: 'textbook', label: 'Textbook or notes' },
 ];
 
 /**
  * Under a document's name: what it is for (it teaches lessons, or it is reference the lessons are checked against: tap to switch), and a note
  * when a newer edition of the same work is in the project, so the older one is not used.
  */
-export const DocRoleLine: React.FC<{ name: string; names: string[] }> = ({ name, names }) => {
+export const DocRoleLine: React.FC<{ name: string; names: string[]; projectId?: string }> = ({ name, names, projectId }) => {
   const { colors } = useTheme();
   useOfficialDocs((s) => s.roles); // re-render when a role changes
   useOfficialDocs((s) => s.names);
   const chosen = useOfficialDocs((s) => s.kinds?.[name]);
-  const guessed = classifyTaxSource(name);
-  const showKind = !!chosen || !!guessed || names.some((n) => !!classifyTaxSource(n));
+  const proj = useProjectStore((s) => (projectId ? s.projects.find((p) => p.id === projectId) : undefined));
+  const profile = profileFor(proj?.profileId, proj?.customProfile, names);
+  const types = [...(profile === 'federal-tax' ? TAX_TYPES : profile ? profile.types.map((t) => ({ kind: t.id, label: t.label })) : []), { kind: 'none', label: 'Not a source of this kind' }];
+  const showKind = !!profile || !!chosen;
   const nextKind = () => {
-    const at = KINDS.findIndex((k) => k.kind === chosen);
-    useOfficialDocs.getState().setKind(name, at + 1 < KINDS.length ? KINDS[at + 1].kind : null);
+    const at = types.findIndex((k) => k.kind === chosen);
+    useOfficialDocs.getState().setKind(name, at + 1 < types.length ? types[at + 1].kind : null);
   };
-  const kindText = chosen ? KINDS.find((k) => k.kind === chosen)?.label : guessed ? `${guessed.label}${guessed.detail ? `, ${guessed.detail}` : ''}` : 'Not recognised as tax material';
+  const guessed = !profile ? null : profile === 'federal-tax' ? classifyTaxSource(name)?.label ?? null : classifyIn(profile, name)?.type.label ?? null;
+  const kindText = chosen ? types.find((k) => k.kind === chosen)?.label ?? chosen : guessed ?? 'Not recognised';
   const role = roleOf(name);
   const older = supersededEditions(names).has(name);
   const set = (next: 'teach' | 'reference') => useOfficialDocs.getState().setRole(name, next === defaultRole(name) ? null : next);

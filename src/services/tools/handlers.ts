@@ -12,7 +12,8 @@ import * as DT from '../../atlasTools/deviceTools';
 import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGridState';
 import { arg, requireString, EMPTY_WRITE } from './toolArgs';
 import { braveSearch } from './braveSearch';
-import { addSource, findUpdates } from '../../standards/updates';
+import { addSource, findUpdates, resolverFor } from '../../standards/updates';
+import { profileFor } from '../../standards/profiles';
 export { braveSearch };
 import { forceHttps, isBlockedUrl } from './urlSafety';
 import { evaluateExpression } from '../../utils/arithmetic';
@@ -406,16 +407,18 @@ async function handleStandardsTool(call: ToolCall): Promise<string> {
   }
   const projectId = call.context?.projectId;
   const held = await heldDocumentNames(projectId);
+  const proj = projectId ? require('../../stores/projectStore').useProjectStore.getState().getProject(projectId) : undefined; // NOSONAR
+  const res = resolverFor(profileFor(proj?.profileId, proj?.customProfile, held));
   if (call.name === 'source_updates') {
     const source = requireString(call, 'source');
     if (!source) throw new Error('Missing required parameter: source');
-    return findUpdates(source, held, web);
+    return findUpdates(source, held, { search: web, res });
   }
   const url = requireString(call, 'url');
   if (!url) throw new Error('Missing required parameter: url');
   if (!projectId) return 'This chat is not in a project, so there is nowhere to add the source.';
   return addSource(url, {
-    held, confirm: DT.confirm, fetchPage: (u) => handleReadUrl(u, 120000, call.signal),
+    held, res, confirm: DT.confirm, fetchPage: (u) => handleReadUrl(u, 120000, call.signal),
     save: async (name, text) => { await require('../rag').ragService.saveProjectNote({ projectId, name, text, mode: 'replace' }); }, // NOSONAR
   });
 }

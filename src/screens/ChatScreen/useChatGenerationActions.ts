@@ -1,6 +1,6 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
-import { hasTaxSources, sourceRules, supersededEditions, taxLabel, yearNotes } from '../../standards/taxSources';
+import { profileFor, sourceContext } from '../../standards/profiles';
 import { followUpQuery } from '../../services/rag/followUp';
 import { officialDocumentNames } from '../../standards/authority';
 import { noteRouted, routeSpecialists } from '../../services/tools/specialistRouting';
@@ -384,17 +384,17 @@ export async function injectRagContext(projectId: string | undefined, query: str
     // Only point at tools this turn actually has: a missing tool makes small models stall or apologise.
     if (enabledTools.includes('search_knowledge_base')) kbPrompt += '\nUse the search_knowledge_base tool to look up anything else in these documents.';
     if (enabledTools.includes('update_project_document')) kbPrompt += '\nWhen the user asks, or the project instructions say so, update a shared document with update_project_document.';
-    // Tax material: say the order of authority, and leave out the older edition when a newer one of the same work is in the project.
+    // The project's source profile (tax, accounting, markets, law or its own): the order of authority, what is stale, and which older editions are left out.
     const docNames = enabledDocs.map((d: import('../../services/rag').RagDocument) => d.name);
-    const ownRules = useProjectStore.getState().getProject(projectId)?.sourceRules;
-    if (hasTaxSources(docNames) || ownRules?.trim()) kbPrompt += `\n${sourceRules(ownRules)}`;
+    const proj = useProjectStore.getState().getProject(projectId);
+    const profile = profileFor(proj?.profileId, proj?.customProfile, docNames);
     const r = await ragService.searchProject(projectId, query);
-    const old = supersededEditions(docNames);
-    if (old.size) r.chunks = r.chunks.filter((c: { name: string }) => !old.has(c.name));
-    const yearNote = yearNotes(query, r.chunks.map((c: { name: string }) => c.name));
-    if (yearNote) kbPrompt += `\n${yearNote}`;
+    const src = sourceContext(profile, { custom: proj?.sourceRules, names: docNames, query, chunkNames: r.chunks.map((c: { name: string }) => c.name), now: new Date() });
+    if (src.rules) kbPrompt += `\n${src.rules}`;
+    if (src.retired.size) r.chunks = r.chunks.filter((c: { name: string }) => !src.retired.has(c.name));
+    if (src.notes) kbPrompt += `\n${src.notes}`;
     if (r.chunks.length > 0) {
-      kbPrompt += `\n\n${retrievalService.formatForPrompt(r, taxLabel)}`;
+      kbPrompt += `\n\n${retrievalService.formatForPrompt(r, src.label)}`;
       setTurnSources(sourcesFromChunks(r.chunks, enabledDocs)); // numbered as in the prompt, for the source list under the reply
     }
     return prompt + kbPrompt;

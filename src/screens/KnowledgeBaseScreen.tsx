@@ -220,7 +220,7 @@ export const KnowledgeBaseScreen: React.FC = () => {
       <View style={styles.docInfo}>
         <Text style={styles.docName} numberOfLines={1}>{item.name}</Text>
         <Text style={styles.docSize}>{formatFileSize(item.size)}{stats?.documents.find((d) => d.id === item.id) ? ` · ${stats.documents.find((d) => d.id === item.id)!.chunks.toLocaleString('en-US')} passages` : ''}</Text>
-        <DocRoleLine name={item.name} names={kbDocs.map((d) => d.name)} />
+        <DocRoleLine name={item.name} names={kbDocs.map((d) => d.name)} projectId={projectId} />
       </View>
       <OfficialStandardButton name={item.name} />
       <Switch

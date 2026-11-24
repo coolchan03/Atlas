@@ -18,6 +18,7 @@ export interface TaxSource {
   detail?: string;
 }
 
+export const TAX_KINDS: string[] = ['statute', 'publicLaw', 'regulation', 'court', 'bulletin', 'publication', 'textbook'];
 const RANK: Record<TaxKind, number> = { statute: 1, publicLaw: 1, regulation: 2, court: 3, bulletin: 3, publication: 4, textbook: 5 };
 const LABEL: Record<TaxKind, string> = { statute: 'Internal Revenue Code', publicLaw: 'Public Law (session law that amended the Code)', court: 'Court decision', regulation: 'Treasury regulations (CFR)', bulletin: 'Internal Revenue Bulletin', publication: 'IRS publication', textbook: 'textbook' };
 
@@ -149,9 +150,6 @@ export function taxLabel(name: string): string {
 
 /** The order of authority and the rule for editions, to put in a prompt when the project holds tax material. A project can replace it with its own rules (sourceRules). */
 export const TAX_RULES = 'These sources differ in authority and age. Rank them, highest first: the Internal Revenue Code and the Public Laws that amended it; Treasury regulations; court decisions (a decision binds only the courts below it, and a Tax Court memorandum or summary opinion is not binding precedent); IRS rulings, procedures and notices; IRS publications and instructions (they explain the law and are not authority on their own); textbooks. Rank decides a conflict, not date: a newer court opinion does not override a statute, and Congress can amend language a court applied. Between editions of the same source, use the most recent, and apply the version in force for the tax year in question. Say which source, edition and date you used. If a source may be out of date, or you cannot check whether a case is still good law, say so.';
-
-/** The rules to give the model: the project's own words when it wrote them, else the built-in order of authority. */
-export const sourceRules = (custom?: string): string => (custom?.trim() ? `Rules for reading these sources, set by the user (follow them over any default): ${custom.trim()}` : TAX_RULES);
 
 export const hasTaxSources = (names: string[]): boolean => names.some((n) => !!classifyTaxSource(n));
 
