@@ -11,11 +11,15 @@
 export type Baseline = Record<string, string[]>;
 
 /** Stores that are one list of items with an id: learn-a-topic courses, pinned answers, skills (named) and scheduled tasks. */
-const ITEM_LISTS: Record<string, { field: string; id: (x: any) => string }> = {
+const ITEM_LISTS: Record<string, { field: string; id: (x: any) => string; /** Which copy of an item both phones have to keep (default: the newer store's). */ pick?: (a: any, b: any) => any }> = {
   'atlas-topics': { field: 'courses', id: (x) => x.id },
   'atlas-pins': { field: 'pins', id: (x) => x.id },
   'atlas-skills': { field: 'skills', id: (x) => x.name },
   'atlas-schedule': { field: 'tasks', id: (x) => x.id },
+  // Your own helpers, journal pages and trips: what is written on either phone stays. A journal day edited on both keeps the later edit.
+  'atlas-custom-helpers': { field: 'helpers', id: (x) => x.id },
+  'atlas-journal': { field: 'entries', id: (x) => x.day, pick: (a, b) => ((b.updatedAt ?? 0) > (a.updatedAt ?? 0) ? b : a) },
+  'atlas-trips': { field: 'trips', id: (x) => x.id },
   // Voices made on either phone all stay; the samples themselves travel separately (voiceReferences.ts).
   'atlas-voice-profiles': { field: 'profiles', id: (x) => x.id },
   'atlas-voice-reference-metadata-v1': { field: 'references', id: (x) => x.id },
@@ -92,7 +96,8 @@ export function mergeListStore(key: string, o: { local: string; remote: string; 
     state = { ...mine, [items.field]: merged.map((x) => {
       const other = both.get(items.id(x));
       const inNewer = (newer[items.field] ?? []).some((n: Obj) => items.id(n) === items.id(x));
-      return key === 'atlas-topics' && other && inNewer ? mergeCourse(x, other) : x;
+      if (key === 'atlas-topics' && other && inNewer) return mergeCourse(x, other);
+      return items.pick && other && inNewer ? items.pick(x, other) : x;
     }) };
   } else if (key === 'atlas-maps') {
     state = { ...mine, imperial: newer.imperial ?? mine.imperial,

@@ -62,6 +62,24 @@ describe('combine', () => {
   });
 });
 
+describe('journal, trips and helpers', () => {
+  const st = (state: object) => JSON.stringify({ state, version: 1 });
+  it('keeps pages, trips and helpers written on either phone, and the later edit of a day', () => {
+    const { combine } = load();
+    const page = (day: string, text: string, updatedAt: number) => ({ day, text, mood: null, updatedAt });
+    const j = JSON.parse(combine('atlas-journal', { remoteNewer: false,
+      local: st({ entries: [page('2026-11-01', 'mine, early', 1), page('2026-11-02', 'only here', 5)] }),
+      remote: st({ entries: [page('2026-11-01', 'theirs, later', 9), page('2026-11-03', 'only there', 6)] }) }));
+    expect(j.state.entries.map((e: { day: string; text: string }) => `${e.day}:${e.text}`).sort())
+      .toEqual(['2026-11-01:theirs, later', '2026-11-02:only here', '2026-11-03:only there']);
+    const t = JSON.parse(combine('atlas-trips', { local: st({ trips: [{ id: 'a' }], activeId: 'a' }), remote: st({ trips: [{ id: 'b' }], activeId: 'b' }) }));
+    expect(t.state.trips.map((x: { id: string }) => x.id).sort()).toEqual(['a', 'b']);
+    expect(t.state.activeId).toBe('a');
+    const h = JSON.parse(combine('atlas-custom-helpers', { local: st({ helpers: [{ id: 'x' }] }), remote: st({ helpers: [{ id: 'y' }] }) }));
+    expect(h.state.helpers).toHaveLength(2);
+  });
+});
+
 describe('mergeLanguage', () => {
   it('keeps the best of both phones', () => {
     const { mergeLanguage } = load();
