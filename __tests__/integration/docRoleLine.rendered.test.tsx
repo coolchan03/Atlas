@@ -17,4 +17,13 @@ it('shows what a document is for, switches it on a tap, and says when an older e
   expect(roleOf('Federal Taxation textbook.pdf')).toBe('reference');
   rtl.fireEvent.press(view.getByTestId('role-Federal Taxation textbook.pdf'));
   expect(roleOf('Federal Taxation textbook.pdf')).toBe('teach');
+
+  // The type of a source: what Atlas guessed, and a tap to correct it (a guess made by the person is marked, and the last tap goes back to the guess).
+  expect(view.getByText('Type: Internal Revenue Code')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('kind-Federal Taxation textbook.pdf'));
+  expect(view.getByText('Type: Internal Revenue Code (set by you)')).toBeTruthy();
+  for (let i = 0; i < 7; i += 1) rtl.fireEvent.press(view.getByTestId('kind-Federal Taxation textbook.pdf'));
+  expect(view.getByText('Type: Not tax material (set by you)')).toBeTruthy();
+  rtl.fireEvent.press(view.getByTestId('kind-Federal Taxation textbook.pdf'));
+  expect(view.queryByText(/set by you/)).toBeNull();
 });

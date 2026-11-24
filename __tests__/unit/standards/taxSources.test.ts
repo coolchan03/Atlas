@@ -9,6 +9,11 @@ describe('tax sources by name', () => {
     ['Rev. Proc. 2024-40.pdf', 'bulletin'],
     ['IRS Pub 17 (2024).pdf', 'publication'],
     ['p535_2023.pdf', 'publication'],
+    ['Public Law 115-97 (TCJA).pdf', 'publicLaw'],
+    ['PL 119-21.pdf', 'publicLaw'],
+    ['Pub. L. 115-97.pdf', 'publicLaw'],
+    ['Smith v Commissioner T.C. Memo 2021-14.pdf', 'court'],
+    ['Jones v. Commissioner 10th Cir 2019.pdf', 'court'],
   ])('%s is a %s', (name, kind) => { expect(classifyTaxSource(name)?.kind).toBe(kind); });
 
   it('does not treat an ordinary textbook as tax law', () => {
@@ -21,6 +26,16 @@ describe('tax sources by name', () => {
     expect([...old]).toEqual(['IRS Pub 17 (2023).pdf']);
     expect(taxLabel('IRS Pub 17 (2024).pdf')).toBe('IRS publication, 2024');
   });
+});
+
+describe('court decisions say how far they bind', () => {
+  it.each([
+    ['Smith v Commissioner T.C. Memo 2021-14.pdf', 'Tax Court memorandum, not binding precedent'],
+    ['Lee v Commissioner Tax Court Summary Opinion 2020.pdf', 'Tax Court summary opinion, not precedent'],
+    ['Jones v Commissioner 10th Circuit 2019.pdf', 'Court of Appeals, 10th Circuit, binding in that circuit'],
+    ['Jones v Commissioner 2nd Circuit.pdf', 'Court of Appeals, 2nd Circuit, binding in that circuit'],
+    ['Loper Bright Supreme Court 2024.pdf', 'U.S. Supreme Court, binding everywhere'],
+  ])('%s: %s', (name, detail) => { expect(classifyTaxSource(name)?.detail).toBe(detail); });
 });
 
 describe('which source wins', () => {

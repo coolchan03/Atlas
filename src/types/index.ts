@@ -409,6 +409,8 @@ export interface Project {
   answerLength?: 'short' | 'normal';
   /** Answers from this project's books quote the passage and name the document, and say when something is not in the books. */
   citeBooks?: boolean;
+  /** The person's own rules for reading this project's documents (which source wins, what binds), replacing the built-in order of authority. */
+  sourceRules?: string;
   isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;

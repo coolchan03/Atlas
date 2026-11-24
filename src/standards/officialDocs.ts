@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setOfficialLookup, setStudyMaterialLookup } from './authority';
-import { setTaxLookup, taxFromText, type TaxSource } from './taxSources';
+import { setKindLookup, setTaxLookup, taxFromText, type TaxKind, type TaxSource } from './taxSources';
 
 /**
  * Documents Atlas treats as the standard itself, whatever they are called. Two ways in: the person marks one (the shield on a
@@ -24,6 +24,9 @@ interface S {
   /** What the person decided a document is for, over the default: lessons are taught from it, or lessons are only checked against it. */
   roles: Record<string, 'teach' | 'reference'>;
   setRole: (name: string, role: 'teach' | 'reference' | null) => void;
+  /** What the person said a document is (a statute, a court decision...), over what Atlas guessed. 'none' means it is not tax material. */
+  kinds: Record<string, TaxKind | 'none'>;
+  setKind: (name: string, kind: TaxKind | 'none' | null) => void;
 }
 
 export const useOfficialDocs = create<S>()(
@@ -35,6 +38,8 @@ export const useOfficialDocs = create<S>()(
       markStudyMaterial: (name) => set((s) => (s.studyMaterial.includes(name) ? s : { studyMaterial: [...s.studyMaterial, name] })),
       tax: {},
       roles: {},
+      kinds: {},
+      setKind: (name, kind) => set((s) => { const next = { ...s.kinds }; if (kind) next[name] = kind; else delete next[name]; return { kinds: next }; }),
       setRole: (name, role) => set((s) => { const next = { ...s.roles }; if (role) next[name] = role; else delete next[name]; return { roles: next }; }),
       setTax: (name, found) => set((s) => ({ tax: { ...s.tax, [name]: found } })),
       mark: (name) => set((s) => (s.names.includes(name) ? s : { names: [...s.names, name], refused: s.refused.filter((n) => n !== name) })),
@@ -50,6 +55,8 @@ setOfficialLookup((name) => useOfficialDocs.getState().names.includes(name));
 setStudyMaterialLookup((name) => (useOfficialDocs.getState().studyMaterial ?? []).includes(name));
 
 setTaxLookup((name) => useOfficialDocs.getState().tax[name]);
+
+setKindLookup((name) => (useOfficialDocs.getState().kinds ?? {})[name]);
 
 /** Called when a document is added: remembers what kind of tax source its first pages show, and which year. */
 export function noteTaxSource(name: string, text: string): TaxSource | null {

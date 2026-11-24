@@ -1,5 +1,6 @@
 import { OfficialStandardButton } from '../components/OfficialStandardButton';
 import { DocRoleLine } from '../components/DocRoleLine';
+import { SourceRulesBox } from '../components/SourceRulesBox';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -131,6 +132,8 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
           <Text style={styles.kbIndexingText}>Cite my books: answers quote the passage, name the document, and say "Not in your books" when it is not there.</Text>
         </View>
       )}
+
+      {kbDocs.length > 0 && <SourceRulesBox projectId={projectId} />}
 
       {kbDocs.length === 0 && !indexingFile ? (
         <View style={styles.emptyState}>
