@@ -362,6 +362,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onRetry,
   onEdit,
   onCheckAnswer,
+  onCheckSources,
   onDelete,
   onSaveToProject,
   onGenerateImage,
@@ -442,6 +443,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     setShowActionMenu(false);
     const why = whyThisReply(message.generationMeta);
     Alert.alert('Why this reply', why || 'Nothing was recorded about what this reply was written from.');
+  };
+  const handleSources = () => {
+    setShowActionMenu(false);
+    setTimeout(() => onCheckSources?.(message), 350);
   };
   const handleCheck = () => {
     setShowActionMenu(false);
@@ -574,7 +579,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         onRetry={handleRetry}
         onDelete={handleDelete}
         onSaveToProject={handleSaveToProject}
-        extras={{ pinned, onPin: handlePin, onSlides: isStreaming ? undefined : handleSlides, onCheck: isStreaming || !onCheckAnswer ? undefined : handleCheck, onWhy: isStreaming ? undefined : handleWhy, onAsk: isStreaming ? undefined : handleAsk }}
+        extras={{ pinned, onPin: handlePin, onSlides: isStreaming ? undefined : handleSlides, onCheck: isStreaming || !onCheckAnswer ? undefined : handleCheck, onSources: isStreaming || !onCheckSources ? undefined : handleSources, onWhy: isStreaming ? undefined : handleWhy, onAsk: isStreaming ? undefined : handleAsk }}
         onGenerateImage={handleGenerateImage}
         onSpeak={handleSpeak}
         onSelectText={handleSelectText}

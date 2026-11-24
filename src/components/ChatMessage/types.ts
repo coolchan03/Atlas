@@ -10,6 +10,8 @@ export interface ChatMessageProps {
   onDelete?: (message: Message) => void;
   /** Ask the model to check this reply claim by claim. */
   onCheckAnswer?: (message: Message) => void;
+  /** Looks the reply's claims up in the person's own documents. */
+  onCheckSources?: (message: Message) => void;
   onSaveToProject?: (message: Message) => void;
   onGenerateImage?: (prompt: string) => void;
   showActions?: boolean;
