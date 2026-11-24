@@ -66,6 +66,7 @@ import { TranslatorScreen } from '../translator/TranslatorScreen';
 import { RadioScreen } from '../radio/RadioScreen';
 import { CurrencyScreen } from '../currency/CurrencyScreen';
 import { JournalScreen } from '../journal/JournalScreen';
+import { TripScreen } from '../trip/TripScreen';
 import { BriefingPaperScreen } from '../screens/BriefingPaperScreen';
 import { useLayoutClass } from '../hooks/useLayoutClass';
 import {
@@ -346,6 +347,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Radio" component={RadioScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Currency" component={CurrencyScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Journal" component={JournalScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="Trip" component={TripScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Study" component={StudyScreen} />
         <RootStack.Screen name="Practice" component={PracticeScreen} />
         <RootStack.Screen name="Planner" component={PlannerScreen} />
