@@ -93,8 +93,12 @@ interface AddDeps {
 
 /** The name a fetched page is saved under: its heading and the site. The day it was fetched is written inside the document, not in the name, because a year in a name is read as the edition's year. Pure. */
 function savedName(text: string, url: string): string {
-  const heading = (text.split('\n').map((l) => l.replace(/^#+\s*/, '').trim()).find((l) => l.length >= 6) ?? 'Official source').replace(/[\\/]/g, ' ').slice(0, 60);
-  return `${heading} (${hostOf(url)})`;
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  // A page's own heading is its name; without one, the last part of its address ("p17" or "rev-proc-2025-32") stands in.
+  const heading = lines.find((l) => /^#{1,3}\s+\S/.test(l))?.replace(/^#+\s*/, '')
+    ?? decodeURIComponent(url.split(/[?#]/)[0].split('/').filter(Boolean).pop() ?? '').replace(/\.[a-z]{2,4}$/i, '').replace(/[-_]+/g, ' ')
+    ?? 'Official source';
+  return `${heading.replace(/[\\/]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Official source'} (${hostOf(url)})`;
 }
 
 /** Adds one official page to the project after the person agrees. Returns what happened, in words the model repeats. */

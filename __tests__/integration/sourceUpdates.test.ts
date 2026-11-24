@@ -9,7 +9,7 @@ import { Alert } from 'react-native';
 const mockSearch = jest.fn();
 jest.mock('../../src/services/tools/webSearchProviders', () => ({ searchWeb: (...a: unknown[]) => mockSearch(...a) }));
 
-const PAGE = `<html><body><h1>Publication 17 (2024), Your Federal Income Tax</h1><p>${'Filing status and dependents are explained here. '.repeat(20)}</p></body></html>`;
+const PAGE = `<html><body><p>Skip to main content</p><h1>Publication 17 (2024), Your Federal Income Tax</h1><p>${'Filing status and dependents are explained here. '.repeat(20)}</p></body></html>`;
 
 it('finds newer official pages marked in code, refuses other sites and PDFs, adds only after consent, and retires the older edition', async () => {
   installNativeBoundary({ fs: true });

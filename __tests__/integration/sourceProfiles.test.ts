@@ -48,4 +48,15 @@ it('applies a field\'s ranking, dating and sites to the prompt and to the update
   expect(found).toMatch(/Statute of Examples \(2025\)[\s\S]*NEWER than "Statute of Examples \(2023\)\.pdf"/);
   expect(found).not.toContain('elsewhere.example.net');
   expect(parseProfile('One line only').problems[0]).toMatch(/needs a name/);
+
+  // Built-in guesses and the person's keywords match whole words only.
+  const law = profileFor('law', undefined, []);
+  const kind = (name: string) => require('../../src/standards/profiles').classifyIn(law, name)?.type.id;
+  expect(kind('26 CFR Part 1 Code of Federal Regulations.pdf')).toBe('regulation');
+  expect(kind('Administrative Code Title 5.pdf')).toBe('regulation');
+  expect(kind('Internal Revenue Code Title 26.pdf')).toBe('statute');
+  expect(kind('Smith v Jones 2019.pdf')).toBe('case');
+  const mine = profileFor('custom', 'Facts | act, law\nsites: x.example.org', []);
+  expect(require('../../src/standards/profiles').classifyIn(mine, 'Fact sheet decode notes.pdf')).toBeNull(); // "act" is not inside "fact"
+  expect(require('../../src/standards/profiles').classifyIn(mine, 'The Act of 2019.pdf')?.type.label).toBe('Facts');
 });

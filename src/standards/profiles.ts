@@ -76,7 +76,7 @@ const LAW: SourceProfile = {
   id: 'law', name: 'Law (general)',
   types: ranked([
     { id: 'constitution', label: 'Constitution', match: /\b(constitution|bill of rights)\b/i, edition: false },
-    { id: 'statute', label: 'Statute', match: /\b(statutes?|u\.?s\.?c|public law|ordinance|code)\b/i, edition: true },
+    { id: 'statute', label: 'Statute', match: /\b(statutes?|u\.?s\.?c|public law|ordinance)\b|(?<!administrative\s)\bcode\b(?!\s+of\s+federal\s+regulations)/i, edition: true },
     { id: 'regulation', label: 'Regulation', match: /\b(cfr|regulations?|administrative code)\b/i, edition: true },
     { id: 'case', label: 'Court decision', match: /\b[a-z]+ v\.? [a-z]+|\b(circuit|court of appeals|supreme court|district court|opinion)\b/i, edition: false },
     { id: 'guidance', label: 'Agency guidance', match: /\b(guidance|opinion letter|advisory|bulletin|notice|faq)\b/i, edition: true },
@@ -110,7 +110,7 @@ export function parseProfile(text: string): { profile: SourceProfile; problems: 
     const keys = words.split(',').map((s) => s.trim()).filter(Boolean);
     if (!label || !keys.length) { problems.push(`Line ${n + 1} needs a name and some words to recognise it by, like: Statutes | code, statute | edition`); return; }
     const dated = /^dated(?:\s+(\d+))?$/i.exec(mode);
-    types.push({ id: `custom-${types.length + 1}`, label, rank: types.length + 1, match: new RegExp(`(?:${keys.map(escape).join('|')})`, 'i'), edition: !dated && /^edition$/i.test(mode), staleDays: dated?.[1] ? Number(dated[1]) : undefined });
+    types.push({ id: `custom-${types.length + 1}`, label, rank: types.length + 1, match: new RegExp(`(?<![a-z0-9])(?:${keys.map(escape).join('|')})(?![a-z0-9])`, 'i'), edition: !dated && /^edition$/i.test(mode), staleDays: dated?.[1] ? Number(dated[1]) : undefined });
   });
   return { profile: { id: 'custom', name: 'My own', types, sites, rules: rules || `These sources differ in authority. Rank them, highest first: ${types.map((t) => t.label).join(', then ')}. Rank decides a conflict, not date. Say which source and date you used, and say if a source may be out of date.` }, problems };
 }
