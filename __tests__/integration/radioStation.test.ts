@@ -2,6 +2,7 @@
 import { DEFAULT_RADIO, rollShow, seeded, type RadioSettings } from '../../src/radio/dice';
 import { GENRES } from '../../src/radio/tables';
 import { STYLES } from '../../src/music/styles';
+import { breakLine, timeCheck } from '../../src/radio/announce';
 import { runStation, type StationDeps, type StationEvent } from '../../src/radio/station';
 
 interface Track { id: number; seconds: number }
@@ -154,4 +155,26 @@ it('has a genre for every Music Studio style, so the station can play anything t
   expect(Object.keys(STYLES).filter((s) => !used.has(s as keyof typeof STYLES))).toEqual([]);
   expect(new Set(GENRES.map((g) => g.id)).size).toBe(GENRES.length); // no id twice
   expect(GENRES.length).toBeGreaterThan(65);
+});
+
+it('says radio things in every break: what just played, the station name, now and then the time, and what is next', async () => {
+  const radio = build({ stationName: 'AI FM', host: true, musicOnly: true }, { songs: 4 });
+  await radio.run();
+  const said = spoken(radio.log);
+  expect(said.length).toBe(4);
+  for (const line of said) expect(line).toMatch(/AI FM\./); // the name is said in every break, not every third
+  expect(said[0]).not.toMatch(/^(That was|You just heard)/); // nothing has played before the first break
+  for (const line of said.slice(1)) expect(line).toMatch(/^(That was|You just heard) an? .+ (song|poem) about /); // the song that just ended is named
+  for (const line of said) expect(line).toMatch(/(Up next|Coming up|Next on the station),/);
+});
+
+it('adds the time of day to a break about one time in four, said the way a host says it', () => {
+  const show = rollShow(DEFAULT_RADIO, seeded(2));
+  const at = new Date(2026, 10, 24, 21, 41);
+  const base = { next: show, name: 'AI FM', theme: '', withTheme: false, now: at };
+  expect(timeCheck(at)).toBe('It is 9:41 PM.');
+  expect(timeCheck(new Date(2026, 10, 24, 0, 5))).toBe('It is 12:05 AM.');
+  expect(breakLine(base, () => 0.1)).toContain('It is 9:41 PM.'); // a low roll adds it
+  expect(breakLine(base, () => 0.9)).not.toContain('It is 9:41 PM.'); // a high roll does not
+  expect(breakLine({ ...base, name: '  ' }, () => 0.9)).toContain('AI FM'); // an empty name falls back to the default
 });

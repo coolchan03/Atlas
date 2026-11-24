@@ -23,7 +23,7 @@ export interface RadioSettings {
   /** Soft songs only: calm genres, calm tones, no lively tunes (for sleep or reading). */
   calmOnly: boolean;
 }
-export const DEFAULT_RADIO: RadioSettings = { theme: '', stationName: 'Atlas Radio', poemChance: 0.4, musicOnly: false, maxSongSeconds: 180, host: true, calmOnly: false };
+export const DEFAULT_RADIO: RadioSettings = { theme: '', stationName: 'AI FM', poemChance: 0.4, musicOnly: false, maxSongSeconds: 180, host: true, calmOnly: false };
 
 export interface Show {
   genre: Genre; topic: Entry; subject: Entry; tone: Tone; form: Form; energy: Energy;

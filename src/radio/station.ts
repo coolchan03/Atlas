@@ -5,7 +5,7 @@
  * through `deps`, so the whole loop runs in a test with a fake clock.
  */
 import type { MusicScore } from '../music/types';
-import { nextUp, stationId } from './announce';
+import { breakLine } from './announce';
 import { rollShow, type History, type RadioSettings, type Random, type Show, EMPTY_HISTORY } from './dice';
 import { poemForVoice } from './poem';
 import { chooseSound, diceSound, tuneFor, type AskModel, type Sound } from './sound';
@@ -111,7 +111,7 @@ export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H
       const show = roll();
       deps.report({ kind: 'break', show });
       const preparing: Promise<Prepared<H> | null> = prepareShow(show, settings, deps).catch((e) => { deps.report({ kind: 'problem', message: String((e as Error)?.message || e) }); return null; });
-      if (settings.host) await deps.speak(count % 3 === 0 ? `${stationId(settings.stationName, settings.theme, deps.rng)} ${nextUp(show, deps.rng)}` : nextUp(show, deps.rng));
+      if (settings.host) await deps.speak(breakLine({ previous: played?.show, next: show, name: settings.stationName, theme: settings.theme, withTheme: count % 3 === 0, now: new Date(Date.now()) }, deps.rng));
       const next = await preparing;
       if (stopped()) { if (next) await discard(next.handle); break; }
       if (!next) { if (!(await deps.wait(5000))) break; continue; } // could not be made: try another

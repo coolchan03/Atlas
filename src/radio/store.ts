@@ -8,7 +8,11 @@ interface RadioSettingsState extends RadioSettings { set: (patch: Partial<RadioS
 export const useRadioSettings = create<RadioSettingsState>()(persist((set) => ({
   ...DEFAULT_RADIO,
   set: (patch) => set(patch),
-}), { name: 'atlas-radio', version: 1, storage: createJSONStorage(() => AsyncStorage), partialize: ({ set: _set, ...settings }) => settings }));
+}), {
+  name: 'atlas-radio', version: 2, storage: createJSONStorage(() => AsyncStorage), partialize: ({ set: _set, ...settings }) => settings,
+  // The first default name was "Atlas Radio"; a station still carrying it is renamed to the new default.
+  migrate: (saved: any) => ({ ...saved, ...(saved?.stationName === 'Atlas Radio' ? { stationName: DEFAULT_RADIO.stationName } : {}) }),
+}));
 
 /** What the station is doing now. Never saved: it describes this run. */
 interface RadioRun {
