@@ -17,6 +17,22 @@ export const EXAMPLE_HELPERS: ExampleHelper[] = [
     steps: 'field: Amount borrowed\nfield: Yearly rate\nfield: Months\ncalc: Monthly rate | {Yearly rate} / 100 / 12\ncalc: Payment | round({Amount borrowed} * {Monthly rate} / (1 - (1 + {Monthly rate}) ^ (0 - {Months})), 2)\ncalc: Total paid | round({Payment} * {Months}, 2)',
   },
   {
+    id: 'budget-502030', title: 'Budget: needs, wants, savings', summary: 'Splits an income 50, 30 and 20', help: 'Fill in the monthly income after tax.',
+    steps: 'field: Monthly income\ncalc: Needs (50%) | round({Monthly income} * 0.5, 2)\ncalc: Wants (30%) | round({Monthly income} * 0.3, 2)\ncalc: Savings (20%) | round({Monthly income} * 0.2, 2)',
+  },
+  {
+    id: 'own-rate', title: 'Money at my own rate', summary: 'Converts an amount at a rate you type', help: 'The rate is how much of the other money one unit of yours buys (for example 0.92).',
+    steps: 'field: Amount\nfield: Rate\ncalc: Converted | round({Amount} * {Rate}, 2)\ncalc: Back again | round({Converted} / {Rate}, 2)',
+  },
+  {
+    id: 'temperature', title: 'Temperature', summary: 'Celsius to Fahrenheit and back', help: 'Type a temperature in Celsius.',
+    steps: 'field: Celsius\ncalc: Fahrenheit | round({Celsius} * 9 / 5 + 32, 1)\ncalc: Kelvin | round({Celsius} + 273.15, 2)',
+  },
+  {
+    id: 'distance', title: 'Distance', summary: 'Kilometres to miles, and the walking time', help: 'Type a distance in kilometres.',
+    steps: 'field: Kilometres\ncalc: Miles | round({Kilometres} * 0.621371, 2)\ncalc: Hours walking at 5 km/h | round({Kilometres} / 5, 1)\ncalc: Hours driving at 80 km/h | round({Kilometres} / 80, 1)',
+  },
+  {
     id: 'recipe-scaler', title: 'Recipe scaler', summary: 'Scales every quantity in a recipe', help: 'Paste the recipe, then say how many it serves and how many you want.',
     steps: 'field: Serves now\nfield: Serves wanted\ncalc: Scale | round({Serves wanted} / {Serves now}, 3)\nai: Rewrite the recipe with every quantity multiplied by the scale, keeping the same units. Do not change the steps.',
   },

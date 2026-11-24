@@ -66,3 +66,24 @@ describe('calc: steps (exact arithmetic done by code)', () => {
     expect(await run('calc: Bad | sqrt(0 - 4)', {})).toMatchObject({ status: 'failed', error: expect.stringMatching(/no number as its answer/) });
   });
 });
+
+it('every example helper in the editor reads without a mistake and has a title, a summary and something to do', () => {
+  const { EXAMPLE_HELPERS } = require('../../src/workflows/exampleHelpers');
+  expect(EXAMPLE_HELPERS.length).toBeGreaterThanOrEqual(9);
+  for (const x of EXAMPLE_HELPERS) {
+    expect({ id: x.id, errors: parseSteps(x.steps).errors }).toEqual({ id: x.id, errors: [] });
+    expect(x.title && x.summary && x.help).toBeTruthy();
+  }
+});
+
+it('the temperature and budget examples give the right numbers', async () => {
+  const { EXAMPLE_HELPERS } = require('../../src/workflows/exampleHelpers');
+  const run = async (id: string, fields: Record<string, string>) => {
+    const x = EXAMPLE_HELPERS.find((e: { id: string }) => e.id === id);
+    const wf = toWorkflow({ id, title: x.title, summary: '', help: '', steps: x.steps, createdAt: 1 });
+    return (await advance(wf, newRun(wf, 'r', wf.input.make('', fields)), { ask: async () => 'x' })).waiting?.summary;
+  };
+  expect(await run('temperature', { f0: '100' })).toBe('Fahrenheit: 212\nKelvin: 373.15');
+  expect(await run('budget-502030', { f0: '3000' })).toBe('Needs (50%): 1500\nWants (30%): 900\nSavings (20%): 600');
+  expect(await run('own-rate', { f0: '100', f1: '0.92' })).toBe('Converted: 92\nBack again: 100');
+});
