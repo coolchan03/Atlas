@@ -67,6 +67,7 @@ import { RadioScreen } from '../radio/RadioScreen';
 import { StormWatchScreen } from '../storm/StormWatchScreen';
 import { TimeCapsuleScreen } from '../capsule/TimeCapsuleScreen';
 import { FormulaScreen } from '../formulas/FormulaScreen';
+import { AskNotesScreen } from '../notes/AskNotesScreen';
 import { CurrencyScreen } from '../currency/CurrencyScreen';
 import { JournalScreen } from '../journal/JournalScreen';
 import { TripScreen } from '../trip/TripScreen';
@@ -352,6 +353,7 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="StormWatch" component={StormWatchScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="TimeCapsule" component={TimeCapsuleScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Formula" component={FormulaScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="AskNotes" component={AskNotesScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Currency" component={CurrencyScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Journal" component={JournalScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Trip" component={TripScreen} options={{ headerShown: false }} />

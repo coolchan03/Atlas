@@ -28,19 +28,24 @@ function passagesOf(text: string): string[] {
   return passages;
 }
 
-/** Reads every passage with the embedding model. `onProgress` hears how many are done. A passage the model cannot read is left without a vector (it is found by its words instead). */
-export async function buildIndex(text: string, onProgress: (done: number, total: number) => void = () => undefined): Promise<DocIndex> {
-  const passages = passagesOf(text);
+/** Reads every passage with the embedding model. `onProgress` hears how many are done. A passage the model cannot read is left without a vector (it is found by its words instead). A passage already in `known` is not read again. */
+export async function indexPassages(passages: string[], onProgress: (done: number, total: number) => void = () => undefined, known?: Map<string, number[] | null>): Promise<DocIndex> {
   const vectors: Array<number[] | null> = [];
   try {
     await embeddingService.load();
     for (let i = 0; i < passages.length; i += 1) {
-      vectors.push(await embeddingService.embed(passages[i]).catch(() => null));
+      const have = known?.get(passages[i]);
+      const vector = have !== undefined ? have : await embeddingService.embed(passages[i]).catch(() => null);
+      known?.set(passages[i], vector);
+      vectors.push(vector);
       onProgress(i + 1, passages.length);
     }
   } catch { while (vectors.length < passages.length) vectors.push(null); }
   return { passages, vectors };
 }
+
+/** Reads a document: cut into passages, each read by the embedding model. */
+export const buildIndex = (text: string, onProgress?: (done: number, total: number) => void): Promise<DocIndex> => indexPassages(passagesOf(text), onProgress);
 
 const words = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
 
@@ -76,15 +81,26 @@ export async function answerQuestion(question: string, doc: { text: string; inde
     const text = (await askShaped(WHOLE_SYSTEM, `Notes from the whole document:\n${notes}\n\nQuestion: ${q}\nAnswer:`, { label: 'Answering from the whole document', maxTokens: ANSWER_TOKENS })).trim();
     return { text, from: [], whole: true };
   }
-  const near = (await closestPassages(q, doc.index)).sort((a, b) => a - b);
-  if (!near.length) return { text: 'I could not find anything about that in the document.', from: [], whole: false };
+  return answerFromPassages(q, doc.index, { none: 'I could not find anything about that in the document.', task: 'Answering from the document' });
+}
+
+/**
+ * Answers from the few passages closest in meaning to the question, citing their numbers. `labelOf` names where a passage came from
+ * (a journal day, a chat), and is shown to the AI and returned so the screen can say it.
+ */
+export async function answerFromPassages(question: string, index: DocIndex, opts: { labelOf?: (i: number) => string; none?: string; task?: string } = {}): Promise<Answer> {
+  const { labelOf = () => '', none = 'I could not find anything about that.', task = 'Answering from the passages' } = opts;
+  const q = question.trim().slice(0, 400);
+  const near = (await closestPassages(q, index)).sort((a, b) => a - b);
+  if (!near.length) return { text: none, from: [], whole: false };
   const room = Math.round(currentStepBudget() * 0.7);
   const used: number[] = []; let block = '';
   for (const i of near) {
-    const piece = `[${i + 1}] ${doc.index.passages[i]}\n\n`;
+    const label = labelOf(i);
+    const piece = `[${i + 1}]${label ? ` (${label})` : ''} ${index.passages[i]}\n\n`;
     if (block.length + piece.length > room && used.length) break;
     block += piece; used.push(i + 1);
   }
-  const text = (await askShaped(SYSTEM, `Passages:\n${block}Question: ${q}\nAnswer:`, { label: 'Answering from the document', maxTokens: ANSWER_TOKENS })).trim();
+  const text = (await askShaped(SYSTEM, `Passages:\n${block}Question: ${q}\nAnswer:`, { label: task, maxTokens: ANSWER_TOKENS })).trim();
   return { text, from: used, whole: false };
 }
