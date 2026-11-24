@@ -51,7 +51,7 @@ export const TeachBackScreen: React.FC = () => {
             {checks.map((c, i) => (
               <View key={i} style={styles.point} testID={`teachback-point-${i}-${c.covered ? 'covered' : 'missed'}`}>
                 <Icon name={c.covered ? 'check' : 'x'} size={16} color={c.covered ? colors.primary : colors.error} />
-                <Text style={{ flex: 1, color: colors.text, ...TYPOGRAPHY.bodySmall }}>{c.point}</Text>
+                <Text style={[styles.pointText, { color: colors.text, ...TYPOGRAPHY.bodySmall }]}>{c.point}</Text>
               </View>
             ))}
             {!!note && <Text style={{ color: colors.text, ...TYPOGRAPHY.body }} testID="teachback-note">{note}</Text>}
@@ -68,4 +68,5 @@ const styles = StyleSheet.create({
   input: { ...TYPOGRAPHY.body, borderWidth: 1, borderRadius: SPACING.sm, padding: SPACING.md, minHeight: 120, textAlignVertical: 'top' },
   card: { borderWidth: 1, borderRadius: SPACING.md, padding: SPACING.md, gap: SPACING.sm },
   point: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start' },
+  pointText: { flex: 1 },
 });
