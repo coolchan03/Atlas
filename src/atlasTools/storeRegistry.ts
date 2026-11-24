@@ -28,6 +28,7 @@ const STORES: Record<string, () => any> = {
   'atlas-checklists': () => require('./checklists').useChecklists,
   'atlas-journal': () => require('../journal/store').useJournal,
   'atlas-trips': () => require('../trip/store').useTrips,
+  'atlas-capsules': () => require('../capsule/store').useCapsules,
   'atlas-language': () => require('../language/store').useLanguage,
   'atlas-recordings': () => require('../atlasRecorder/store').useRecordings,
   'atlas-about-me': () => require('../stores/aboutMeStore').useAboutMe,

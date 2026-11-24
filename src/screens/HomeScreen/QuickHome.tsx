@@ -45,6 +45,7 @@ const destinations: Destination[] = [
   { key: 'askdoc', label: 'Ask a document', hint: 'Pick one long file and ask it questions; each answer says which passages it came from', icon: 'file-text', screen: 'AskDocument', optional: true, ...TILE.blue },
   { key: 'trip', label: 'Trip kit', hint: 'The language and money of a trip, phrases translated for it, and a packing list', icon: 'briefcase', screen: 'Trip', optional: true, ...TILE.teal },
   { key: 'journal', label: 'Journal', hint: 'A private page for each day, with a question to start from and a look back at the week', icon: 'edit-3', screen: 'Journal', optional: true, ...TILE.amber },
+  { key: 'capsule', label: 'Time capsule', hint: 'A letter to your future self that stays shut until a date you pick, with a look back at your journal', icon: 'archive', screen: 'TimeCapsule', optional: true, ...TILE.amber },
   { key: 'currency', label: 'Currency', hint: 'Convert money. Rates are kept on the phone with their date', icon: 'dollar-sign', screen: 'Currency', optional: true, ...TILE.green },
   { key: 'storm', label: 'Storm watch', hint: 'Is the weather turning? The barometer decides the level and the AI explains it', icon: 'cloud-lightning', screen: 'StormWatch', optional: true, ...TILE.cyan },
   { key: 'radio', label: 'AI radio', hint: 'An endless station: songs of every genre, some with a poem read over them', icon: 'radio', screen: 'Radio', optional: true, ...TILE.violet },

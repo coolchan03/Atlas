@@ -20,6 +20,7 @@ const ITEM_LISTS: Record<string, { field: string; id: (x: any) => string; /** Wh
   'atlas-custom-helpers': { field: 'helpers', id: (x) => x.id },
   'atlas-journal': { field: 'entries', id: (x) => x.day, pick: (a, b) => ((b.updatedAt ?? 0) > (a.updatedAt ?? 0) ? b : a) },
   'atlas-trips': { field: 'trips', id: (x) => x.id },
+  'atlas-capsules': { field: 'capsules', id: (x) => x.id },
   // Voices made on either phone all stay; the samples themselves travel separately (voiceReferences.ts).
   'atlas-voice-profiles': { field: 'profiles', id: (x) => x.id },
   'atlas-voice-reference-metadata-v1': { field: 'references', id: (x) => x.id },

@@ -77,6 +77,7 @@ Regenerate with `node scripts/route-matrix.cjs`; rows you filled in are kept.
 | Journal | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Currency | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | StormWatch | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| TimeCapsule | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Radio | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Translator | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | VoiceLab | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
