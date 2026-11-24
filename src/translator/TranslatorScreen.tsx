@@ -1,3 +1,4 @@
+import { NavigationRouteContext } from '@react-navigation/native';
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +25,8 @@ const MODES: Array<{ id: TranslatorMode; label: string; icon: string }> = [
 export const TranslatorScreen: React.FC = () => {
   const { colors } = useTheme();
   const { mode, from, to, set, swap } = useTranslator();
+  const shared = (React.useContext(NavigationRouteContext)?.params as { picture?: { uri: string; mime: string } } | undefined)?.picture;
+  React.useEffect(() => { if (shared) set({ mode: 'camera' }); }, [shared?.uri]); // eslint-disable-line react-hooks/exhaustive-deps
   // Wide screens keep the content in a centred column (a tablet gets two panes in text mode, see TextPanel).
   const wide = useWideLayout(1100);
   const [picking, setPicking] = React.useState<'from' | 'to' | null>(null);
@@ -63,7 +66,7 @@ export const TranslatorScreen: React.FC = () => {
         {mode === 'text' && <TextPanel />}
         {mode === 'interpreter' && <LivePanel bothWays={false} />}
         {mode === 'conversation' && <LivePanel bothWays />}
-        {mode === 'camera' && <CameraPanel />}
+        {mode === 'camera' && <CameraPanel shared={shared} />}
       </ScrollView>
       <LanguagePicker
         visible={picking !== null}

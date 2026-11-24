@@ -14,7 +14,7 @@ import { useTranslator } from './store';
 interface Found { original: string; translation: string; found: boolean }
 
 /** Camera mode: take or choose a picture, read the text in it and translate it. Needs a model that can see pictures. */
-export function CameraPanel() {
+export function CameraPanel({ shared }: { shared?: { uri: string; mime: string } }) {
   const { colors } = useTheme();
   const to = useTranslator((s) => s.to);
   const [asset, setAsset] = React.useState<Asset | null>(null);
@@ -36,6 +36,7 @@ export function CameraPanel() {
     try { setFound(await translatePicture(a.uri, a.type, languageFor(to))); } catch (e) { setError(String((e as Error)?.message || e)); }
     setBusy(false);
   };
+  React.useEffect(() => { if (shared?.uri) void run({ uri: shared.uri, type: shared.mime || undefined }); }, [shared?.uri]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (source: 'camera' | 'library') => {
     try {
       await audioSessionManager.deactivate(); // the camera and the speech session collide on iOS; a no-op on Android

@@ -6,6 +6,10 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useAppStore, useChatStore } from '../stores';
 import { useActiveTextModel } from '../hooks/useActiveTextModel';
+import { documentService } from '../services/documentService';
+import { useJournal, dayKey } from '../journal/store';
+import type { SharedFile } from '../navigation/types';
+import { sharedKind, sharedName } from './sharedFile';
 
 /** What Atlas can do with text another app shared (or that was selected and sent with "Ask Atlas"). Each choice opens a chat with the request typed. */
 const SHARE_ACTIONS: { id: string; label: string; icon: string; prompt: (text: string) => string }[] = [
@@ -19,10 +23,26 @@ const SHARE_ACTIONS: { id: string; label: string; icon: string; prompt: (text: s
 /** Long text is cut so it fits a small model's memory; the box shows what was kept. */
 const MAX_CHARS = 6000;
 
+/** The few characters of a shared file that are read for the text actions. */
+const FILE_CHARS = 6000;
+
 export const ShareScreen: React.FC = () => {
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
-  const text = String((useRoute<any>().params as { text?: string } | undefined)?.text ?? '');
+  const params = useRoute<any>().params as { text?: string; file?: SharedFile } | undefined;
+  const file = params?.file;
+  const kind = file ? sharedKind(file.mime) : null;
+  const [fileText, setFileText] = React.useState<string | null>(null);
+  const [fileError, setFileError] = React.useState('');
+  React.useEffect(() => {
+    if (!file || kind === 'picture') return;
+    let alive = true;
+    documentService.textFromPicked(file.uri, sharedName(file.mime), FILE_CHARS)
+      .then((t) => { if (alive) { if (t.trim()) setFileText(t); else setFileError('There is no text in that file to read.'); } })
+      .catch((e) => alive && setFileError(String((e as Error)?.message || e).slice(0, 160)));
+    return () => { alive = false; };
+  }, [file?.uri]); // eslint-disable-line react-hooks/exhaustive-deps
+  const text = file ? fileText ?? '' : String(params?.text ?? '');
   const { modelId: textModelId } = useActiveTextModel();
   const activeModelId = useAppStore((s) => s.activeModelId);
   const downloaded = useAppStore((s) => s.downloadedModels);
@@ -35,6 +55,13 @@ export const ShareScreen: React.FC = () => {
     navigation.replace('Chat', { conversationId, starter: prompt(kept) });
   };
 
+  const saveToJournal = () => {
+    const today = dayKey();
+    const page = useJournal.getState().entries.find((e) => e.day === today);
+    useJournal.getState().save(today, `${page?.text ? `${page.text}\n\n` : ''}${kept.slice(0, 2000)}`, page?.mood ?? null);
+    navigation.navigate('Journal');
+  };
+  const hasText = !!text.trim();
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
@@ -42,8 +69,29 @@ export const ShareScreen: React.FC = () => {
         <Text style={[styles.title, { color: colors.text }]}>What should Atlas do with this?</Text>
       </View>
       <ScrollView contentContainerStyle={styles.body}>
-        <Text style={[styles.preview, { color: colors.textSecondary, borderColor: colors.border, backgroundColor: colors.surface }]} numberOfLines={12} testID="share-preview">{kept}</Text>
-        {SHARE_ACTIONS.map((a) => (
+        {kind === 'picture' ? (
+          <TouchableOpacity style={[styles.action, { borderColor: colors.border }]} onPress={() => navigation.replace('Translator', { picture: file })} testID="share-translate-picture" accessibilityRole="button">
+            <Icon name="camera" size={18} color={colors.primary} />
+            <Text style={[styles.label, { color: colors.text }]}>Read and translate the text in the picture</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={[styles.preview, { color: colors.textSecondary, borderColor: colors.border, backgroundColor: colors.surface }]} numberOfLines={12} testID="share-preview">
+            {file && !hasText ? fileError || 'Reading the file...' : kept}
+          </Text>
+        )}
+        {kind === 'document' && (
+          <TouchableOpacity style={[styles.action, { borderColor: colors.border }]} onPress={() => navigation.replace('AskDocument', { file })} testID="share-ask-document" accessibilityRole="button">
+            <Icon name="file-text" size={18} color={colors.primary} />
+            <Text style={[styles.label, { color: colors.text }]}>Ask questions about the whole document</Text>
+          </TouchableOpacity>
+        )}
+        {kind !== 'picture' && hasText && (
+          <TouchableOpacity style={[styles.action, { borderColor: colors.border }]} onPress={saveToJournal} testID="share-journal" accessibilityRole="button">
+            <Icon name="edit-3" size={18} color={colors.primary} />
+            <Text style={[styles.label, { color: colors.text }]}>Save to today in my journal</Text>
+          </TouchableOpacity>
+        )}
+        {kind !== 'picture' && hasText && SHARE_ACTIONS.map((a) => (
           <TouchableOpacity key={a.id} style={[styles.action, { borderColor: colors.border }]} onPress={() => start(a.prompt)} testID={`share-${a.id}`} accessibilityRole="button">
             <Icon name={a.icon} size={18} color={colors.primary} />
             <Text style={[styles.label, { color: colors.text }]}>{a.label}</Text>

@@ -13,8 +13,11 @@ jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: mockParams }),
 }));
 
+const mockRead = jest.fn();
+jest.mock('../../../src/services/documentService', () => ({ documentService: { textFromPicked: (...a: unknown[]) => mockRead(...a) } }));
+
 import { ShareScreen } from '../../../src/share/ShareScreen';
-import { flushShare, useIncomingShare } from '../../../src/share/shareIntake';
+import { flushShare, parseSharedFile, useIncomingShare } from '../../../src/share/shareIntake';
 import { useAppStore } from '../../../src/stores/appStore';
 import { useAuthStore, useChatStore } from '../../../src/stores';
 import { createDownloadedModel } from '../../utils/factories';
@@ -50,4 +53,44 @@ it('keeps shared text waiting until the navigation is ready', () => {
   flushShare(); // no navigation container yet in this test
   expect(useIncomingShare.getState().text).toBe('hello from another app');
   expect(useAuthStore).toBeDefined();
+});
+
+it('opens a shared PDF: shows what it says, offers to ask about the whole document, and saves the text to the journal', async () => {
+  const { waitFor } = require('@testing-library/react-native');
+  const { useJournal, dayKey } = require('../../../src/journal/store');
+  useAppStore.setState({ downloadedModels: [createDownloadedModel({ id: 'm1' })], activeModelId: 'm1' });
+  useJournal.setState({ entries: [] });
+  mockRead.mockResolvedValueOnce('The lease ends on 1 March and the deposit is 900 dollars.');
+  mockParams = { file: { uri: 'content://docs/1', mime: 'application/pdf' } };
+  const screen = render(<ShareScreen />);
+  await waitFor(() => expect(screen.getByTestId('share-preview').props.children).toMatch(/The lease ends on 1 March/));
+  expect(mockRead).toHaveBeenCalledWith('content://docs/1', 'shared.pdf', 6000);
+
+  fireEvent.press(screen.getByTestId('share-summarize'));
+  expect(mockNav.replace).toHaveBeenCalledWith('Chat', expect.objectContaining({ starter: expect.stringMatching(/^Summarize this:\n\nThe lease ends on 1 March/) }));
+  fireEvent.press(screen.getByTestId('share-ask-document'));
+  expect(mockNav.replace).toHaveBeenCalledWith('AskDocument', { file: mockParams.file });
+  fireEvent.press(screen.getByTestId('share-journal'));
+  expect(useJournal.getState().entries[0]).toMatchObject({ day: dayKey(), text: 'The lease ends on 1 March and the deposit is 900 dollars.' });
+});
+
+it('offers a shared picture to the translator, says plainly when a file has no text, and reads the native report of a shared file', async () => {
+  const { waitFor } = require('@testing-library/react-native');
+  mockParams = { file: { uri: 'content://photos/2', mime: 'image/jpeg' } };
+  let screen = render(<ShareScreen />);
+  fireEvent.press(screen.getByTestId('share-translate-picture'));
+  expect(mockNav.replace).toHaveBeenCalledWith('Translator', { picture: mockParams.file });
+  expect(screen.queryByTestId('share-summarize')).toBeNull(); // no text to work on in a picture
+  screen.unmount();
+
+  mockRead.mockRejectedValueOnce(new Error('This PDF is scanned and has no text.'));
+  mockParams = { file: { uri: 'content://docs/3', mime: 'application/pdf' } };
+  screen = render(<ShareScreen />);
+  await waitFor(() => expect(screen.getByTestId('share-preview').props.children).toMatch(/scanned and has no text/));
+  expect(screen.queryByTestId('share-summarize')).toBeNull();
+
+  expect(parseSharedFile('{"uri":"content://a/1","mime":"image/png"}')).toEqual({ uri: 'content://a/1', mime: 'image/png' });
+  expect(parseSharedFile('{"mime":"image/png"}')).toBeNull();
+  expect(parseSharedFile('not json')).toBeNull();
+  expect(parseSharedFile(null)).toBeNull();
 });

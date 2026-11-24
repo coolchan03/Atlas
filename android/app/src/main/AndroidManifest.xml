@@ -122,6 +122,14 @@
             <category android:name="android.intent.category.DEFAULT" />
             <data android:mimeType="text/plain" />
         </intent-filter>
+        <!-- Share a PDF, a Word document or a picture from any app into Atlas. -->
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="application/pdf" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            <data android:mimeType="image/*" />
+        </intent-filter>
       </activity>
 
       <!-- "Ask Atlas" in the menu that appears when text is selected in any app. -->

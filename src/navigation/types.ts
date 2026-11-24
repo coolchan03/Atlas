@@ -1,5 +1,8 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
 
+/** A file another app shared into Atlas: where it can be read and what it is. */
+export interface SharedFile { uri: string; mime: string }
+
 export type RootStackParamList = {
   Onboarding: undefined;
   ModelDownload: undefined;
@@ -23,7 +26,7 @@ export type RootStackParamList = {
   OfflineLibrary: undefined;
   SurvivalManual: { chapterId?: string } | undefined;
   Phrases: undefined;
-  Translator: undefined;
+  Translator: { picture?: SharedFile } | undefined;
   Radio: undefined;
   StormWatch: undefined;
   TimeCapsule: undefined;
@@ -33,7 +36,7 @@ export type RootStackParamList = {
   Currency: undefined;
   Journal: undefined;
   Trip: undefined;
-  AskDocument: undefined;
+  AskDocument: { file?: SharedFile } | undefined;
   Study: { projectId: string; openAt?: number };
   Practice: { projectId: string; topic?: string };
   Planner: undefined;
@@ -49,7 +52,7 @@ export type RootStackParamList = {
   ProjectDocument: { projectId: string; docId?: number; name?: string };
   Recorder: undefined;
   Search: undefined;
-  Share: { text: string };
+  Share: { text?: string; file?: SharedFile };
   Skills: undefined;
   Schedule: undefined;
   Topics: { projectId?: string; topic?: string } | undefined;

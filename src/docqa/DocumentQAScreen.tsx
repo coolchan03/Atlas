@@ -6,6 +6,8 @@ import { SPACING, TYPOGRAPHY } from '../constants';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Button } from '../components/Button';
 import { useWideLayout } from '../hooks/useWideLayout';
+import { NavigationRouteContext } from '@react-navigation/native';
+import { sharedName } from '../share/sharedFile';
 import { documentService } from '../services/documentService';
 import { answerQuestion, buildIndex, type Answer, type DocIndex } from './index';
 
@@ -26,22 +28,32 @@ export const DocumentQAScreen: React.FC = () => {
   const [busy, setBusy] = React.useState(false);
   const [open, setOpen] = React.useState<string | null>(null);
 
+  const openFile = async (uri: string, name: string) => {
+    setProgress('Opening the document...'); setDoc(null); setAsked([]);
+    const text = await documentService.textFromPicked(uri, name, MAX_CHARS);
+    if (text.trim().length < 200) throw new Error('There is hardly any text in that file to ask about.');
+    const index = await buildIndex(text, (done, total) => setProgress(`Reading the document: ${done} of ${total} passages...`));
+    setDoc({ name, text, index });
+  };
   const choose = async () => {
     setError(null);
     const { pick, types, isErrorWithCode, errorCodes } = require('@react-native-documents/picker');
     try {
       const [file] = await pick({ type: [types.allFiles], mode: 'import', allowMultiSelection: false });
       if (!file) return;
-      setProgress('Opening the document...'); setDoc(null); setAsked([]);
-      const text = await documentService.textFromPicked(file.uri, file.name ?? 'document.txt', MAX_CHARS);
-      if (text.trim().length < 200) throw new Error('There is hardly any text in that file to ask about.');
-      const index = await buildIndex(text, (done, total) => setProgress(`Reading the document: ${done} of ${total} passages...`));
-      setDoc({ name: file.name ?? 'document', text, index });
+      await openFile(file.uri, file.name ?? 'document.txt');
     } catch (e: any) {
       if (!(isErrorWithCode?.(e) && e.code === errorCodes.OPERATION_CANCELED)) setError(String(e?.message || e));
     }
     setProgress(null);
   };
+  // A document shared into Atlas from another app opens at once.
+  const shared = (React.useContext(NavigationRouteContext)?.params as { file?: { uri: string; mime: string } } | undefined)?.file;
+  React.useEffect(() => {
+    if (!shared) return;
+    setError(null);
+    openFile(shared.uri, sharedName(shared.mime)).catch((e) => setError(String(e?.message || e))).finally(() => setProgress(null));
+  }, [shared?.uri]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ask = async () => {
     const q = question.trim();
