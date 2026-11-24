@@ -56,6 +56,7 @@ export const AtlasHubScreen: React.FC = () => {
     { label: 'Time capsule', sub: 'A letter that opens on a date you choose', icon: 'archive', color: '#9A3412', to: 'TimeCapsule' },
     { label: 'Formula helper', sub: 'The AI writes a spreadsheet formula; Atlas tries it on your rows', icon: 'percent', color: '#047857', to: 'Formula' },
     { label: 'Ask my notes', sub: 'Questions about your journal, chats, recordings and trips', icon: 'search', color: '#4338CA', to: 'AskNotes' },
+    { label: 'Teach it back', sub: 'Explain a topic and see which key points you missed', icon: 'users', color: '#4338CA', to: 'TeachBack' },
     { label: 'Currency', sub: 'Convert money; rates kept on the phone', icon: 'dollar-sign', color: '#047857', to: 'Currency' },
     { label: 'Storm watch', sub: 'Is the weather turning? From the barometer', icon: 'cloud-lightning', color: '#475569', to: 'StormWatch' },
     { label: 'AI radio', sub: 'Endless songs with poems read over them', icon: 'radio', color: '#7C3AED', to: 'Radio' },

@@ -29,6 +29,7 @@ export type RootStackParamList = {
   TimeCapsule: undefined;
   Formula: undefined;
   AskNotes: undefined;
+  TeachBack: undefined;
   Currency: undefined;
   Journal: undefined;
   Trip: undefined;
