@@ -25,6 +25,7 @@ export type RootStackParamList = {
   Phrases: undefined;
   Translator: undefined;
   Radio: undefined;
+  StormWatch: undefined;
   Currency: undefined;
   Journal: undefined;
   Trip: undefined;

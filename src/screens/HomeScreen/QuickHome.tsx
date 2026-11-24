@@ -46,6 +46,7 @@ const destinations: Destination[] = [
   { key: 'trip', label: 'Trip kit', hint: 'The language and money of a trip, phrases translated for it, and a packing list', icon: 'briefcase', screen: 'Trip', optional: true, ...TILE.teal },
   { key: 'journal', label: 'Journal', hint: 'A private page for each day, with a question to start from and a look back at the week', icon: 'edit-3', screen: 'Journal', optional: true, ...TILE.amber },
   { key: 'currency', label: 'Currency', hint: 'Convert money. Rates are kept on the phone with their date', icon: 'dollar-sign', screen: 'Currency', optional: true, ...TILE.green },
+  { key: 'storm', label: 'Storm watch', hint: 'Is the weather turning? The barometer decides the level and the AI explains it', icon: 'cloud-lightning', screen: 'StormWatch', optional: true, ...TILE.cyan },
   { key: 'radio', label: 'AI radio', hint: 'An endless station: songs of every genre, some with a poem read over them', icon: 'radio', screen: 'Radio', optional: true, ...TILE.violet },
   { key: 'translator', label: 'Translator', hint: 'Translate text, speech, a conversation or a picture, on the phone', icon: 'repeat', screen: 'Translator', optional: true, ...TILE.blue },
   { key: 'phrases', label: 'Phrases', hint: 'Useful phrases for travel or emergencies', icon: 'message-square', screen: 'Phrases', optional: true, ...TILE.violet },
