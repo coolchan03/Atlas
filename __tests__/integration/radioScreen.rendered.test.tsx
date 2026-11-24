@@ -8,6 +8,9 @@ it('lets the theme, name, poems, song length and host be set, and shows the song
   const { RadioScreen } = require('../../src/radio/RadioScreen');
   const { useRadioSettings, useRadioRun, EMPTY_RUN } = require('../../src/radio/store');
   const view = rtl.render(React.createElement(RadioScreen));
+  // The radio is a tab of Music Studio, opened on it from the Radio tiles, with the studio's own tab beside it.
+  expect(view.getByTestId('studio-mode-radio').props.accessibilityState.selected).toBe(true);
+  expect(view.getByTestId('studio-mode-make')).toBeTruthy();
 
   rtl.fireEvent.changeText(view.getByTestId('radio-theme'), 'a haunted lighthouse late-night station');
   rtl.fireEvent.changeText(view.getByTestId('radio-name'), 'Lamp FM');
