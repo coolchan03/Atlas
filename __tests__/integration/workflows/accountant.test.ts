@@ -41,7 +41,7 @@ it('goes from a statement to a CSV that is proven complete, asking only about wh
 
   run = await approve(accountant, run, { ask });
   expect(run.status).toBe('done');
-  expect(saved).toEqual(['running', 'running', 'waiting']); // saved after every step, so a closed app can resume
+  expect(saved).toEqual(['running', 'running', 'running', 'waiting']); // saved when the run starts (so it can be watched) and after every step, so a closed app can resume
   // What the person decided is remembered for the next statement.
   expect(applyRules('QWERTY HOLDINGS 441', run.ctx.rules)).toBe('Fees');
 });

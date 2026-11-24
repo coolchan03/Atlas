@@ -29,6 +29,8 @@ import type { Message } from '../../types';
 import { applyMessageLook, messageTime } from '../../theme/messageLooks';
 import { usePins } from '../../pins/store';
 import { slidesFromReply } from '../../presentations/replySlides';
+import { useStepProgress } from '../../workflows/stepProgress';
+import { StepProgressList } from '../../workflows/StepProgressList';
 
 function getToolIcon(toolName?: string): string {
   switch (toolName) {
@@ -36,6 +38,7 @@ function getToolIcon(toolName?: string): string {
     case 'calculator': return 'hash';
     case 'get_current_datetime': return 'clock';
     case 'get_device_info': return 'smartphone';
+    case 'work_in_steps': return 'list';
     default: return 'tool';
   }
 }
@@ -50,6 +53,7 @@ function getToolLabel(toolName?: string, content?: string): string {
     case 'calculator': return content || 'Calculated';
     case 'get_current_datetime': return 'Retrieved date/time';
     case 'get_device_info': return 'Retrieved device info';
+    case 'work_in_steps': { const n = content ? /^Done in (\d+) steps/.exec(content)?.[1] : null; return n ? `Did the job in ${n} steps` : 'Big job in steps'; }
     default: return toolName || 'Tool result';
   }
 }
@@ -132,17 +136,26 @@ const ToolResultMessage: React.FC<{ message: Message; styles: any; colors: any }
   return <ToolResultBubble stableKey={stableKey} toolIcon={toolIcon} toolLabel={toolLabel} toolName={message.toolName || 'unknown'} durationLabel={durationLabel} content={message.content} hasDetails={hasDetails} styles={styles} colors={colors} />;
 };
 
+/** The steps of a big job, live, under the call that is doing them. */
+const LiveSteps: React.FC = () => {
+  const { active, items } = useStepProgress();
+  return active && items.length ? <StepProgressList items={items} testID="chat-step-progress" /> : null;
+};
+
 const ToolCallMessage: React.FC<{ message: Message; styles: any; colors: any }> = ({ message, styles, colors }) => (
   <View testID="tool-call-message" style={styles.systemInfoContainer}>
     {message.toolCalls?.map((tc, i) => {
       let argsPreview = '';
       try { argsPreview = Object.values(JSON.parse(tc.arguments)).join(', '); } catch { argsPreview = tc.arguments; }
       return (
-        <View key={`${tc.id || i}`} style={styles.toolStatusRow}>
-          <Icon name={getToolIcon(tc.name)} size={13} color={colors.primary} />
-          <Text style={[styles.toolStatusText, { color: colors.primary }]} numberOfLines={1}>
-            Using {tc.name}{argsPreview ? `: ${argsPreview}` : ''}
-          </Text>
+        <View key={`${tc.id || i}`}>
+          <View style={styles.toolStatusRow}>
+            <Icon name={getToolIcon(tc.name)} size={13} color={colors.primary} />
+            <Text style={[styles.toolStatusText, { color: colors.primary }]} numberOfLines={1}>
+              Using {tc.name}{argsPreview ? `: ${argsPreview}` : ''}
+            </Text>
+          </View>
+          {tc.name === 'work_in_steps' && <LiveSteps />}
         </View>
       );
     })}

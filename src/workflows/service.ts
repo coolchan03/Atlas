@@ -53,6 +53,19 @@ export function startWorkflow(id: string, text: string, fields: Record<string, s
   return advance(wf, newRun(wf, localUniqueId('wf'), ctx), deps);
 }
 
+/** Starts a job and says at once which run it is, so the screen can show its steps while they run. `done` settles when the job needs the person or has finished. */
+export function beginWorkflow(id: string, text: string, fields: Record<string, string> = {}): { runId: string; done: Promise<AnyRun> } {
+  const wf = workflowById(id);
+  if (!wf) return { runId: '', done: Promise.reject(new Error('This job is not available any more.')) };
+  const ctx = wf.input.make(text, fields);
+  if (id === 'accountant') ctx.rules = useWorkflowRuns.getState().rules;
+  const run = newRun(wf, localUniqueId('wf'), ctx);
+  return { runId: run.id, done: advance(wf, run, deps) };
+}
+
+/** The titles of a job's steps, in order (empty when the job is gone). */
+export const stepTitles = (workflowId: string): string[] => workflowById(workflowId)?.steps.map((s) => s.title) ?? [];
+
 export const answerRun = (run: AnyRun, answers: Record<string, string>): Promise<AnyRun> => answer(workflowFor(run), run, { answers, deps });
 export const approveRun = (run: AnyRun): Promise<AnyRun> => approve(workflowFor(run), run, deps);
 export const cancelRun = (run: AnyRun): void => save(cancel(run));

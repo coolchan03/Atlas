@@ -8,7 +8,9 @@ import { ScreenBackground } from '../components/ScreenBackground';
 import { Button, Card } from '../components';
 import { recorderService } from '../atlasRecorder/recorderService';
 import { saveMarkdown, saveText } from '../study/exportFiles';
-import { workflowList } from './service';
+import { stepTitles, workflowList } from './service';
+import { runItems } from './stepProgress';
+import { StepProgressList } from './StepProgressList';
 import type { InputField } from './engine';
 
 export type Kind = string;
@@ -106,7 +108,7 @@ export const InputView: React.FC<InputProps> = (p) => {
   );
 };
 
-type AnyRun = { id: string; workflowId: string; status: string; log: string[]; error?: string; ctx: any; waiting?: { kind: string; title: string; summary?: string; questions?: Array<{ id: string; text: string; options?: string[] }> } };
+type AnyRun = { id: string; workflowId: string; step: number; status: string; log: string[]; error?: string; ctx: any; waiting?: { kind: string; title: string; summary?: string; questions?: Array<{ id: string; text: string; options?: string[] }> } };
 interface RunProps {
   run: AnyRun; busy: boolean; answers: Record<string, string>; setAnswers: (fn: (a: Record<string, string>) => Record<string, string>) => void;
   onContinue: () => void; onApprove: () => void; onCancel: () => void; onBack: () => void; onResume: () => void;
@@ -155,7 +157,7 @@ export const RunView: React.FC<RunProps> = (p) => {
   const { run } = p;
   return (
     <Shell title={titleOf(run.workflowId)} onBack={p.onBack}>
-      {run.log.map((line, i) => <Text key={i} style={[styles.log, { color: colors.textSecondary }]}>{line}</Text>)}
+      <StepProgressList items={runItems(stepTitles(run.workflowId), run)} testID="workflow-steps" />
       {p.busy && <ActivityIndicator color={colors.primary} />}
       {run.status === 'failed' && <Text style={[styles.error, { color: colors.error }]} testID="workflow-error">{run.error}</Text>}
       {(run.status === 'failed' || run.status === 'running') && !p.busy && (

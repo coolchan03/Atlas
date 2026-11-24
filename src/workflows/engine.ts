@@ -56,6 +56,7 @@ export async function advance<C>(workflow: Workflow<C>, run: Run<C>, deps: Deps<
   const { ask } = deps;
   const save = deps.save ?? (() => undefined);
   let state: Run<C> = { ...run, status: 'running', waiting: undefined, error: undefined };
+  save(state); // the run is on show as running, at the step about to start, before that step is done
   while (state.step < workflow.steps.length) {
     const step = workflow.steps[state.step];
     try {
