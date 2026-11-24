@@ -2,7 +2,8 @@
 export type Rates = Record<string, number>;
 
 /** The rate from one money to another (how many `to` one `from` buys), or null when either has no rate. A rate typed by the person wins. */
-export function rateBetween(from: string, to: string, rates: Rates, own?: number | null): number | null {
+export function rateBetween(from: string, to: string, known: { rates: Rates; own?: number | null }): number | null {
+  const { rates, own } = known;
   if (own && own > 0) return own;
   if (from === to) return 1;
   const a = rates[from]; const b = rates[to];

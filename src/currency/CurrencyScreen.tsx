@@ -25,7 +25,7 @@ export const CurrencyScreen: React.FC = () => {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const pair = `${from}>${to}`;
-  const rate = rateBetween(from, to, rates, own[pair]);
+  const rate = rateBetween(from, to, { rates, own: own[pair] });
   const value = readNumber(amount);
   const age = ageInDays(date);
   const refresh = async () => {
