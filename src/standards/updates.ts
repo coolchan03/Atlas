@@ -67,6 +67,7 @@ export async function findUpdates(source: string, held: string[], via: { search:
   const pages = new Map<string, Page>();
   let failures = 0;
   const sites = res.sites(query);
+  if (!sites.length) return "This project's profile lists no official sites to look on. Tell the user to add a line like `sites: congress.gov, govinfo.gov` to the profile.";
   for (const site of sites) {
     try { for (const h of await search(`${query} site:${site}`)) if (h.url && res.official(h.url) && !pages.has(h.url)) pages.set(h.url, { title: h.title, url: h.url, snippet: h.snippet }); }
     catch { failures += 1; }

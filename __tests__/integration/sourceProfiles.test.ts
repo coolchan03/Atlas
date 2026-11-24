@@ -48,6 +48,8 @@ it('applies a field\'s ranking, dating and sites to the prompt and to the update
   expect(found).toMatch(/Statute of Examples \(2025\)[\s\S]*NEWER than "Statute of Examples \(2023\)\.pdf"/);
   expect(found).not.toContain('elsewhere.example.net');
   expect(parseProfile('One line only').problems[0]).toMatch(/needs a name/);
+  const none = resolverFor(profileFor('custom', 'Statutes | statute | edition', []));
+  expect(await findUpdates('anything', [], { search, res: none })).toMatch(/lists no official sites/);
 
   // Built-in guesses and the person's keywords match whole words only.
   const law = profileFor('law', undefined, []);
