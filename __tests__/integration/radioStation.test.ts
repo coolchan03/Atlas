@@ -1,5 +1,7 @@
 /** The AI radio loop with the phone's parts faked at the boundary: the model, the recording, the player, the voice and the clock. */
 import { DEFAULT_RADIO, rollShow, seeded, type RadioSettings } from '../../src/radio/dice';
+import { GENRES } from '../../src/radio/tables';
+import { STYLES } from '../../src/music/styles';
 import { runStation, type StationDeps, type StationEvent } from '../../src/radio/station';
 
 interface Track { id: number; seconds: number }
@@ -118,4 +120,11 @@ it('rolls only calm genres, tones and tunes when calm songs are asked for', () =
     expect(show.energy).toBe('calm');
     expect(['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious']).toContain(show.tone);
   }
+});
+
+it('has a genre for every Music Studio style, so the station can play anything the studio can make', () => {
+  const used = new Set(GENRES.map((g) => g.style));
+  expect(Object.keys(STYLES).filter((s) => !used.has(s as keyof typeof STYLES))).toEqual([]);
+  expect(new Set(GENRES.map((g) => g.id)).size).toBe(GENRES.length); // no id twice
+  expect(GENRES.length).toBeGreaterThan(65);
 });
