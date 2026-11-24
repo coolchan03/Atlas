@@ -78,7 +78,8 @@ interface AskOptions { progress?: AskProgress; label?: string; shape?: { grammar
 
 async function ask(system: string, user: string, { progress, label = 'Writing a script or lesson', shape }: AskOptions = {}): Promise<string> {
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
-  const remote = await askRemote(system, user);
+  // A shaped answer (a grammar, a length) and private text are always written by the phone's own engine: a server cannot be held to a grammar.
+  const remote = shape ? null : await askRemote(system, user);
   if (remote !== null) return remote.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   const onBackground = !!backgroundModelId();
   if (!onBackground) try { await callHook(HOOKS.ensureTextModel, null); } catch (error) {

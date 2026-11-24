@@ -25,6 +25,7 @@ export type RootStackParamList = {
   Translator: undefined;
   Radio: undefined;
   Currency: undefined;
+  Journal: undefined;
   Study: { projectId: string; openAt?: number };
   Practice: { projectId: string; topic?: string };
   Planner: undefined;
