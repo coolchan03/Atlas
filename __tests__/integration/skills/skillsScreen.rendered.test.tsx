@@ -4,9 +4,9 @@
  */
 import { installNativeBoundary, requireRTL } from '../../harness/nativeBoundary';
 
-let mockPicked: { uri: string; name: string } | null = null;
+let mockPicked: { uri: string; name: string } | Array<{ uri: string; name: string }> | null = null;
 jest.mock('@react-native-documents/picker', () => ({
-  pick: jest.fn(async () => { if (!mockPicked) throw new Error('cancelled'); return [mockPicked]; }),
+  pick: jest.fn(async () => { if (!mockPicked) throw new Error('cancelled'); return Array.isArray(mockPicked) ? mockPicked : [mockPicked]; }),
   types: { allFiles: '*/*' },
   keepLocalCopy: jest.fn(async ({ files }: { files: { uri: string }[] }) => files.map((f) => ({ status: 'success', localUri: f.uri }))),
   isErrorWithCode: () => false,
@@ -109,4 +109,35 @@ it('puts every ready-made skill in exactly one group', () => {
   const { SKILL_CATEGORIES } = require('../../../src/skills/skillCategories');
   const grouped = SKILL_CATEGORIES.flatMap((c: any) => c.names);
   expect([...grouped].sort()).toEqual(SKILL_LIBRARY.map((l: any) => l.name).sort());
+});
+
+it('takes a skill together with its reference files, keeps them, and shows the model only the parts that match the request', async () => {
+  installNativeBoundary({ fs: true });
+  const { render, fireEvent, waitFor } = requireRTL();
+  const React = require('react');
+  const RNFS = require('react-native-fs');
+  const { SkillsScreen } = require('../../../src/skills/SkillsScreen');
+  const { useSkills } = require('../../../src/skills/skillsStore');
+  const { skillsNote } = require('../../../src/skills/selectSkills');
+  useSkills.setState({ skills: [] });
+  const dir = `${RNFS.DocumentDirectoryPath}/refund`;
+  await RNFS.writeFile(`${dir}/SKILL.md`, '---\nname: refund-helper\ndescription: Answer questions about refunds and returns for customers.\n---\nAnswer using the policy in the reference files. Be polite.', 'utf8');
+  await RNFS.writeFile(`${dir}/policy.md`, '# Returns\n\nA refund for a damaged parcel is paid within 5 working days after the parcel is returned.\n\n# Shipping\n\nParcels are sent every Tuesday and Friday from the warehouse.', 'utf8');
+  await RNFS.writeFile(`${dir}/script.py`, 'print("not text for the model")', 'utf8');
+  mockPicked = ['SKILL.md', 'policy.md', 'script.py'].map((name) => ({ uri: `file://${dir}/${name}`, name }));
+
+  const screen = render(React.createElement(SkillsScreen));
+  fireEvent.press(screen.getByTestId('skill-add-own'));
+  fireEvent.press(screen.getByTestId('skill-choose'));
+  await waitFor(() => expect(screen.getByTestId('skill-preview')).toBeTruthy());
+  expect(screen.getByTestId('skill-resources').props.children.join('')).toBe('Comes with 1 reference file: policy.md.'); // the script is not text for the model
+  fireEvent.press(screen.getByTestId('skill-add'));
+  expect(useSkills.getState().skills[0].resources.map((r: { name: string }) => r.name)).toEqual(['policy.md']);
+
+  const refund = skillsNote('refund for a damaged parcel after the parcel is returned, how many working days', useSkills.getState().skills, 4096);
+  expect(refund).toMatch(/Answer using the policy/);
+  expect(refund).toMatch(/\[policy\.md\]/);
+  expect(refund).toMatch(/within 5 working days/);
+  expect(refund).not.toMatch(/every Tuesday and Friday/); // the shipping part does not match the request
+  mockPicked = null;
 });

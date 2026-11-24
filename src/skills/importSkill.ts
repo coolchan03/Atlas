@@ -2,7 +2,7 @@ import { safeUnzip } from '../utils/safeExtract';
 import RNFS from 'react-native-fs';
 import { pick, types } from '@react-native-documents/picker';
 import { resolvePickedFileUri } from '../utils/resolvePickedFileUri';
-import { parseSkill, SkillFormatError, type ParsedSkill } from './parseSkill';
+import { limitResources, parseSkill, SkillFormatError, type ParsedSkill, type SkillResource } from './parseSkill';
 
 /** A skill is instructions: anything bigger than this is not one. */
 const MAX_BYTES = 200 * 1024;
@@ -26,7 +26,20 @@ async function readText(path: string): Promise<string> {
   return RNFS.readFile(path, 'utf8');
 }
 
-/** The skill in a picked SKILL.md (or any .md / .txt) file, or in a zipped skill folder. Files next to SKILL.md are ignored. */
+/** Every text file under the skill's folder (not SKILL.md itself), with its path relative to the folder; the files that are too big are not read. */
+async function readResources(dir: string, root = dir, depth = 0): Promise<SkillResource[]> {
+  const out: SkillResource[] = [];
+  for (const e of await RNFS.readDir(dir)) {
+    if (e.name.startsWith('.') || e.name === '__MACOSX') continue;
+    if (e.isDirectory() && depth < 3) out.push(...await readResources(e.path, root, depth + 1));
+    else if (e.isFile() && Number(e.size) <= 40 * 1024 && !/^skill\.md$/i.test(e.name)) {
+      try { out.push({ name: e.path.slice(root.length + 1), text: await RNFS.readFile(e.path, 'utf8') }); } catch { /* not text: left out */ }
+    }
+  }
+  return out;
+}
+
+/** The skill in a picked SKILL.md (or any .md / .txt) file, or in a zipped skill folder with the text files that sit with it. Scripts are not run. */
 async function readSkillFile(uri: string, name: string): Promise<ParsedSkill> {
   const local = (await resolvePickedFileUri(uri, name || 'skill.md')).replace(/^file:\/\//, '');
   if (!/\.zip$/i.test(name)) return parseSkill(await readText(local));
@@ -35,16 +48,30 @@ async function readSkillFile(uri: string, name: string): Promise<ParsedSkill> {
     await safeUnzip(local, dir);
     const found = await findSkillFile(dir);
     if (!found) throw new SkillFormatError('There is no SKILL.md in that zip.');
-    return parseSkill(await readText(found));
+    const skill = parseSkill(await readText(found));
+    const { kept } = limitResources(await readResources(found.slice(0, found.lastIndexOf('/'))));
+    return kept.length ? { ...skill, resources: kept } : skill;
   } finally {
     RNFS.unlink(dir).catch(() => undefined);
   }
 }
 
-/** Opens the file picker and reads the chosen skill; null when the person closes the picker. */
+/**
+ * Opens the file picker and reads the chosen skill; null when the person closes the picker. Several files can be chosen at once: the one with
+ * a skill header is the skill and the other text files come with it as its references.
+ */
 export async function pickSkill(): Promise<ParsedSkill | null> {
   let files;
-  try { files = await pick({ mode: 'open', type: [types.allFiles], allowMultiSelection: false }); } catch { return null; }
-  const file = files?.[0];
-  return file ? readSkillFile(file.uri, file.name || 'skill.md') : null;
+  try { files = await pick({ mode: 'open', type: [types.allFiles], allowMultiSelection: true }); } catch { return null; }
+  if (!files?.length) return null;
+  if (files.length === 1) return readSkillFile(files[0].uri, files[0].name || 'skill.md');
+  const read = await Promise.all(files.map(async (f) => {
+    const local = (await resolvePickedFileUri(f.uri, f.name || 'file.txt')).replace(/^file:\/\//, '');
+    return { name: f.name || 'file.txt', text: await readText(local) };
+  }));
+  const main = read.find((f) => /^skill\.md$/i.test(f.name)) ?? read.find((f) => /^---\n/.test(f.text.replace(/^\ufeff/, '').replace(/\r\n?/g, '\n')));
+  if (!main) throw new SkillFormatError('None of those files is a SKILL.md (a file that starts with a header between two --- lines).');
+  const { kept } = limitResources(read.filter((f) => f !== main));
+  const skill = parseSkill(main.text);
+  return kept.length ? { ...skill, resources: kept } : skill;
 }
