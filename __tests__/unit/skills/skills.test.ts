@@ -1,4 +1,4 @@
-import { parseSkill, skillSlug, SkillFormatError } from '../../../src/skills/parseSkill';
+import { limitResources, parseSkill, RESOURCE_LIMITS, skillSlug, SkillFormatError } from '../../../src/skills/parseSkill';
 import { calledSkill, pickSkill, relevance, skillsNote, skillBudgetChars } from '../../../src/skills/selectSkills';
 import type { Skill } from '../../../src/skills/skillsStore';
 
@@ -93,5 +93,42 @@ describe('choosing a skill for a message', () => {
     expect(note.length).toBeLessThan(skillBudgetChars(4096) + 300);
     expect(note).toMatch(/left out to fit/);
     expect(skillBudgetChars(16384)).toBeGreaterThan(skillBudgetChars(4096));
+  });
+});
+
+describe('files that come with a skill', () => {
+  it('keeps text files within the limits, with plain names, and leaves out scripts, SKILL.md, empty and oversize files', () => {
+    const big = 'x'.repeat(RESOURCE_LIMITS.bytesEach + 1);
+    const { kept, skipped } = limitResources([
+      { name: 'references/api.md', text: 'The API.' }, { name: '/notes.txt', text: 'Notes.' }, { name: 'scripts/run.py', text: 'print(1)' }, { name: 'SKILL.md', text: 'the skill' },
+      { name: 'empty.md', text: '  ' }, { name: 'huge.md', text: big }, { name: 'data\\table.csv', text: 'a,b' },
+    ]);
+    expect(kept.map((r) => r.name)).toEqual(['references/api.md', 'notes.txt', 'data/table.csv']);
+    expect(skipped).toBe(4);
+    const many = Array.from({ length: 30 }, (_, i) => ({ name: `r${i}.md`, text: 'y'.repeat(20 * 1024) }));
+    const limited = limitResources(many).kept;
+    expect(limited.length).toBeLessThanOrEqual(RESOURCE_LIMITS.files);
+    expect(limited.reduce((n, r) => n + r.text.length, 0)).toBeLessThanOrEqual(RESOURCE_LIMITS.bytesTotal);
+  });
+
+  it('gives the reference pieces that match the request, best first and inside the room, and none when nothing matches', () => {
+    const { relevantReferences, referencePieces } = require('../../../src/skills/selectSkills');
+    const text = '# Returns\n\nA refund for a damaged parcel is paid within five working days.\n\n# Shipping\n\nParcels are sent every Tuesday from the warehouse.';
+    expect(referencePieces(text, 80).length).toBeGreaterThan(1);
+    const files = [{ name: 'policy.md', text }];
+    expect(relevantReferences('refund for a damaged parcel', files, 500)[0]).toMatch(/\[policy\.md\]\n.*refund for a damaged parcel/s);
+    expect(relevantReferences('refund for a damaged parcel', files, 40)).toEqual([]); // no room
+    expect(relevantReferences('what is the weather', files, 500)).toEqual([]);
+  });
+});
+
+describe('a skill read as steps', () => {
+  const { skillSteps } = require('../../../src/skills/skillSteps');
+  it('takes the numbered items (an indented line belongs to its item, a closing paragraph does not), else the sections under headings, else nothing', () => {
+    expect(skillSteps('Intro.\n\n1. First thing.\n   more of the first.\n2) Second thing.\n\nA closing note.')).toEqual(['First thing. more of the first.', 'Second thing.']);
+    expect(skillSteps('# Title\n\n## Gather\nCollect the facts.\n\nAnd the dates.\n\n## Write\nWrite it up.')).toEqual(['Gather Collect the facts. And the dates.', 'Write Write it up.']);
+    expect(skillSteps('Be kind and brief.')).toEqual([]);
+    expect(skillSteps('1. Only one step.')).toEqual([]);
+    expect(skillSteps(Array.from({ length: 20 }, (_, i) => `${i + 1}. Step ${i + 1}.`).join('\n'))).toHaveLength(12);
   });
 });

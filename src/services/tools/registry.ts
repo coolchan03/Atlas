@@ -265,7 +265,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   },
   {
     id: 'make_helper', name: 'make_helper', displayName: 'Make a multi-step helper', icon: 'list',
-    description: "Make a reusable multi-step helper for the user, when they ask for a repeatable job (for example 'a reply writer', 'a meeting recap', 'a study plan from notes'). A helper is a name plus step lines, one per line: 'field: <label> | <choice>, <choice>' (asked first; leave off the choices for a typed answer), 'ask: <question> | <choice>, <choice>' (a choice part-way) and 'ai: <one instruction>'. Use at least one ai: line and at most 8 lines. It is saved in Multi-step helpers for the user to read and run; it can only use the text and answers the user gives it.",
+    description: "Make a reusable multi-step helper for the user, when they ask for a repeatable job (for example 'a reply writer', 'a meeting recap', 'a study plan from notes'). A helper is a name plus step lines, one per line: 'field: <label> | <choice>, <choice>' (asked first; leave off the choices for a typed answer), 'ask: <question> | <choice>, <choice>' (a choice part-way) 'ai: <one instruction>' and 'calc: <label> | <expression>' (an exact calculation done by code, for example 'calc: Total | {Price} * {Qty}'; {Name} is a field written above it; use it for totals, conversions and splits instead of asking the AI to do arithmetic). Use at least one ai: or calc: line and at most 8 lines. It is saved in Multi-step helpers for the user to read and run; it can only use the text and answers the user gives it.",
     parameters: {
       title: { type: 'string', description: 'Short name, 2 to 5 words', required: true },
       steps: { type: 'string', description: 'The step lines, one per line', required: true },
@@ -288,9 +288,33 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: { topic: { type: 'string', description: 'The standard or topic, for example "ASC 842 leases", "credit losses CECL" or "segment reporting"', required: true } },
   },
   {
+    id: 'source_updates', name: 'source_updates', displayName: 'Look for newer sources', icon: 'refresh-cw',
+    description: "Look on the official sites of this project's field only (for tax: IRS, eCFR, the U.S. Code, Congress and the courts; for markets, accounting, law or a profile the user wrote: its own list of sites) for a newer version of a source the project holds, or for something new on a topic. Each page found is marked in code as NEWER, the same edition or OLDER than a document the project already has. Use when the user asks to look for updates, check whether a source is current, or find a newer rule, filing, standard, law or decision. Tell the user what was found and ask before adding anything. To check whether a court case is still good law, use case_status.",
+    parameters: { source: { type: 'string', description: 'What to look for: a document name in the project, a citation such as "Rev. Proc. 2024-40", "ASC 842" or "10-K Apple", or a topic', required: true } },
+  },
+  {
+    id: 'case_status', name: 'case_status', displayName: 'Check a court case', icon: 'check-circle',
+    description: "Check whether a court case is still good law: searches the web for later treatment (overruled, reversed, vacated, superseded by statute, followed, affirmed) and shows each result with the signals found in its text. Use before relying on a court decision, and whenever the user asks whether a case is still good law. A negative word can describe the case's own appeal rather than later treatment, so open a result with read_url to see which court did what, and when, before saying the case is no longer good law.",
+    parameters: { case: { type: 'string', description: 'The case name and, if known, the citation or court and year, for example "Loper Bright Enterprises v. Raimondo, 603 U.S. 369 (2024)"', required: true } },
+  },
+  {
+    id: 'add_source', name: 'add_source', displayName: 'Add a source to the project', icon: 'plus-circle',
+    description: "Add one web page from this project's official sites to the project as a document, after the user agrees in a dialog. Use only after source_updates found it and the user said to add it. A newer edition of a work the project holds replaces the older one in answers.",
+    parameters: { url: { type: 'string', description: 'The full address of the page, exactly as source_updates showed it', required: true } },
+  },
+  {
     id: 'drug_label', name: 'drug_label', displayName: 'Drug label', icon: 'activity',
     description: "Look up the FDA label of a medicine by brand or generic name: what it is for, dose, warnings, who must not use it and interactions, in the manufacturer's own words. Use when the user asks about a medicine, a dose, a side effect or whether two medicines mix. Needs a connection for a first lookup; labels looked up before work offline. Quote the label and say it is not medical advice.",
     parameters: { name: { type: 'string', description: 'The medicine, brand or generic name, for example ibuprofen or Advil', required: true } },
+  },
+  {
+    id: 'work_in_steps', name: 'work_in_steps', displayName: 'Do a big job in steps', icon: 'list',
+    description: "Do a job that has several parts, or that works on a long text, in small steps instead of all at once. The job is split into short steps and each is done on its own, so nothing is forgotten or cut off. Use it when the user asks for several things in one message (for example summarise, then list the actions, then write an email), or gives a long text and wants more than one thing done with it. Pass the job in the user's words, and the text when there is one.",
+    parameters: {
+      job: { type: 'string', description: 'What to do, in the user\'s words, with every part of it', required: true },
+      text: { type: 'string', description: 'The material to work on (a document, notes, an article), when the user gave one' },
+      skill: { type: 'string', description: 'The name of an installed skill whose steps to follow one at a time (for a long skill), when the user called one' },
+    },
   },
   {
     id: 'make_music', name: 'make_music', displayName: 'Make music', icon: 'music',

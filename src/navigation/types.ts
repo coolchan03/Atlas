@@ -1,5 +1,8 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
 
+/** A file another app shared into Atlas: where it can be read and what it is. */
+export interface SharedFile { uri: string; mime: string }
+
 export type RootStackParamList = {
   Onboarding: undefined;
   ModelDownload: undefined;
@@ -12,7 +15,8 @@ export type RootStackParamList = {
   AgentEdit: { agentId?: string; kind?: 'agent' | 'pal' };
   Learning: { agentId?: string } | undefined;
   TeachList: undefined;
-  Workflows: undefined;
+  /** `job`: a job to open at once (a skill run in steps). */
+  Workflows: { job?: string } | undefined;
   Sensors: undefined;
   CallSetup: undefined;
   CpaPrep: undefined;
@@ -22,7 +26,18 @@ export type RootStackParamList = {
   OfflineLibrary: undefined;
   SurvivalManual: { chapterId?: string } | undefined;
   Phrases: undefined;
-  Translator: undefined;
+  Translator: { picture?: SharedFile } | undefined;
+  Radio: undefined;
+  StormWatch: undefined;
+  TimeCapsule: undefined;
+  Formula: undefined;
+  AskNotes: undefined;
+  TeachBack: undefined;
+  Trail: undefined;
+  Currency: undefined;
+  Journal: undefined;
+  Trip: undefined;
+  AskDocument: { file?: SharedFile } | undefined;
   Study: { projectId: string; openAt?: number };
   Practice: { projectId: string; topic?: string };
   Planner: undefined;
@@ -38,7 +53,7 @@ export type RootStackParamList = {
   ProjectDocument: { projectId: string; docId?: number; name?: string };
   Recorder: undefined;
   Search: undefined;
-  Share: { text: string };
+  Share: { text?: string; file?: SharedFile };
   Skills: undefined;
   Schedule: undefined;
   Topics: { projectId?: string; topic?: string } | undefined;

@@ -12,6 +12,27 @@ export interface ParsedSkill {
   userInvocable: boolean;
   /** Programs the skill expects (curl, python...): Atlas cannot run them. */
   needs: string[];
+  /** Text files that came with it (references, examples). */
+  resources?: SkillResource[];
+}
+
+/** A text file that comes with a skill (references/api.md, examples.txt): read when the request is about what it holds. */
+export interface SkillResource { name: string; text: string }
+
+/** What a skill may bring along: a few text files, each short, all together a small share of the phone's storage. */
+export const RESOURCE_LIMITS = { files: 12, bytesEach: 40 * 1024, bytesTotal: 100 * 1024 };
+const RESOURCE_TYPE = /\.(md|markdown|txt|csv|json|yaml|yml)$/i;
+
+/** Keeps the resources that are text, within the limits, in the order given, with plain relative names. Pure. */
+export function limitResources(files: SkillResource[]): { kept: SkillResource[]; skipped: number } {
+  const kept: SkillResource[] = [];
+  let total = 0;
+  for (const f of files) {
+    const name = f.name.replace(/\\/g, '/').replace(/^\/+/, '');
+    const fits = RESOURCE_TYPE.test(name) && !/(^|\/)skill\.md$/i.test(name) && f.text.trim() && f.text.length <= RESOURCE_LIMITS.bytesEach && total + f.text.length <= RESOURCE_LIMITS.bytesTotal && kept.length < RESOURCE_LIMITS.files;
+    if (fits) { kept.push({ name, text: f.text }); total += f.text.length; }
+  }
+  return { kept, skipped: files.length - kept.length };
 }
 
 export class SkillFormatError extends Error {}

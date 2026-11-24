@@ -9,6 +9,9 @@ import { useMusicLibrary, type InstrumentalTrack } from './library';
 import { prepareInstruments } from './soundfontFiles';
 import { AMBIENT, AMBIENT_RATE, makeAmbient, type AmbientKind } from './ambient';
 
+/** How long a score plays, in whole seconds (a little past its last note): the length to render a tune whose length is not chosen. */
+export const scoreSeconds = (s: MusicScore): number => Math.min(300, Math.max(10, Math.ceil(Math.max(...s.notes.map((n) => n.beat + n.length)) * 60 / (s.bpm || 100)) + 2));
+
 /** Lets the screen repaint between the slow steps of making a track, so the person sees what is happening. */
 const breathe = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 30));
 

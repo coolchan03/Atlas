@@ -35,6 +35,7 @@ import { VoiceModelsSheet } from '../../components/models/VoiceModelsSheet';
 import { useWhisperStore } from '../../stores/whisperStore';
 import { WHISPER_MODELS } from '../../services';
 import { getTextRuntimeInfo } from '../../services/activeModelService/runtimeInfo';
+import { addSourceCheckNote } from '../../services/sourceCheck';
 import { formatRemoteRuntimeStatus, formatTextRuntimeStatus } from '../../services/modelRuntimeStatus';
 import { speedHealthLabel, useSpeedStats } from '../../atlasTools/speed';
 
@@ -289,6 +290,7 @@ export const ChatScreen: React.FC = () => {
       onEdit={chat.handleEditMessage}
       onDelete={chat.handleDeleteMessage}
       onCheckAnswer={chat.handleCheckAnswer}
+      onCheckSources={(m) => { if (chat.activeConversation) void addSourceCheckNote(chat.activeConversation.id, m.content, chat.activeConversation.projectId); }}
       onSaveToProject={chat.activeProject && !chat.activeConversation?.isPrivate &&
         (chat.activeProject.pinVerifier ? isProtectedProjectUnlocked(chat.activeProject.id) : !chat.activeConversation?.pinVerifier)
         ? chat.handleSaveReportToProject : undefined}

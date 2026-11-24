@@ -13,7 +13,7 @@ interface SkillsState {
   setEnabled: (name: string, on: boolean) => void;
 }
 
-/** Skills the person added. Text only: whatever sits next to a SKILL.md (scripts, references) is not kept or run. */
+/** Skills the person added. Text only: the text files that came with a skill (references, examples) are kept for it; scripts are not run. */
 export const useSkills = create<SkillsState>()(persist((set) => ({
   skills: [],
   add: (skill) => set((s) => {

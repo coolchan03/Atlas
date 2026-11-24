@@ -4,7 +4,7 @@
  * not authority on their own; textbooks come last and go out of date. Within one of these, the newest edition is the one that applies.
  * Atlas reads all of this from a document's name (and, for a standard, its first pages), so nothing has to be tagged by hand. Pure.
  */
-type TaxKind = 'statute' | 'regulation' | 'bulletin' | 'publication' | 'textbook';
+export type TaxKind = 'statute' | 'publicLaw' | 'regulation' | 'court' | 'bulletin' | 'publication' | 'textbook';
 export interface TaxSource {
   kind: TaxKind;
   /** 1 is the highest authority. */
@@ -14,17 +14,38 @@ export interface TaxSource {
   year?: number;
   /** Documents of one series are editions of the same work: "pub-17", "irc", "cfr-26". */
   series?: string;
+  /** For a court decision: which court, and whether it binds ("Tax Court memorandum, not binding precedent"). */
+  detail?: string;
 }
 
-const RANK: Record<TaxKind, number> = { statute: 1, regulation: 2, bulletin: 3, publication: 4, textbook: 5 };
-const LABEL: Record<TaxKind, string> = { statute: 'Internal Revenue Code', regulation: 'Treasury regulations (CFR)', bulletin: 'Internal Revenue Bulletin', publication: 'IRS publication', textbook: 'textbook' };
+export const TAX_KINDS: string[] = ['statute', 'publicLaw', 'regulation', 'court', 'bulletin', 'publication', 'textbook'];
+const RANK: Record<TaxKind, number> = { statute: 1, publicLaw: 1, regulation: 2, court: 3, bulletin: 3, publication: 4, textbook: 5 };
+const LABEL: Record<TaxKind, string> = { statute: 'Internal Revenue Code', publicLaw: 'Public Law (session law that amended the Code)', court: 'Court decision', regulation: 'Treasury regulations (CFR)', bulletin: 'Internal Revenue Bulletin', publication: 'IRS publication', textbook: 'textbook' };
 
 const REGULATION = /\b(?:26[\s_-]*cfr|cfr|code of federal regulations|treas(?:ury)?\.?[\s_-]*reg)/i;
 const STATUTE = /\b(?:title[\s_-]*26|internal revenue code|irc|26[\s_-]*u\.?s\.?c|usc[\s_-]*title[\s_-]*26|uscode)\b/i;
 const BULLETIN = /\b(?:irb[\s_-]*\d{2,4}[\s_-]+\d{1,2}|irb|internal revenue bulletin|rev\.?[\s_-]*(?:rul|proc)|revenue[\s_-]*(?:ruling|procedure)|notice[\s_-]*\d{4}-\d+)/i;
+const PUBLIC_LAW = /\b(?:public[\s_-]*law|p\.?[\s_-]?l\.?|pub\.?[\s_-]*l\.?)[\s_-]*(\d{2,3})[\s_\u2010-\u2015-]+(\d{1,4})\b/i;
+const COURT = /\b(?:tax[\s_-]*court|t\.?c\.?[\s_-]*(?:memo|summ)|tcm|v\.?[\s_-]*commissioner|v\.?[\s_-]*comm'?r|f\.?[\s_-]*(?:2d|3d|4th)|court[\s_-]*of[\s_-]*appeals|circuit|supreme[\s_-]*court|fed(?:eral)?\.?[\s_-]*cl(?:aims)?|district[\s_-]*court)\b/i;
 const PUBLICATION = /\b(?:pub(?:lication)?[\s_-]*\d{1,4}[a-z]?|p\d{2,4}[a-z]?(?=[\s_.-]|$))/i;
 
 /** The four-digit year a name shows (the last one when there are several, since "Pub 17 (2023 returns) 2024" is the 2024 edition), or the year of an IRB such as "irb24-31". */
+const ordinal = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`;
+
+/** Which court a decision is from and what that means for how far it binds, from its name or first page. A statement of fact about the court, not a ruling on the case. */
+function courtDetail(text: string): string {
+  if (/supreme[\s_-]*court/i.test(text)) return 'U.S. Supreme Court, binding everywhere';
+  if (/summary[\s_-]*opinion|t\.?c\.?[\s_-]*summ/i.test(text)) return 'Tax Court summary opinion, not precedent';
+  if (/t\.?c\.?[\s_-]*memo|\btcm\b|memorandum[\s_-]*(?:opinion|decision)/i.test(text)) return 'Tax Court memorandum, not binding precedent';
+  if (/tax[\s_-]*court/i.test(text)) return 'Tax Court regular opinion';
+  const circuit = text.match(/\b(\d{1,2})(?:st|nd|rd|th)[\s_-]*cir/i)?.[1];
+  if (circuit) return `Court of Appeals, ${ordinal(Number(circuit))} Circuit, binding in that circuit`;
+  if (/d\.?c\.?[\s_-]*cir/i.test(text)) return 'Court of Appeals, D.C. Circuit, binding in that circuit';
+  if (/federal[\s_-]*cir|fed\.?[\s_-]*cir/i.test(text)) return 'Court of Appeals, Federal Circuit, binding in that circuit';
+  if (/circuit|court[\s_-]*of[\s_-]*appeals|f\.?[\s_-]*(?:2d|3d|4th)/i.test(text)) return 'Court of Appeals, binding in its own circuit';
+  return 'trial court, not binding on other courts';
+}
+
 function yearOf(name: string): number | undefined {
   const irb = name.match(/\birb[\s_-]*(\d{2})[\s_-]+\d{1,2}\b/i);
   if (irb) return 2000 + Number(irb[1]);
@@ -63,11 +84,24 @@ export function taxFromText(text: string): TaxSource | null {
     const cur = start.match(/(?:current through|as of|updated)[^.]{0,40}(20\d{2})/i);
     return make('statute', cur ? Number(cur[1]) : firstYear(start), `irc${partOf(start.slice(0, 600))}`);
   }
+  const law = start.match(/\bPublic\s+Law\s+(\d{2,3})\s*[\u2010-\u2015-]\s*(\d{1,4})\b/i);
+  if (law && /Internal Revenue Code|Be it enacted|Act\b/i.test(start)) return make('publicLaw', undefined, `pl-${law[1]}-${law[2]}`);
+  if (/\bUNITED STATES (?:TAX COURT|COURT OF APPEALS|COURT OF FEDERAL CLAIMS|DISTRICT COURT)\b|\bSupreme Court of the United States\b/i.test(start)) return { ...make('court', firstYear(start)), detail: courtDetail(start) };
   return null;
 }
 
+let kindOverride: (name: string) => TaxKind | 'none' | undefined = (_name) => undefined;
+/** What the person said a document is (officialDocs.ts), over what its name and first pages show. 'none' says it is not tax material. */
+export const setKindLookup = (fn: (name: string) => TaxKind | 'none' | undefined): void => { kindOverride = fn; };
+
 /** What a document is, by its name; null for anything that does not look like tax material at all (it is then just a document). */
 export function classifyTaxSource(name: string): TaxSource | null {
+  const chosen = kindOverride(name);
+  if (chosen === 'none') return null;
+  if (chosen) {
+    const base = classifyByName(name) ?? lookup(name);
+    return { ...make(chosen, base?.year, base?.series), ...(chosen === 'court' ? { detail: base?.detail ?? courtDetail(name) } : {}) };
+  }
   const byName = classifyByName(name);
   const learned = lookup(name);
   if (!learned) return byName;
@@ -82,6 +116,9 @@ function classifyByName(name: string): TaxSource | null {
   if (REGULATION.test(n)) return make2('regulation', `cfr-26${partOf(n)}`);
   if (BULLETIN.test(n)) return make2('bulletin');
   if (STATUTE.test(n)) return make2('statute', `irc${partOf(n)}`);
+  const law = n.match(PUBLIC_LAW);
+  if (law) return { ...make('publicLaw', undefined, `pl-${law[1]}-${law[2]}`) };
+  if (COURT.test(n)) return { ...make2('court'), detail: courtDetail(n) };
   const pub = n.match(PUBLICATION);
   if (pub) return make2('publication', `pub-${(pub[0].match(/\d{1,4}[a-z]?/i)?.[0] ?? '').toLowerCase()}`);
   return null;
@@ -108,11 +145,11 @@ export function supersededEditions(names: string[]): Set<string> {
 /** A short label for a document in a prompt, such as "IRS publication, 2024 edition", or '' for ordinary documents. */
 export function taxLabel(name: string): string {
   const c = classifyTaxSource(name);
-  return c ? `${c.label}${c.year ? `, ${c.year}` : ''}` : '';
+  return c ? `${c.kind === 'court' && c.detail ? c.detail : c.label}${c.year ? `, ${c.year}` : ''}` : '';
 }
 
-/** The order of authority and the rule for editions, to put in a prompt when the project holds tax material. */
-export const TAX_RULES = 'These sources differ in authority and age. Follow this order: the Internal Revenue Code (Title 26), then the Treasury regulations (CFR), then Internal Revenue Bulletins (rulings, procedures, notices), then IRS publications, then textbooks. When they differ, the higher one is right. Between editions of the same source, use the most recent. Say which source and which edition you used, and the tax year each figure applies to. An IRS publication explains the law and is not authority on its own.';
+/** The order of authority and the rule for editions, to put in a prompt when the project holds tax material. A project can replace it with its own rules (sourceRules). */
+export const TAX_RULES = 'These sources differ in authority and age. Rank them, highest first: the Internal Revenue Code and the Public Laws that amended it; Treasury regulations; court decisions (a decision binds only the courts below it, and a Tax Court memorandum or summary opinion is not binding precedent); IRS rulings, procedures and notices; IRS publications and instructions (they explain the law and are not authority on their own); textbooks. Rank decides a conflict, not date: a newer court opinion does not override a statute, and Congress can amend language a court applied. Between editions of the same source, use the most recent, and apply the version in force for the tax year in question. Say which source, edition and date you used. If a source may be out of date, say so. Before relying on a court decision, check its later treatment with the case_status tool.';
 
 export const hasTaxSources = (names: string[]): boolean => names.some((n) => !!classifyTaxSource(n));
 
@@ -126,7 +163,7 @@ export const yearsAsked = (question: string): number[] => [...new Set([...questi
 export function yearNotes(question: string, sourceNames: string[]): string {
   const asked = yearsAsked(question);
   if (!asked.length) return '';
-  const off = [...new Set(sourceNames)].map((n) => ({ n, c: classifyTaxSource(n) })).filter((x): x is { n: string; c: TaxSource } => !!x.c?.year && !asked.includes(x.c.year));
+  const off = [...new Set(sourceNames)].map((n) => ({ n, c: classifyTaxSource(n) })).filter((x): x is { n: string; c: TaxSource } => !!x.c?.year && x.c.kind !== 'court' && x.c.kind !== 'publicLaw' && !asked.includes(x.c.year));
   if (!off.length) return '';
   return `The question is about tax year ${asked.join(' and ')}. ${off.map((x) => `${x.n} is for ${x.c.year}`).join('; ')}: do not give figures from a different year as the answer. Say which year each figure is for, and that it may differ.`;
 }

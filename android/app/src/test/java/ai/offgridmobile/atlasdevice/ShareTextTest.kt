@@ -21,6 +21,21 @@ class ShareTextTest {
         assertNull(ShareText.from(ShareText.ACTION_PROCESS_TEXT, "text/plain", "ignored", null))
     }
 
+    @Test fun takesSharedFilesOfKindsAtlasCanOpen() {
+        assertEquals("content://a/1", ShareText.fileUri(ShareText.ACTION_SEND, "application/pdf", "content://a/1"))
+        assertEquals("content://a/2", ShareText.fileUri(ShareText.ACTION_SEND, "image/jpeg", "content://a/2"))
+        assertEquals("content://a/3", ShareText.fileUri(ShareText.ACTION_SEND, "IMAGE/PNG", "content://a/3"))
+        assertEquals("content://a/4", ShareText.fileUri(ShareText.ACTION_SEND, "text/plain", "content://a/4"))
+    }
+
+    @Test fun ignoresFilesOfOtherKindsAndShareWithoutAStream() {
+        assertNull(ShareText.fileUri(ShareText.ACTION_SEND, "video/mp4", "content://a/5"))
+        assertNull(ShareText.fileUri(ShareText.ACTION_SEND, "application/pdf", null))
+        assertNull(ShareText.fileUri(ShareText.ACTION_SEND, "application/pdf", " "))
+        assertNull(ShareText.fileUri(ShareText.ACTION_SEND, null, "content://a/6"))
+        assertNull(ShareText.fileUri("android.intent.action.MAIN", "application/pdf", "content://a/7"))
+    }
+
     @Test fun cutsVeryLongText() {
         val text = ShareText.from(ShareText.ACTION_SEND, "text/plain", "a".repeat(ShareText.MAX_CHARS + 500), null)!!
         assertEquals(ShareText.MAX_CHARS, text.length)

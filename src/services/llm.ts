@@ -934,8 +934,11 @@ class LLMService {
     if (!this.multimodalInitialized) return false;
     return messages.some(m => m.attachments?.some(a => a.type === 'image'));
   }
-  /** Generate a completion with a hard token cap (used for summarization, not user-facing). */
-  async generateWithMaxTokens(messages: Message[], maxTokens: number): Promise<string> {
+  /**
+   * Generate a completion with a hard token cap (used for summarization, not user-facing). `grammar` (GBNF) makes the engine write only text that
+   * follows it; the Vulkan engine has no grammar support, so there the reply is unconstrained and the caller's own checks apply.
+   */
+  async generateWithMaxTokens(messages: Message[], maxTokens: number, extra: { grammar?: string } = {}): Promise<string> {
     if (this.vulkanLoaded) {
       if (this.isGenerating) throw new Error('Generation already in progress');
       this.isGenerating = true;
@@ -957,8 +960,8 @@ class LLMService {
     const { settings } = useAppStore.getState();
     let fullResponse = '';
     const ctx = this.context;
-    const maxParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift(), modelPath: this.currentModelPath, contextLength: this.currentSettings.contextLength }), n_predict: maxTokens };
-    if (this.shouldPrime(oaiMessages)) await primeFirstWord(ctx, maxParams);
+    const maxParams = { messages: oaiMessages, ...buildCompletionParams(settings, { disableCtxShift: this.shouldDisableCtxShift(), modelPath: this.currentModelPath, contextLength: this.currentSettings.contextLength }), n_predict: maxTokens, ...(extra.grammar ? { grammar: extra.grammar } : {}) };
+    if (!extra.grammar && this.shouldPrime(oaiMessages)) await primeFirstWord(ctx, maxParams);
     const completionWork = safeCompletion(ctx, () => ctx.completion(
       maxParams,
       (data) => { if (this.isGenerating && data.token) fullResponse += data.token; },

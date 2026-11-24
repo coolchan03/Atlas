@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { useAppStore, useChatStore, useProjectStore } from '../stores';
 import { searchEverything, type SearchHit, type SearchKind } from './searchIndex';
+import { askWhere } from './askWhere';
 
 const HEADINGS: Record<SearchKind, string> = { screen: 'Screens and settings', chat: 'Chats', project: 'Projects', model: 'Models' };
 
@@ -21,6 +22,15 @@ export const SearchScreen: React.FC = () => {
     () => searchEverything(query, { conversations, projects, models: models.map((m) => ({ id: m.id, name: m.name })) }),
     [query, conversations, projects, models],
   );
+  const [suggested, setSuggested] = useState<{ query: string; hits: SearchHit[] } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const askAi = async () => {
+    setAsking(true); setAskError(null);
+    try { setSuggested({ query, hits: await askWhere(query) }); }
+    catch (e) { setAskError(`Could not search by meaning: ${String((e as Error)?.message || e).slice(0, 120)}`); }
+    setAsking(false);
+  };
   const open = (h: SearchHit) => {
     if (h.kind === 'chat') useChatStore.getState().setActiveConversation(h.id);
     navigation.navigate(h.route, h.params);
@@ -35,6 +45,28 @@ export const SearchScreen: React.FC = () => {
       </View>
       <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
         {query.trim().length >= 2 && !hits.length && <Text style={[styles.empty, { color: colors.textMuted }]} testID="search-empty">Nothing found for "{query.trim()}".</Text>}
+        {query.trim().length >= 4 && (
+          <TouchableOpacity onPress={() => { void askAi(); }} disabled={asking} style={styles.row} accessibilityRole="button" testID="search-ask-ai">
+            <Icon name="compass" size={18} color={colors.primary} />
+            <View style={styles.rowText}>
+              <Text style={[styles.title, { color: colors.primary }]}>{asking ? 'Looking...' : 'Find it by meaning'}</Text>
+              <Text style={[styles.detail, { color: colors.textMuted }]}>Say what you want in your own words. It only points to a screen.</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+        {!!askError && <Text style={[styles.empty, { color: colors.error }]} testID="search-ask-error">{askError}</Text>}
+        {suggested && suggested.query === query && (
+          <View>
+            <Text style={[styles.heading, { color: colors.textMuted }]}>Closest by meaning</Text>
+            {!suggested.hits.length && <Text style={[styles.detail, { color: colors.textMuted }]} testID="search-ask-none">No screen fits that.</Text>}
+            {suggested.hits.map((h) => (
+              <TouchableOpacity key={`ai-${h.id}`} style={styles.row} onPress={() => open(h)} testID={`search-ai-${h.id}`} accessibilityRole="button">
+                <Icon name={h.icon} size={18} color={colors.primary} />
+                <View style={styles.rowText}><Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{h.title}</Text></View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         {kinds.map((k) => (
           <View key={k}>
             <Text style={[styles.heading, { color: colors.textMuted }]}>{HEADINGS[k]}</Text>

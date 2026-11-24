@@ -9,6 +9,7 @@ import { languageFor } from './languages';
 import { translateText } from './translateService';
 import { useTranslator } from './store';
 import { useMissingVoice } from './useMissingVoice';
+import { useLayoutClass } from '../hooks/useLayoutClass';
 
 /** Text mode: type or paste text, get the translation, hear it, copy it. Recent translations are kept below. */
 export function TextPanel() {
@@ -19,6 +20,8 @@ export function TextPanel() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const voiceNote = useMissingVoice(languageFor(to).name);
+  // On a tablet the text goes in on the left and the translation shows beside it, instead of below.
+  const { twoPane } = useLayoutClass();
 
   const translate = async () => {
     const input = text.trim();
@@ -34,6 +37,8 @@ export function TextPanel() {
 
   return (
     <View style={styles.gap} testID="translator-text">
+      <View style={twoPane ? styles.panes : styles.gap} testID="translator-panes">
+      <View style={[styles.gap, twoPane && styles.pane]}>
       <TextInput
         value={text} onChangeText={setText} multiline placeholder="Type or paste text to translate" placeholderTextColor={colors.textMuted} testID="translator-input"
         style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surface }]}
@@ -46,8 +51,9 @@ export function TextPanel() {
       {busy && <ActivityIndicator color={colors.primary} />}
       {!!error && <Text style={{ color: colors.error, ...TYPOGRAPHY.bodySmall }} testID="translator-error">{error}</Text>}
       {!!voiceNote && <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }} testID="translator-voice-note">{voiceNote}</Text>}
+      </View>
       {!!result && (
-        <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="translator-result">
+        <View style={[styles.card, twoPane && styles.pane, { borderColor: colors.border, backgroundColor: colors.surface }]} testID="translator-result">
           <Text selectable style={{ color: colors.text, ...TYPOGRAPHY.body }}>{result}</Text>
           <View style={styles.actions}>
             <TouchableOpacity onPress={() => { stopSpeech(); void speakInAndWait(result, languageFor(to).code, { messageId: 'translator' }); }} accessibilityRole="button" accessibilityLabel="Speak the translation" testID="translator-speak"><Icon name="volume-2" size={20} color={colors.primary} /></TouchableOpacity>
@@ -56,6 +62,7 @@ export function TextPanel() {
           </View>
         </View>
       )}
+      </View>
       {history.length > 0 && (
         <View style={styles.gap}>
           <View style={styles.actions}>
@@ -76,6 +83,8 @@ export function TextPanel() {
 
 const styles = StyleSheet.create({
   gap: { gap: SPACING.md },
+  panes: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.lg },
+  pane: { flex: 1 },
   input: { borderWidth: 1, borderRadius: 12, padding: SPACING.md, minHeight: 120, textAlignVertical: 'top', ...TYPOGRAPHY.body },
   card: { borderWidth: 1, borderRadius: 12, padding: SPACING.md, gap: SPACING.sm },
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.lg },

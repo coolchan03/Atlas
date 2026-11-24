@@ -1,6 +1,6 @@
 /* eslint-disable max-params, complexity -- Generation orchestrator retains the legacy routing and retry interfaces. */
 /* eslint-disable max-lines -- cohesive generation-action orchestrator (send/regenerate/dispatch/route share the same GenerationDeps + session state); splitting it would scatter tightly-coupled turn logic. */
-import { TAX_RULES, hasTaxSources, supersededEditions, yearNotes } from '../../standards/taxSources';
+import { profileFor, sourceContext } from '../../standards/profiles';
 import { followUpQuery } from '../../services/rag/followUp';
 import { officialDocumentNames } from '../../standards/authority';
 import { noteRouted, routeSpecialists } from '../../services/tools/specialistRouting';
@@ -41,6 +41,9 @@ import { callHook, HOOKS } from '../../bootstrap/hookRegistry';
 import { Message, MediaAttachment, Project, DownloadedModel, RemoteModel, CacheType } from '../../types';
 import logger from '../../utils/logger';
 import { buildDeepResearchBrief, cancelDeepResearch, ResearchCancelledError } from '../../services/deepResearch';
+import { answerInSteps } from '../../workflows/answerInSteps';
+import { cancelWorkInSteps, StepsCancelledError } from '../../workflows/autoSteps';
+import { wantsSteps } from '../../workflows/bigRequest';
 import { ModelReadyOutcome, ensureReadyOrAlert } from './modelReadiness';
 type SetState<T> = Dispatch<SetStateAction<T>>;
 const FALLBACK_RECENT_MESSAGE_COUNT = 2;
@@ -381,16 +384,17 @@ export async function injectRagContext(projectId: string | undefined, query: str
     // Only point at tools this turn actually has: a missing tool makes small models stall or apologise.
     if (enabledTools.includes('search_knowledge_base')) kbPrompt += '\nUse the search_knowledge_base tool to look up anything else in these documents.';
     if (enabledTools.includes('update_project_document')) kbPrompt += '\nWhen the user asks, or the project instructions say so, update a shared document with update_project_document.';
-    // Tax material: say the order of authority, and leave out the older edition when a newer one of the same work is in the project.
+    // The project's source profile (tax, accounting, markets, law or its own): the order of authority, what is stale, and which older editions are left out.
     const docNames = enabledDocs.map((d: import('../../services/rag').RagDocument) => d.name);
-    if (hasTaxSources(docNames)) kbPrompt += `\n${TAX_RULES}`;
+    const proj = useProjectStore.getState().getProject(projectId);
+    const profile = profileFor(proj?.profileId, proj?.customProfile, docNames);
     const r = await ragService.searchProject(projectId, query);
-    const old = supersededEditions(docNames);
-    if (old.size) r.chunks = r.chunks.filter((c: { name: string }) => !old.has(c.name));
-    const yearNote = yearNotes(query, r.chunks.map((c: { name: string }) => c.name));
-    if (yearNote) kbPrompt += `\n${yearNote}`;
+    const src = sourceContext(profile, { custom: proj?.sourceRules, names: docNames, query, chunkNames: r.chunks.map((c: { name: string }) => c.name), now: new Date() });
+    if (src.rules) kbPrompt += `\n${src.rules}`;
+    if (src.retired.size) r.chunks = r.chunks.filter((c: { name: string }) => !src.retired.has(c.name));
+    if (src.notes) kbPrompt += `\n${src.notes}`;
     if (r.chunks.length > 0) {
-      kbPrompt += `\n\n${retrievalService.formatForPrompt(r)}`;
+      kbPrompt += `\n\n${retrievalService.formatForPrompt(r, src.label)}`;
       setTurnSources(sourcesFromChunks(r.chunks, enabledDocs)); // numbered as in the prompt, for the source list under the reply
     }
     return prompt + kbPrompt;
@@ -511,8 +515,24 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
     }
     researchInFlight = false;
   }
-  // A message longer than the model can hold is read in parts and shown to the model as notes (the saved message is unchanged).
-  if (!deps.activeModelInfo?.isRemote && useAppStore.getState().settings.readLongInParts !== false && llmService.isModelLoaded()) {
+  // A message that asks for several things, or is long next to the model's memory, is done in small steps first and the model writes its
+  // answer from that work (the saved message is unchanged). Otherwise a message longer than the model can hold is read in parts as notes.
+  const localReady = !deps.activeModelInfo?.isRemote && llmService.isModelLoaded();
+  const contextTokens = llmService.getPerformanceSettings?.()?.contextLength || useAppStore.getState().settings.contextLength || 4096;
+  let stepsDone = false;
+  if (localReady && !deps.researchMode && useAppStore.getState().settings.autoSteps !== false && wantsSteps(researchMessage, contextTokens)) {
+    try {
+      const stepped = await answerInSteps(researchMessage, {
+        onStatus: (status) => deps.setResearchStatus?.(status),
+        addNote: (content) => deps.addMessage(targetConversationId, { role: 'assistant', content, isSystemInfo: true } as any),
+      });
+      if (stepped) { researchMessage = stepped; stepsDone = true; }
+    } catch (e) {
+      if (e instanceof StepsCancelledError) { generationSession.end('stopped'); generationService.drainQueue(); return; }
+      throw e;
+    }
+  }
+  if (!stepsDone && localReady && useAppStore.getState().settings.readLongInParts !== false) {
     researchMessage = await condenseLongMessage(researchMessage, deps);
   }
   // Offline research already contains the selected document excerpts; do not inject them twice.
@@ -525,7 +545,8 @@ export async function startGenerationFn(deps: GenerationDeps, call: StartGenerat
   basePrompt = callHook<string>(HOOKS.audioAugmentPrompt, basePrompt) ?? basePrompt;
 
   const isRemote = !!useRemoteServerStore.getState().activeRemoteTextModelId;
-  const activeTools = enabledTools;
+  // The steps tool is not offered for a turn that was already done in steps.
+  const activeTools = stepsDone ? enabledTools.filter((t) => t !== 'work_in_steps') : enabledTools;
   // Text hint only when the LOCAL engine lacks native tool-calling (llama without Jinja); LiteRT
   // and remote pass tools natively, so injecting a hint would double-inject. localToolSupport is
   // the engine-registry answer — no engine === 'litert' branch here.
@@ -720,6 +741,7 @@ export async function handleSendFn(deps: GenerationDeps, call: SendCall): Promis
 }
 export async function handleStopFn(deps: Pick<GenerationDeps, 'isGeneratingImage' | 'setResearchStatus'>): Promise<void> {
   cancelDeepResearch();
+  cancelWorkInSteps();
   deps.setResearchStatus?.(null);
   generationSession.end('stopped');
   callHook(HOOKS.audioStop); // abort must silence TTS too — buffered-ahead sentences keep playing otherwise

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Alert } from 'react-native';
+import { NavigationRouteContext } from '@react-navigation/native';
 import { useRecordings } from '../atlasRecorder/store';
 import { documentService } from '../services/documentService';
-import { answerRun, approveRun, cancelRun, resumeRun, startWorkflow, useWorkflowRuns } from './service';
+import { answerRun, approveRun, beginWorkflow, cancelRun, resumeRun, useWorkflowRuns } from './service';
 import { HelperEditor } from './HelperEditor';
 import { useCustomHelpers } from './customHelpers';
 import { InputView, JobList, RunView, type Kind } from './WorkflowViews';
@@ -10,7 +11,9 @@ import { InputView, JobList, RunView, type Kind } from './WorkflowViews';
 /** Multi-step helpers: pick a job, give it text, answer its questions, approve the result. The logic lives in ./service. */
 export const WorkflowsScreen: React.FC = () => {
   const runs = useWorkflowRuns((s) => s.runs);
-  const [kind, setKind] = useState<Kind | null>(null);
+  const route = React.useContext(NavigationRouteContext) as { params?: { job?: string } } | undefined; // none outside a navigator
+  // A skill run in steps arrives with the job to open.
+  const [kind, setKind] = useState<Kind | null>(route?.params?.job ?? null);
   const [text, setText] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -32,9 +35,14 @@ export const WorkflowsScreen: React.FC = () => {
       if (file) setText(await documentService.textFromPicked(file.uri, file.name ?? 'file.txt', 60000));
     } catch (e: any) { if (!(isErrorWithCode(e) && e.code === errorCodes.OPERATION_CANCELED)) throw e; }
   });
-  const start = () => work(() => startWorkflow(kind!, text, fields));
+  // The run opens at once, so its steps can be watched while they are done.
+  const start = () => {
+    const { runId, done } = beginWorkflow(kind!, text, fields);
+    if (runId) { setOpenId(runId); setKind(null); }
+    return work(() => done);
+  };
 
-  if (editing !== undefined) return <HelperEditor helper={helpers.find((h) => h.id === editing) ?? null} onClose={() => setEditing(undefined)} />;
+  if (editing !== undefined) return <HelperEditor helper={helpers.find((h) => h.id === editing) ?? null} onClose={() => setEditing(undefined)} onRun={(jobId) => { setEditing(undefined); setKind(jobId); }} />;
   if (run) {
     return (
       <RunView run={run} busy={busy} answers={answers} setAnswers={setAnswers}

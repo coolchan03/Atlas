@@ -28,6 +28,8 @@ interface WorkflowInput<C> {
   fields?: InputField[];
   /** Offer the person's finished recordings as the source of the text. */
   fromRecording?: boolean;
+  /** Offer to fill the text from a photo: `read` turns the picture into the text (a list of what it shows). */
+  fromPhoto?: { label: string; read: (uri: string, mime: string | undefined) => Promise<string> };
   make: (text: string, fields: Record<string, string>) => C;
 }
 export interface Workflow<C> { id: string; title: string; summary: string; input: WorkflowInput<C>; steps: Step<C>[] }
@@ -56,6 +58,7 @@ export async function advance<C>(workflow: Workflow<C>, run: Run<C>, deps: Deps<
   const { ask } = deps;
   const save = deps.save ?? (() => undefined);
   let state: Run<C> = { ...run, status: 'running', waiting: undefined, error: undefined };
+  save(state); // the run is on show as running, at the step about to start, before that step is done
   while (state.step < workflow.steps.length) {
     const step = workflow.steps[state.step];
     try {

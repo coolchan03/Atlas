@@ -72,6 +72,17 @@ Regenerate with `node scripts/route-matrix.cjs`; rows you filled in are kept.
 | TopicBoard | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | TopicSquare | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Topics | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| AskDocument | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| Trip | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| Journal | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| Currency | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| StormWatch | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| TimeCapsule | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| Formula | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| AskNotes | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| TeachBack | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| Trail | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| Radio | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Translator | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | VoiceLab | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | WordBook | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |

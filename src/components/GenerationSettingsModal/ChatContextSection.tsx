@@ -36,6 +36,7 @@ export const ChatContextSection: React.FC = () => {
   const modelMax = useAppStore((s) => s.modelMaxContext);
   const toMarkdown = useAppStore((s) => s.settings.convertToMarkdown !== false);
   const readLong = useAppStore((s) => s.settings.readLongInParts !== false);
+  const autoSteps = useAppStore((s) => s.settings.autoSteps !== false);
   const replyMode = useAppStore((s) => s.settings.maxTokensMode ?? 'auto');
   const replyTokens = useAppStore((s) => s.settings.maxTokens);
   // Same ceiling the loader uses for this phone's RAM (bigger choices would be cut down anyway).
@@ -140,6 +141,13 @@ export const ChatContextSection: React.FC = () => {
         <TouchableOpacity onPress={convertWorkspace} disabled={!!converting} testID="convert-workspace" accessibilityRole="button" style={styles.convertButton}>
           <Text style={styles.link}>{converting || 'Convert the Atlas workspace folder to Markdown files'}</Text>
         </TouchableOpacity>
+        <View style={styles.switchRow}>
+          <View style={styles.switchText}>
+            <Text style={styles.title}>Do big requests in steps</Text>
+            <Text style={styles.hint}>A message that asks for several things, or is long for the model, is planned into small steps and done one at a time before the answer is written. Slower, but small models do not lose parts of it.</Text>
+          </View>
+          <Switch value={autoSteps} onValueChange={(v) => updateSettings({ autoSteps: v })} testID="auto-steps" />
+        </View>
         <View style={styles.switchRow}>
           <View style={styles.switchText}>
             <Text style={styles.title}>Read very long messages in parts</Text>

@@ -31,4 +31,4 @@ export const useOffGrid = create<OffGridState>()(
 export const offGridOn = (): boolean => useOffGrid.getState().on;
 
 /** Tools that need the internet; they are not offered to the model while off-grid mode is on. */
-export const NETWORK_TOOLS = ['web_search', 'read_url', 'find_image'];
+export const NETWORK_TOOLS = ['web_search', 'read_url', 'find_image', 'source_updates', 'add_source', 'case_status'];

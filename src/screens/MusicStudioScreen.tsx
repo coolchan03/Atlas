@@ -11,7 +11,7 @@ import { shareItem } from '../utils/shareItem';
 import { STYLES, composeStyled, type Energy, type StyleMood } from '../music/styles';
 import { POPULAR, styleFromText } from '../music/simple';
 import type { MusicScore } from '../music/composition';
-import { saveAmbient, saveInstrumental } from '../music/saveTrack';
+import { saveAmbient, saveInstrumental, scoreSeconds } from '../music/saveTrack';
 import { composeContinuation, composeMusic, composeVariation } from '../music/composerAgent';
 import RNFS from 'react-native-fs';
 import { pick as pickFiles, types } from '@react-native-documents/picker';
@@ -90,8 +90,6 @@ export function MusicStudioScreen() {
     } catch (error: any) { Alert.alert('Could not make the music', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
-  /** How long a score plays, in whole seconds (a little past its last note), for rendering a tune whose length is not the chosen duration. */
-  const secondsOf = (s: MusicScore): number => Math.min(300, Math.max(10, Math.ceil(Math.max(...s.notes.map((n) => n.beat + n.length)) * 60 / (s.bpm || 100)) + 2));
   /** Brings in a standard MIDI file: it becomes a saved track that can be played, edited, varied and extended like any other. */
   const importMidi = async () => {
     if (busy) return;
@@ -101,7 +99,7 @@ export function MusicStudioScreen() {
       setBusy(true); setStatus('Reading the MIDI file...');
       const local = await resolvePickedFileUri(file.uri, file.name || 'tune.mid');
       const imported = fromMidi(fromBase64(await RNFS.readFile(local.replace(/^file:\/\//, ''), 'base64')), file.name || '');
-      await saveScore(imported, 'imported MIDI file', secondsOf(imported));
+      await saveScore(imported, 'imported MIDI file', scoreSeconds(imported));
     } catch (error: any) {
       if (!/cancel/i.test(String(error?.message || error)) && error?.code !== 'OPERATION_CANCELED') Alert.alert('Could not bring in the MIDI file', String(error?.message || error));
     } finally { setBusy(false); setStatus(''); }
@@ -116,7 +114,7 @@ export function MusicStudioScreen() {
       if (!Array.isArray(saved?.notes) || !saved.notes.length) throw new Error('This track has no notes to continue.');
       const style = (STYLES[track.mood as StyleMood] ? track.mood : mood) as StyleMood;
       const composed = await composeContinuation(saved as MusicScore, { mood: style });
-      await saveScore(composed.score, 'Atlas composer', secondsOf(composed.score));
+      await saveScore(composed.score, 'Atlas composer', scoreSeconds(composed.score));
     } catch (error: any) { Alert.alert('Could not extend the tune', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }
   };
@@ -130,7 +128,7 @@ export function MusicStudioScreen() {
       if (!Array.isArray(saved?.notes) || !saved.notes.length) throw new Error('This track has no notes to vary (background sounds cannot be varied).');
       const style = (STYLES[track.mood as StyleMood] ? track.mood : mood) as StyleMood;
       const composed = await composeVariation(saved as MusicScore, { mood: style, seconds: track.seconds });
-      await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer', secondsOf(composed.score));
+      await saveScore(composed.score, composed.via === 'composer' ? 'Atlas composer' : 'built-in composer', scoreSeconds(composed.score));
       if (composed.via === 'built-in') Alert.alert('Made with the built-in composer', `${composed.note}${composed.diagnostics?.fallbackReason ? `\n\nWhy: ${composed.diagnostics.fallbackReason}` : ''}`);
     } catch (error: any) { Alert.alert('Could not make a variation', String(error?.message || error)); }
     finally { setBusy(false); setStatus(''); }

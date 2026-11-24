@@ -11,13 +11,17 @@ import { bill, meeting } from './everyday';
 import { contract, cook, explain, howItWorks, repair, writing } from './helperJobs';
 import { budget, decision, mealWeek, studyPlan } from './moreJobs';
 import { toWorkflow, useCustomHelpers } from './customHelpers';
+import { skillHelper } from '../skills/skillSteps';
+import { useSkills } from '../skills/skillsStore';
 import { localUniqueId } from '../utils/uniqueId';
 
 type AnyRun = Run<any>;
 const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill, repair, cook, explain, writing, howitworks: howItWorks, contract, budget, studyplan: studyPlan, mealweek: mealWeek, decision };
 /** Every helper: the built-in ones, then the ones the person wrote. */
 export const workflowList = (): Array<Workflow<any>> => [...Object.values(WORKFLOWS), ...useCustomHelpers.getState().helpers.map(toWorkflow)];
-const workflowById = (id: string): Workflow<any> | undefined => WORKFLOWS[id] ?? workflowList().find((w) => w.id === id);
+/** The installed skills that are written as steps, as jobs of their own (run from the Skills screen, not listed with the helpers). */
+const skillWorkflows = (): Array<Workflow<any>> => useSkills.getState().skills.flatMap((s) => { const h = skillHelper(s); return h ? [toWorkflow(h)] : []; });
+export const workflowById = (id: string): Workflow<any> | undefined => WORKFLOWS[id] ?? workflowList().find((w) => w.id === id) ?? skillWorkflows().find((w) => w.id === id);
 
 interface RunsState { runs: AnyRun[]; rules: Record<string, string>; put: (r: AnyRun) => void; remove: (id: string) => void; setRules: (rules: Record<string, string>) => void }
 export const useWorkflowRuns = create<RunsState>()(persist((set) => ({
@@ -43,15 +47,18 @@ const workflowFor = (run: AnyRun): Workflow<any> => {
   return wf;
 };
 
-/** Starts a job from the text and extra choices its input asks for. */
-export function startWorkflow(id: string, text: string, fields: Record<string, string> = {}): Promise<AnyRun> {
+/** Starts a job and says at once which run it is, so the screen can show its steps while they run. `done` settles when the job needs the person or has finished. */
+export function beginWorkflow(id: string, text: string, fields: Record<string, string> = {}): { runId: string; done: Promise<AnyRun> } {
   const wf = workflowById(id);
-  if (!wf) return Promise.reject(new Error('This job is not available any more.'));
+  if (!wf) return { runId: '', done: Promise.reject(new Error('This job is not available any more.')) };
   const ctx = wf.input.make(text, fields);
-  // Category choices the person made on earlier statements carry over.
   if (id === 'accountant') ctx.rules = useWorkflowRuns.getState().rules;
-  return advance(wf, newRun(wf, localUniqueId('wf'), ctx), deps);
+  const run = newRun(wf, localUniqueId('wf'), ctx);
+  return { runId: run.id, done: advance(wf, run, deps) };
 }
+
+/** The titles of a job's steps, in order (empty when the job is gone). */
+export const stepTitles = (workflowId: string): string[] => workflowById(workflowId)?.steps.map((s) => s.title) ?? [];
 
 export const answerRun = (run: AnyRun, answers: Record<string, string>): Promise<AnyRun> => answer(workflowFor(run), run, { answers, deps });
 export const approveRun = (run: AnyRun): Promise<AnyRun> => approve(workflowFor(run), run, deps);

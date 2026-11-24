@@ -9,6 +9,8 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { parseSkill, type ParsedSkill } from './parseSkill';
 import { useSkills, type Skill as InstalledSkill } from './skillsStore';
 import { pickSkill } from './importSkill';
+import { skillJobId, skillSteps } from './skillSteps';
+import { useNavigation } from '@react-navigation/native';
 import { SKILL_LIBRARY } from './library';
 import { OWN_CATEGORY, SKILL_CATEGORIES, categoryOf, type SkillCategory } from './skillCategories';
 
@@ -17,7 +19,9 @@ type Colors = ReturnType<typeof useTheme>['colors'];
 /** One skill: on/off when it is added, an Add button when it is only offered. Tap the name to read it. */
 function SkillRow({ skill, installed, colors, onAdd, onRemove }: { skill: ParsedSkill; installed?: InstalledSkill; colors: Colors; onAdd: () => void; onRemove: () => void }) {
   const { setEnabled } = useSkills();
+  const navigation = useNavigation<any>();
   const [open, setOpen] = useState(false);
+  const steps = installed ? skillSteps(installed.body).length : 0;
   return (
     <View style={[styles.skill, { borderTopColor: colors.border }]} testID={installed ? `skill-${skill.name}` : undefined}>
       <View style={styles.row}>
@@ -29,6 +33,8 @@ function SkillRow({ skill, installed, colors, onAdd, onRemove }: { skill: Parsed
           ? <Switch value={installed.enabled} onValueChange={(on) => setEnabled(skill.name, on)} testID={`skill-switch-${skill.name}`} />
           : <TouchableOpacity onPress={onAdd} testID={`library-skill-${skill.name}`} accessibilityLabel={`Add the ${skill.name} skill`}><Text style={{ color: colors.primary }}>Add</Text></TouchableOpacity>}
       </View>
+      {steps > 0 && <TouchableOpacity onPress={() => navigation.navigate('Workflows', { job: skillJobId(skill.name) })} testID={`skill-steps-${skill.name}`} accessibilityRole="button"><Text style={{ color: colors.primary }}>Run it in {steps} steps</Text></TouchableOpacity>}
+      {!!installed?.resources?.length && <Text style={[styles.meta, { color: colors.textSecondary }]}>{installed.resources.length} reference file{installed.resources.length === 1 ? '' : 's'} kept with it.</Text>}
       {!!installed?.needs.length && <Text style={[styles.warn, { color: colors.error }]}>Expects {installed.needs.join(', ')}, which Atlas cannot run: only its instructions are followed.</Text>}
       {open && (
         <View>
@@ -63,8 +69,9 @@ function CategoryCard({ category, skills, colors, onAdd, onRemove }: { category:
 
 /**
  * Skills: reusable instructions in the open SKILL.md format (the one Claude and OpenClaw use). A skill is added after a preview;
- * Atlas then follows it when a message clearly fits its description, or when you type /skill-name. Scripts and files next to
- * SKILL.md are not run, and a skill that depends on programs (curl, python) will only get its instructions followed.
+ * Atlas then follows it when a message clearly fits its description, or when you type /skill-name. The text files that come with a skill
+ * (references, examples) are kept, and only the parts a request is about are shown to the model; scripts are not run, and a skill that
+ * depends on programs (curl, python) will only get its instructions followed.
  */
 export const SkillsScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -96,6 +103,7 @@ export const SkillsScreen: React.FC = () => {
             <Text style={[styles.title, { color: colors.text }]}>Add /{pending.name}?</Text>
             <Text style={[styles.meta, { color: colors.textSecondary }]}>{pending.description}</Text>
             {!!pending.needs.length && <Text style={[styles.warn, { color: colors.error }]}>Expects {pending.needs.join(', ')}, which Atlas cannot run.</Text>}
+            {!!pending.resources?.length && <Text style={[styles.meta, { color: colors.textSecondary }]} testID="skill-resources">Comes with {pending.resources.length} reference file{pending.resources.length === 1 ? '' : 's'}: {pending.resources.map((r) => r.name).join(', ')}.</Text>}
             <Text style={[styles.instructions, { color: colors.text, borderColor: colors.border }]}>{pending.body.slice(0, 1200)}{pending.body.length > 1200 ? '\n...' : ''}</Text>
             <View style={styles.actions}>
               <Button title="Add skill" onPress={() => { add(pending); setPending(null); setPasted(''); setAdding(false); }} testID="skill-add" />
@@ -121,7 +129,7 @@ export const SkillsScreen: React.FC = () => {
           </TouchableOpacity>
           {adding && (
             <View style={styles.form}>
-              <Button title="Choose a SKILL.md or zip" onPress={() => preview(pickSkill)} testID="skill-choose" />
+              <Button title="Choose a SKILL.md, a zip, or several files" onPress={() => preview(pickSkill)} testID="skill-choose" />
               <Text style={[styles.meta, { color: colors.textMuted }]}>Or paste the text of a SKILL.md:</Text>
               <TextInput value={pasted} onChangeText={setPasted} multiline placeholder={'---\nname: my-skill\ndescription: When to use it\n---\nWhat to do...'} placeholderTextColor={colors.textMuted}
                 style={[styles.input, { color: colors.text, borderColor: colors.border }]} testID="skill-paste" autoCapitalize="none" />

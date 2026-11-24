@@ -4,6 +4,8 @@
  * earlier in the chat (a follow-up like "and tomorrow?" needs the same tool again). Tools it knows nothing about (added by
  * servers) are always kept: they are routed separately. A message that needs no tool sends none of the built-in ones.
  */
+import { severalParts } from '../../workflows/bigRequest';
+
 const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|today|tonight|now|current|price|cost|score|weather|forecast|search|look up|find out|google|http|www\.|\.com)\b/i;
 
 /**
@@ -39,11 +41,15 @@ const TRIGGERS: Record<string, RegExp> = {
   my_location: /\b(where am i|location|gps|near|nearby|how far|direction|which way|camp|car|waypoint|coordinates|altitude)\b/i,
   learned_knowledge: /./, // kept whenever it is switched on: only the talk chat with a learning AI switches it on
   standards_check: /\b(fasb|asu|asc\s*\d{3}|gaap|accounting standards?|standard update|codification|ifrs|out ?of ?date|outdated|latest (rule|standard|guidance)|new (rule|standard)|textbook)\b/i,
+  source_updates: /\b(updates?|updated|newer|newest|latest|new version|amend(?:ed|ment)?|supersed(?:ed|es)|still (?:good )?law|overrul(?:ed|ing)|revers(?:ed|al)|out ?of ?date|outdated|current|look for|check (?:for|if|whether))\b/i,
+  case_status: /\b(good law|still (?:valid|good|binding)|overrul(?:ed|ing)|revers(?:ed|al)|vacat(?:ed|ur)|abrogat\w*|supersed\w*|later treatment|subsequent (?:history|treatment)|cited by|citator|shepardi[sz]e)\b|\bvs?\.?\s+[A-Z]/i,
+  add_source: /\b(add|save|include|put|import)\b.{0,40}\b(project|source|document|page|it|that|this|them)\b/i,
   drug_label: /\b(medicine|medication|drug|dose|dosage|ibuprofen|acetaminophen|tylenol|advil|aspirin|antibiotic|side effects?|interact(s|ion|ions)?|prescription|over[- ]the[- ]counter|otc|mg)\b/i,
   make_music: /\b(music|song|tune|melody|compose|composer|instrumental|soundtrack|beat|jingle|lullaby|ambient|jazz|lo-?fi|play me|background (music|sound))\b/i,
   list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,
   map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,
   remember: /\b(remember|don't forget|keep in mind|my name|i am|i'm|i like|i prefer|i live|i work|allergic|birthday)\b/i,
+  work_in_steps: { test: severalParts } as RegExp,
   make_helper: /\b(make|build|create|set up|write)\b.{0,30}\b(helper|multi-?step|workflow|template|reusable|repeatable)\b|\b(helper|multi-?step)\b.{0,20}\b(for|that|which)\b/i,
   schedule_task: /\b(remind|reminder|schedule|every (day|morning|evening|night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|each (day|morning|week)|tomorrow at|at \d|alarm|notify)\b/i,
   draft_message: { test: reachesSomeone } as RegExp,

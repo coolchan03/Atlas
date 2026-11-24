@@ -34,10 +34,31 @@ const DESTINATIONS: Destination[] = [
   { title: 'Offline library', route: 'OfflineLibrary', icon: 'book-open', keywords: 'wikipedia books packs offline reference' },
   { title: 'Survival manual', route: 'SurvivalManual', icon: 'life-buoy', keywords: 'first aid water shelter fire guide' },
   { title: 'Phrase trainer', route: 'Phrases', icon: 'globe', keywords: 'travel phrases translate' },
+  { title: 'Ask a document', route: 'AskDocument', icon: 'file-text', keywords: 'pdf file question answer long document read summarise summarize contract report ask' },
+  { title: 'Trip kit', route: 'Trip', icon: 'briefcase', keywords: 'travel trip holiday vacation packing list phrases abroad language money' },
+  { title: 'Storm watch', route: 'StormWatch', icon: 'cloud-lightning', keywords: 'storm weather barometer pressure falling rain wind forecast hiking camping' },
+  { title: 'Time capsule', route: 'TimeCapsule', icon: 'archive', keywords: 'letter future self seal open year later memory message to myself' },
+  { title: 'Formula helper', route: 'Formula', icon: 'percent', keywords: 'spreadsheet excel sheets formula sum sumif average vlookup cells columns' },
+  { title: 'Ask my notes', route: 'AskNotes', icon: 'search', keywords: 'my notes journal chats recordings remember what did i say decide search memory personal wiki' },
+  { title: 'Teach it back', route: 'TeachBack', icon: 'users', keywords: 'explain teach feynman study learn gaps missed points tutor revise exam' },
+  { title: 'Trail', route: 'Trail', icon: 'navigation', keywords: 'track back record walk hike route gps return start lost way back trail journal distance' },
+  { title: 'Journal', route: 'Journal', icon: 'edit-3', keywords: 'diary write day mood gratitude reflect notes private week review' },
+  { title: 'Currency converter', route: 'Currency', icon: 'dollar-sign', keywords: 'money exchange rate dollars euros convert travel currency' },
+  { title: 'AI radio', route: 'Radio', icon: 'radio', keywords: 'radio station music songs poems genre playlist endless dj theme' },
   { title: 'Translator', route: 'Translator', icon: 'repeat', keywords: 'translate translation interpreter interpret conversation language camera sign menu speak' },
+  { title: 'Learn a topic', route: 'Topics', icon: 'grid', keywords: 'lessons quiz exercises course study exam prep topic teach me' },
+  { title: 'Knowledge base', route: 'Knowledge', icon: 'book-open', keywords: 'documents pdf notes ask my files practice questions' },
+  { title: 'Planner', route: 'Planner', icon: 'calendar', keywords: 'exam dates study schedule day by day plan' },
+  { title: 'Multi-step helpers', route: 'Workflows', icon: 'list', keywords: 'helper workflow steps bank statement recipe split bill calculator reply writer' },
+  { title: 'Scheduled tasks', route: 'Schedule', icon: 'clock', keywords: 'schedule remind later repeat daily task alarm' },
+  { title: 'Atlas tools', route: 'AtlasHub', icon: 'compass', keywords: 'hub maps phrases compass off-grid emergency survival' },
+  { title: 'Sensors', route: 'Sensors', icon: 'cpu', keywords: 'gps pressure light motion accelerometer sensors phone' },
   { title: 'Tools', route: 'Tools', icon: 'tool', keywords: 'web search calculator tools enable' },
   { title: 'About Atlas', route: 'About', icon: 'info', keywords: 'version build licence' },
 ];
+
+/** The screens the search can open, for the AI that picks one (askWhere.ts). */
+export const listDestinations = (): Array<{ title: string; route: string; params?: object; icon: string; keywords: string }> => DESTINATIONS;
 
 const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '');
 

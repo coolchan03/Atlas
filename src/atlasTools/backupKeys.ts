@@ -13,7 +13,7 @@ export const RESTORABLE_STORE_KEYS = new Set([
   'atlas-language',
   // Practice questions and review dates (textbook question banks), exam prep, study plan, About me, Home widgets, call choices.
   'atlas-exercises', 'atlas-cpa-prep', 'atlas-study-plan', 'atlas-about-me', 'atlas-custom-home-shortcuts-v1', 'atlas-call-prefs',
-  'atlas-pressure-log', 'atlas-memory-choice-v1', 'atlas-ask-later',
+  'atlas-pressure-log', 'atlas-journal', 'atlas-trips', 'atlas-capsules', 'atlas-trails', 'atlas-memory-choice-v1', 'atlas-ask-later',
   // Which documents are the official standard, what each is for (teach or reference) and what the first pages of each showed (tax kind and year): the documents come back in an encrypted backup, so these must too.
   'atlas-official-docs',
 ]);
@@ -32,6 +32,8 @@ export const NOT_BACKED_UP: Record<string, string> = {
   'atlas-trash': 'recently deleted items kept on this phone for a few days',
   'atlas-tasks': 'running and failed jobs of this phone, which cannot continue on another phone',
   'atlas-reading-prefs': 'how this phone shows lessons: text size, line spacing and font',
+  'atlas-currency': 'the last currency rates fetched and the rates typed in on this phone',
+  'atlas-radio': 'the AI radio\'s theme and choices on this phone',
   'atlas-translator': 'the Translator\'s chosen languages and recent translations on this phone',
   'atlas-model-speed': 'measured speed of this phone\'s models',
   'atlas-accel-record': 'what each model measured on each accelerator on this phone (hardware-bound)',

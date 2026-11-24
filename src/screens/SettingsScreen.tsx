@@ -128,6 +128,7 @@ export const SettingsScreen: React.FC = () => {
               label: 'Models & AI',
               items: [
                 { icon: 'cpu', title: 'Models', desc: 'Browse, download and load text, image and voice models', screen: 'ModelsTab' as any },
+                { icon: 'package', title: 'My models', desc: 'Delete models, move them to an SD card, add vision files', screen: 'MyModels' as const },
                 { icon: 'sliders', title: 'Model Settings', desc: 'System prompt, generation, and performance', screen: 'ModelSettings' as const },
                 { icon: 'wifi', title: 'Remote Servers', desc: 'Use models running on a computer on your Wi-Fi (Ollama, LM Studio...)', screen: 'RemoteServers' as const },
                 { icon: 'zap', title: 'Skills', desc: 'Reusable instructions in the SKILL.md format (Claude, OpenClaw): import, switch on or off, call with /name', screen: 'Skills' as const },
@@ -138,6 +139,7 @@ export const SettingsScreen: React.FC = () => {
               label: 'Features',
               items: [
                 { icon: 'droplet', title: 'Appearance & AI style', desc: 'Theme, colors, font, text size, bottom bar, and how talkative the AI is', screen: 'Appearance' as const },
+                { icon: 'image', title: 'Background images', desc: 'Set a background photo for any screen', screen: 'BackgroundSettings' as const },
                 { icon: 'monitor', title: 'Presentation Studio', desc: 'Create PowerPoint decks with templates and export PDF, offline', screen: 'Presentations' as const },
                 { icon: 'bookmark', title: 'Pinned', desc: 'Answers you pinned from any chat, in one place', screen: 'Pins' as const },
                 { icon: 'clock', title: 'Scheduled tasks', desc: 'Have the AI do something at a set time: a daily briefing, a plan, anything you can ask', screen: 'Schedule' as const },
@@ -154,14 +156,12 @@ export const SettingsScreen: React.FC = () => {
               label: 'System',
               items: [
                 { icon: 'lock', title: 'Security', desc: 'Passphrase and app lock', screen: 'SecuritySettings' as const },
-                { icon: 'package', title: 'My models', desc: 'Delete models, move them to an SD card, add vision files', screen: 'MyModels' as const },
                 { icon: 'hard-drive', title: 'Storage', desc: 'Models and data usage', screen: 'StorageSettings' as const },
                 { icon: 'activity', title: 'Self-check', desc: 'Test what works on this phone', screen: 'SelfCheck' as const },
                 { icon: 'smartphone', title: 'Device Information', desc: 'Hardware and compatibility', screen: 'DeviceInfo' as const },
                 { icon: 'save', title: 'Backup & sync', desc: 'Back up and restore; sync with nearby devices', screen: 'Backup' as const },
                 { icon: 'users', title: 'Assistant settings', desc: 'Reminders and tips, requested Android permissions and assistant device access', screen: 'AssistantAccess' as const },
-                { icon: 'activity', title: 'Task center', desc: 'See, cancel and retry imports, downloads and other long jobs', screen: 'TaskCenter' as const },
-                { icon: 'image', title: 'Background images', desc: 'Set a background photo for any screen', screen: 'BackgroundSettings' as const },
+                { icon: 'list', title: 'Task center', desc: 'See, cancel and retry imports, downloads and other long jobs', screen: 'TaskCenter' as const },
               ],
             },
           ] as Array<{ label: string; items: { icon: string; title: string; desc: string; screen: any }[] }>).map((group) => (

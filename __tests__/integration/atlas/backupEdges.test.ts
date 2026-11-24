@@ -80,8 +80,11 @@ describe('backup edge cases', () => {
   });
 
   it('refuses files that are too big, mixed up with the password, or not Atlas backups', async () => {
-    mockArchive = good(); mockSize = 60 * 1024 * 1024;
+    mockArchive = good(); mockSize = 200 * 1024 * 1024;
+    await expect(importBackup()).rejects.toThrow('170 MB');
+    mockSize = 60 * 1024 * 1024; mockPicked = [{ uri: 'file:///cache/backup.json', name: 'backup.json' }];
     await expect(importBackup()).rejects.toThrow('50 MB');
+    mockPicked = [{ uri: 'file:///cache/backup.atlasbackup', name: 'backup.atlasbackup' }];
     mockSize = null;
     await expect(importBackup('a-long-enough-password')).rejects.toThrow('not encrypted');
     mockArchive = 'atlasbackup:v1:xxxx';
@@ -101,6 +104,37 @@ describe('backup edge cases', () => {
     await expect(importBackup()).rejects.toThrow('must be password-encrypted');
     mockArchive = wrap({ format: 'OffGridAtlasBackup', version: 1, items: { 'local-llm-chat-storage': JSON.stringify({ state: { conversations: [] }, version: 0 }) } });
     await expect(importBackup()).rejects.toThrow(/encrypted backup|No supported/);
+  });
+
+  it('seals a backup bigger than one slice in parts and opens it again, with emoji and all', async () => {
+    const notes = `${'Notes \u{1F600} '.repeat(1_100_000)}end`; // about 9.9 million characters, so three slices
+    mockStore.set('local-llm-project-storage', JSON.stringify({ state: { projects: [{ id: 'therapy', name: 'Therapy', systemPrompt: notes }] }, version: 0 }));
+    expect(await exportBackup('a-long-enough-password')).toBeTruthy();
+    expect(mockArchive.startsWith('atlasbackup:v2:')).toBe(true);
+    const parts = mockArchive.slice('atlasbackup:v2:'.length).split('\n');
+    expect(parts.length).toBeGreaterThan(2);
+    mockStore.clear();
+    expect(await importBackup('a-long-enough-password')).toBeTruthy();
+    const restored = JSON.parse(mockStore.get('local-llm-project-storage')!);
+    expect(restored.state.projects[0].systemPrompt).toBe(notes);
+  });
+
+  it('keeps a small password backup in the original single-piece format', async () => {
+    expect(await exportBackup('a-long-enough-password')).toBeTruthy();
+    expect(mockArchive.startsWith('atlasbackup:v1:')).toBe(true);
+  });
+
+  it('refuses a sealed backup with a part missing, repeated or swapped, and changes nothing', async () => {
+    const notes = 'x'.repeat(9_000_000);
+    mockStore.set('local-llm-project-storage', JSON.stringify({ state: { projects: [{ id: 'therapy', name: 'Therapy', systemPrompt: notes }] }, version: 0 }));
+    await exportBackup('a-long-enough-password');
+    const parts = mockArchive.slice('atlasbackup:v2:'.length).split('\n');
+    mockStore.clear(); mockStore.set('local-llm-project-storage', projects());
+    for (const damaged of [parts.slice(0, -1), [parts[0], parts[0], parts[2]], [parts[1], parts[0], parts[2]]]) {
+      mockArchive = `atlasbackup:v2:${damaged.join('\n')}`;
+      await expect(importBackup('a-long-enough-password')).rejects.toThrow('part is missing or out of order');
+    }
+    expect(mockStore.get('local-llm-project-storage')).toBe(projects());
   });
 
   it('restores a plain version 1 backup and describes it', async () => {

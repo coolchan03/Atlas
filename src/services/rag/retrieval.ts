@@ -173,7 +173,8 @@ class RetrievalService {
     return { chunks: ranked, kind: ranked.length ? 'semantic' : 'none-matching' };
   }
 
-  formatForPrompt(result: SearchResult): string {
+  /** `label` adds what a document is to each excerpt's heading (a statute, a court decision), for sources that differ in authority. */
+  formatForPrompt(result: SearchResult, label?: (name: string) => string): string {
     if (result.chunks.length === 0) return '';
 
     const sections = result.chunks.map((chunk, index) => {
@@ -182,7 +183,8 @@ class RetrievalService {
       // Two neighbouring passages of one document share the overlap their windows were cut with: it is sent once, not twice.
       const before = result.chunks.find((c) => c.doc_id === chunk.doc_id && c.position === chunk.position - 1);
       const safeContent = stripAngleBracketTags(before ? withoutSharedStart(before.content, chunk.content) : chunk.content);
-      return `[Source ${index + 1}: ${safeName} (part ${chunk.position + 1})]\n${safeContent}`;
+      const kind = label?.(chunk.name).replaceAll(/[<>]/g, '');
+      return `[Source ${index + 1}: ${safeName}${kind ? ` - ${kind}` : ''} (part ${chunk.position + 1})]\n${safeContent}`;
     });
 
     return `<knowledge_base>\nThe following excerpts are from the user's project knowledge base. Use them to inform your response when relevant, and cite an excerpt you use by its source number in square brackets, like [1].\n\n${sections.join('\n\n---\n\n')}\n</knowledge_base>`;

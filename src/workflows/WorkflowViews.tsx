@@ -1,3 +1,4 @@
+import { PhotoFill } from './PhotoFill';
 import React from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +9,13 @@ import { ScreenBackground } from '../components/ScreenBackground';
 import { Button, Card } from '../components';
 import { recorderService } from '../atlasRecorder/recorderService';
 import { saveMarkdown, saveText } from '../study/exportFiles';
-import { workflowList } from './service';
+import { stepTitles, workflowById, workflowList } from './service';
+import { runItems } from './stepProgress';
+import { StepProgressList } from './StepProgressList';
 import type { InputField } from './engine';
 
 export type Kind = string;
-const titleOf = (id: string): string => workflowList().find((w) => w.id === id)?.title ?? 'Job';
+const titleOf = (id: string): string => workflowById(id)?.title ?? 'Job';
 const fail = (title: string) => (e: unknown) => Alert.alert(title, String((e as Error)?.message || e));
 
 export const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; children: React.ReactNode }> = ({ title, onBack, children }) => {
@@ -85,13 +88,14 @@ const FieldRow: React.FC<{ field: InputField; value: string; onChange: (v: strin
 /** Where the text for a job comes from, any extra choices it asks for, and the start button. */
 export const InputView: React.FC<InputProps> = (p) => {
   const { colors } = useTheme();
-  const input = workflowList().find((w) => w.id === p.kind)!.input;
+  const input = workflowById(p.kind)!.input;
   return (
     <Shell title={titleOf(p.kind)} onBack={p.onBack}>
       <Text style={[styles.note, { color: colors.textSecondary }]}>{input.help}</Text>
       {(input.fields ?? []).map((f) => <FieldRow key={f.id} field={f} value={p.fields[f.id] ?? ''} onChange={(v) => p.setField(f.id, v)} />)}
       <TextInput style={[styles.input, styles.big, { color: colors.text, borderColor: colors.border }]} value={p.text} onChangeText={p.setText} multiline textAlignVertical="top"
         placeholder={input.placeholder ?? 'Paste text here'} placeholderTextColor={colors.textMuted} testID="workflow-text" />
+      {input.fromPhoto && <PhotoFill label={input.fromPhoto.label} read={input.fromPhoto.read} onText={(t) => p.setText(p.text.trim() ? `${p.text.trim()}, ${t}` : t)} />}
       {input.fromRecording && p.recordings.map((r) => (
         <TouchableOpacity key={r.id} onPress={() => { p.setText(recorderService.transcript(r.id)); p.setField('title', r.title); }} style={styles.row} testID={`workflow-rec-${r.id}`}>
           <Text style={{ color: colors.primary }}>Use recording: {r.title}</Text>
@@ -106,7 +110,7 @@ export const InputView: React.FC<InputProps> = (p) => {
   );
 };
 
-type AnyRun = { id: string; workflowId: string; status: string; log: string[]; error?: string; ctx: any; waiting?: { kind: string; title: string; summary?: string; questions?: Array<{ id: string; text: string; options?: string[] }> } };
+type AnyRun = { id: string; workflowId: string; step: number; status: string; log: string[]; error?: string; ctx: any; waiting?: { kind: string; title: string; summary?: string; questions?: Array<{ id: string; text: string; options?: string[] }> } };
 interface RunProps {
   run: AnyRun; busy: boolean; answers: Record<string, string>; setAnswers: (fn: (a: Record<string, string>) => Record<string, string>) => void;
   onContinue: () => void; onApprove: () => void; onCancel: () => void; onBack: () => void; onResume: () => void;
@@ -155,7 +159,7 @@ export const RunView: React.FC<RunProps> = (p) => {
   const { run } = p;
   return (
     <Shell title={titleOf(run.workflowId)} onBack={p.onBack}>
-      {run.log.map((line, i) => <Text key={i} style={[styles.log, { color: colors.textSecondary }]}>{line}</Text>)}
+      <StepProgressList items={runItems(stepTitles(run.workflowId), run)} testID="workflow-steps" />
       {p.busy && <ActivityIndicator color={colors.primary} />}
       {run.status === 'failed' && <Text style={[styles.error, { color: colors.error }]} testID="workflow-error">{run.error}</Text>}
       {(run.status === 'failed' || run.status === 'running') && !p.busy && (
@@ -183,7 +187,6 @@ const styles = StyleSheet.create({
   note: { ...TYPOGRAPHY.bodySmall },
   h: { ...TYPOGRAPHY.h3 },
   card: { marginBottom: SPACING.sm },
-  log: { ...TYPOGRAPHY.bodySmall },
   error: { ...TYPOGRAPHY.body },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
   big: { minHeight: 180 },
