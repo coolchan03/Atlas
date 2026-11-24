@@ -38,6 +38,7 @@ const DESTINATIONS: Destination[] = [
   { title: 'Trip kit', route: 'Trip', icon: 'briefcase', keywords: 'travel trip holiday vacation packing list phrases abroad language money' },
   { title: 'Storm watch', route: 'StormWatch', icon: 'cloud-lightning', keywords: 'storm weather barometer pressure falling rain wind forecast hiking camping' },
   { title: 'Time capsule', route: 'TimeCapsule', icon: 'archive', keywords: 'letter future self seal open year later memory message to myself' },
+  { title: 'Formula helper', route: 'Formula', icon: 'percent', keywords: 'spreadsheet excel sheets formula sum sumif average vlookup cells columns' },
   { title: 'Journal', route: 'Journal', icon: 'edit-3', keywords: 'diary write day mood gratitude reflect notes private week review' },
   { title: 'Currency converter', route: 'Currency', icon: 'dollar-sign', keywords: 'money exchange rate dollars euros convert travel currency' },
   { title: 'AI radio', route: 'Radio', icon: 'radio', keywords: 'radio station music songs poems genre playlist endless dj theme' },

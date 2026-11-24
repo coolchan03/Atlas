@@ -54,6 +54,7 @@ export const AtlasHubScreen: React.FC = () => {
     { label: 'Trip kit', sub: 'Language, money, phrases and packing for a trip', icon: 'briefcase', color: '#0E7490', to: 'Trip' },
     { label: 'Journal', sub: 'A private page for each day', icon: 'edit-3', color: '#9A3412', to: 'Journal' },
     { label: 'Time capsule', sub: 'A letter that opens on a date you choose', icon: 'archive', color: '#9A3412', to: 'TimeCapsule' },
+    { label: 'Formula helper', sub: 'The AI writes a spreadsheet formula; Atlas tries it on your rows', icon: 'percent', color: '#047857', to: 'Formula' },
     { label: 'Currency', sub: 'Convert money; rates kept on the phone', icon: 'dollar-sign', color: '#047857', to: 'Currency' },
     { label: 'Storm watch', sub: 'Is the weather turning? From the barometer', icon: 'cloud-lightning', color: '#475569', to: 'StormWatch' },
     { label: 'AI radio', sub: 'Endless songs with poems read over them', icon: 'radio', color: '#7C3AED', to: 'Radio' },
