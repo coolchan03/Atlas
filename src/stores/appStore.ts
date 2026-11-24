@@ -76,7 +76,7 @@ type AppSettings = {
    *  'conservative' = one model at a time; 'balanced' = co-reside within budget;
    *  'aggressive' = co-reside with a larger RAM commitment. */
   modelLoadingMode?: 'conservative' | 'balanced' | 'aggressive';
-  cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[]; studyToolsAdded?: boolean;
+  cacheType: CacheType; showGenerationDetails: boolean; enabledTools: string[]; studyToolsAdded?: boolean; stepsToolAdded?: boolean;
   thinkingEnabled: boolean;
   /** Chat "Work through steps": a short plan is made and run step by step (see services/stepRunner.ts). Off by default. */
   workThroughSteps?: boolean;
@@ -280,7 +280,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   modelLoadingMode: 'balanced',
   cacheType: 'q4_0' as CacheType,
   showGenerationDetails: false,
-  enabledTools: ['web_search', 'read_url', 'search_knowledge_base', ...STUDY_TOOL_IDS],
+  enabledTools: ['web_search', 'read_url', 'search_knowledge_base', ...STUDY_TOOL_IDS, 'work_in_steps'],
   thinkingEnabled: false,
   workThroughSteps: false,
   liteRTBackend: 'gpu',
@@ -294,6 +294,11 @@ function migrateEnabledTools(merged: any): void {
   if (merged.settings?.enabledTools && !merged.settings.studyToolsAdded) {
     const have: string[] = merged.settings.enabledTools;
     merged.settings = { ...merged.settings, enabledTools: [...have, ...STUDY_TOOL_IDS.filter((t) => !have.includes(t))], studyToolsAdded: true };
+  }
+  // Once: older installs get the tool that splits a big request into small steps (it is only offered for messages that look big).
+  if (merged.settings?.enabledTools && !merged.settings.stepsToolAdded) {
+    const have: string[] = merged.settings.enabledTools;
+    merged.settings = { ...merged.settings, enabledTools: have.includes('work_in_steps') ? have : [...have, 'work_in_steps'], stepsToolAdded: true };
   }
   if (merged.settings?.enabledTools && !merged.settings.enabledTools.includes('search_knowledge_base')) {
     merged.settings = { ...merged.settings, enabledTools: [...merged.settings.enabledTools, 'search_knowledge_base'] };

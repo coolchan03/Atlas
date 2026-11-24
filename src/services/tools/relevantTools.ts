@@ -13,6 +13,13 @@ const ASKS_FACT = /\b(who|what|when|where|which|how many|how much|latest|news|to
 const WHO = String.raw`(?![Mm]e\b|[Uu]s\b|[Yy]ou\b|[Ii]t\b|[Bb]ack\b)(?:my|mum|mom|dad|him|her|them|his|their|our|the (?:landlord|doctor|dentist|school|office|boss|team|plumber|bank)|\d|\+|[A-Z][a-z]+)`;
 const REACH_VERB = new RegExp(String.raw`\b(?:[Tt]ext|[Ss][Mm][Ss]|[Ee]-?mail|[Mm]essage|[Dd][Mm]|[Cc]all|[Pp]hone|[Dd]ial|[Rr]ing|[Tt]ell|[Rr]eply to|[Rr]espond to)\s+${WHO}`);
 const SEND_MESSAGE = /\b(?:send|write|draft)\s+(?:a |an |my |the )?(?:quick |short )?(?:text|sms|e-?mail|message)\b/i;
+/** A message that asks for several things, or is long enough that doing it all at once would crowd a small model. */
+function severalParts(message: string): boolean {
+  if (message.length > 900 || /\b(step by step|in steps|one at a time)\b/i.test(message)) return true;
+  const asks = message.match(/\b(summari[sz]e|list|write|make|compare|explain|translate|extract|rewrite|create|check|draft|plan|find|calculate)\b/gi) ?? [];
+  return asks.length >= 3 || /\b(and then|after that|then|finally)\b[^.]*\b(summari[sz]e|list|write|make|compare|explain|translate|extract|rewrite|create|draft|plan)\b/i.test(message) && asks.length >= 2;
+}
+
 function reachesSomeone(message: string): boolean {
   return SEND_MESSAGE.test(message) || REACH_VERB.test(message);
 }
@@ -44,6 +51,7 @@ const TRIGGERS: Record<string, RegExp> = {
   list_maps: /\b(maps?|map files?|offline maps?|\.map|mapsforge)\b/i,
   map_places: /\b(near|nearby|nearest|closest|around here|around me|close by|hospital|clinic|pharmacy|gas station|fuel|cafe|coffee|restaurant|campground|campsite|trailhead|peak|shelter|water source|store|shop|where is|find a|is there a)\b/i,
   remember: /\b(remember|don't forget|keep in mind|my name|i am|i'm|i like|i prefer|i live|i work|allergic|birthday)\b/i,
+  work_in_steps: { test: severalParts } as RegExp,
   make_helper: /\b(make|build|create|set up|write)\b.{0,30}\b(helper|multi-?step|workflow|template|reusable|repeatable)\b|\b(helper|multi-?step)\b.{0,20}\b(for|that|which)\b/i,
   schedule_task: /\b(remind|reminder|schedule|every (day|morning|evening|night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|daily|weekly|each (day|morning|week)|tomorrow at|at \d|alarm|notify)\b/i,
   draft_message: { test: reachesSomeone } as RegExp,

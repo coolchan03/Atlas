@@ -293,6 +293,14 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: { name: { type: 'string', description: 'The medicine, brand or generic name, for example ibuprofen or Advil', required: true } },
   },
   {
+    id: 'work_in_steps', name: 'work_in_steps', displayName: 'Do a big job in steps', icon: 'list',
+    description: "Do a job that has several parts, or that works on a long text, in small steps instead of all at once. The job is split into short steps and each is done on its own, so nothing is forgotten or cut off. Use it when the user asks for several things in one message (for example summarise, then list the actions, then write an email), or gives a long text and wants more than one thing done with it. Pass the job in the user's words, and the text when there is one.",
+    parameters: {
+      job: { type: 'string', description: 'What to do, in the user\'s words, with every part of it', required: true },
+      text: { type: 'string', description: 'The material to work on (a document, notes, an article), when the user gave one' },
+    },
+  },
+  {
     id: 'make_music', name: 'make_music', displayName: 'Make music', icon: 'music',
     description: "Make an original instrumental tune and play it. A specialist composer with dozens of instruments writes it, not you: just describe what the user wants. Use when they ask for music, a song, a tune, background music, a lullaby, a soundtrack or a beat. Instrumental only, no singing.",
     parameters: {

@@ -78,7 +78,7 @@ function getLastUserQuery(messages: Message[]): string {
 /** A tool that has not answered by now is stopped and reported to the model as a failure, so the turn can go on. */
 export const TOOL_TIMEOUT_MS = 3 * 60 * 1000;
 /** Tools that legitimately run for minutes (they search and read many pages, or make media). */
-const LONG_TOOL = /research|podcast|image|video|download|sync|backup/i;
+const LONG_TOOL = /research|podcast|image|video|download|sync|backup|steps/i;
 export const toolTimeoutFor = (name: string): number => (LONG_TOOL.test(name) ? 10 * 60 * 1000 : TOOL_TIMEOUT_MS);
 
 const BUILT_IN_TOOL_IDS = new Set(AVAILABLE_TOOLS.map((t) => t.id));

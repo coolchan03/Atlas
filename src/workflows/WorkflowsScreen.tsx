@@ -34,7 +34,7 @@ export const WorkflowsScreen: React.FC = () => {
   });
   const start = () => work(() => startWorkflow(kind!, text, fields));
 
-  if (editing !== undefined) return <HelperEditor helper={helpers.find((h) => h.id === editing) ?? null} onClose={() => setEditing(undefined)} />;
+  if (editing !== undefined) return <HelperEditor helper={helpers.find((h) => h.id === editing) ?? null} onClose={() => setEditing(undefined)} onRun={(jobId) => { setEditing(undefined); setKind(jobId); }} />;
   if (run) {
     return (
       <RunView run={run} busy={busy} answers={answers} setAnswers={setAnswers}

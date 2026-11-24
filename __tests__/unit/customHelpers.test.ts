@@ -21,7 +21,7 @@ it('runs a helper you wrote: asks, uses the AI for each ai line, and ends with a
   expect(run.status).toBe('waiting'); // the review
   expect(prompts[0]).toMatch(/Tone: Friendly/);
   expect(prompts[0]).toMatch(/Keep it short\? Yes/);
-  expect(prompts[1]).toMatch(/Earlier results:\nresult 1/);
+  expect(prompts[1]).toMatch(/Result of the step before:\nresult 1/);
   expect(run.waiting?.summary).toBe('result 2');
 });
 
@@ -107,8 +107,37 @@ describe('numbered steps', () => {
     const run = await advance(wf, newRun(wf, 'r', wf.input.make('the meeting notes', {})), { ask });
     expect(prompts).toHaveLength(3);
     expect(prompts[0]).toMatch(/Instruction: List the decisions made\./);
-    expect(prompts[1]).toMatch(/Instruction: List who must do what\.[\s\S]*Earlier results:\nresult 1/);
-    expect(prompts[2]).toMatch(/Earlier results:\nresult 1\n\nresult 2/);
+    expect(prompts[1]).toMatch(/Instruction: List who must do what\.[\s\S]*Result of the step before:\nresult 1/);
+    expect(prompts[2]).toMatch(/Earlier steps:\nStep 1 \(short\): result 1\n\nResult of the step before:\nresult 2/);
     expect(run.waiting?.summary).toBe('result 3');
+  });
+});
+
+describe('a long job in many steps does not overwhelm the model', () => {
+  it('keeps every step prompt inside the budget, with the instruction and the latest result whole, however long the text and the chain', async () => {
+    const { stepBudget } = require('../../src/workflows/stepPrompt');
+    const lines = Array.from({ length: 10 }, (_, i) => `${i + 1}. Do part ${i + 1} of the job.`).join('\n');
+    const wf = toWorkflow({ id: 'long', title: 'Long', summary: '', help: '', steps: lines, createdAt: 1 });
+    const prompts: string[] = [];
+    const ask = async (_s: string, u: string) => { prompts.push(u); return `RESULT-${prompts.length} ${'detail '.repeat(300)}`; };
+    const text = `START ${'word '.repeat(8000)} END`; // about 40,000 characters
+    await advance(wf, newRun(wf, 'r', wf.input.make(text, {})), { ask });
+    const budget = stepBudget(4096);
+    expect(prompts).toHaveLength(10);
+    prompts.forEach((p, i) => {
+      expect(p.length).toBeLessThanOrEqual(budget + 200);
+      expect(p).toContain(`Instruction: Do part ${i + 1} of the job.`);
+      if (i > 0) expect(p).toContain(`RESULT-${i} `); // the latest result is there
+      if (i > 2 && i < 6) expect(/Step 1 \(short\): ([^\n]*)/.exec(p)?.[1].length).toBeLessThanOrEqual(160); // an old result is cut to its first words
+    });
+    expect(prompts[9]).toMatch(/START/); // the beginning and the end of a long text are both kept
+    expect(prompts[9]).toMatch(/END/);
+  });
+
+  it('gives a small context window a small budget and a big one a bigger one', () => {
+    const { stepBudget } = require('../../src/workflows/stepPrompt');
+    expect(stepBudget(1024)).toBe(2400);
+    expect(stepBudget(4096)).toBe(5461);
+    expect(stepBudget(32768)).toBe(12000);
   });
 });

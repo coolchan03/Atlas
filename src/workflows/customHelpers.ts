@@ -12,6 +12,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { InputField, Workflow } from './engine';
 import { compileCalc, readNumber, showNumber } from './calc';
+import { currentStepBudget, STEP_SYSTEM, stepPrompt } from './stepPrompt';
 
 export interface CustomHelper { id: string; title: string; summary: string; help: string; steps: string; createdAt: number; /** Made by the chat AI (make_helper), so the list can say so. */ madeByAi?: boolean }
 interface State { helpers: CustomHelper[]; save: (h: Omit<CustomHelper, 'createdAt'>) => void; remove: (id: string) => void }
@@ -74,8 +75,8 @@ export function toWorkflow(h: CustomHelper): Workflow<Ctx> {
     ? { kind: 'ask' as const, id: `ask${i}`, title: s.text, questions: () => [{ id: 'q', text: s.text, options: s.options }], apply: (ctx, a) => ({ answers: [...ctx.answers, `${s.text} ${a.q ?? ''}`] }) }
     : { kind: 'model' as const, id: `ai${i}`, title: s.text.slice(0, 50), run: async (ctx, ask) => {
       const known = [...ctx.fieldLabels.map((label, k) => `${label}: ${ctx.fields[`f${k}`] ?? ''}`), ...ctx.answers, ...ctx.calcs].filter(Boolean).join('\n');
-      const reply = await ask('You follow one instruction using only the information given. Never invent facts, names, numbers or dates that are not in it. If something needed is missing, say what is missing.',
-        `Instruction: ${s.text}\n\nText:\n${ctx.text}\n${known ? `\nChoices:\n${known}\n` : ''}${ctx.outputs.length ? `\nEarlier results:\n${ctx.outputs.join('\n\n')}\n` : ''}`.slice(0, 9000));
+      const reply = await ask(STEP_SYSTEM,
+        stepPrompt({ instruction: s.text, text: ctx.text, known, results: ctx.outputs, budget: currentStepBudget() }));
       const result = reply.trim().slice(0, 6000);
       if (!result) throw new Error('The AI gave no answer. Try again.');
       return { outputs: [...ctx.outputs, result] };

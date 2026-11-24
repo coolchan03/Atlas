@@ -108,6 +108,11 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (kind !== 'call' && !body.trim()) throw new Error('Missing required parameter: body');
       return DT.draftMessage(kind, body, { to: String(call.arguments?.to ?? ''), subject: String(call.arguments?.subject ?? '') });
     }
+    case 'work_in_steps': {
+      const job = requireString(call, 'job');
+      if (!job) throw new Error('Missing required parameter: job');
+      return require('../../workflows/autoSteps').workInSteps(job, String(call.arguments?.text ?? ''));
+    }
     case 'make_helper': {
       const { saveHelperFromTool } = require('../../workflows/helperFromTool');
       return saveHelperFromTool({ title: String(call.arguments?.title ?? ''), steps: String(call.arguments?.steps ?? ''), summary: String(call.arguments?.summary ?? '') });

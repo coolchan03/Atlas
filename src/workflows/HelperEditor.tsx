@@ -6,13 +6,14 @@ import { Button } from '../components';
 import { Shell } from './WorkflowViews';
 import { parseSteps, useCustomHelpers, type CustomHelper } from './customHelpers';
 import { EXAMPLE_HELPERS } from './exampleHelpers';
+import { planJob } from './planner';
 import { Select } from '../components/Select';
 
 const CALC_EXAMPLE = 'calc: Total | {Price} * {Qty}';
 const EXAMPLE = 'field: Tone | Friendly, Formal\nfield: Names to include\nask: Keep it short? | Yes, No\nai: Write the reply in that tone, using the names.\nai: Check the reply for anything missing and fix it.';
 
 /** Write your own multi-step helper: a name and one step per line. The AI can also draft the steps from a plain description. */
-export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () => void }> = ({ helper, onClose }) => {
+export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () => void; /** Called with the helper's job id after "Save and run". */ onRun?: (jobId: string) => void }> = ({ helper, onClose, onRun }) => {
   const { colors } = useTheme();
   const [title, setTitle] = useState(helper?.title ?? '');
   const [summary, setSummary] = useState(helper?.summary ?? '');
@@ -27,19 +28,14 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
   );
   const draft = async () => {
     setBusy(true);
-    try {
-      const reply: string = await require('../study/engine').askModel(
-        'You write the steps of a small multi-step helper. Reply with ONLY lines. Each line is a numbered step ("1. Do this"), or starts with field:, ask:, ai: or calc:. field: is a choice or typed answer asked before it starts ("field: Tone | Friendly, Formal"). ask: is a choice asked part-way ("ask: Keep it short? | Yes, No"). ai: is one instruction for the AI. calc: is an exact calculation done by code, never by the AI ("calc: Total | {Price} * {Qty} * (1 + {Tax} / 100)"); {Name} is a field written above it. Use at most 3 field lines, 1 ask line, 4 ai lines and 3 calc lines.',
-        `The helper should: ${idea.slice(0, 500)}`);
-      const lines = reply.split('\n').map((l) => l.trim()).filter((l) => /^((field|ask|ai|calc)\s*:|(step\s*)?\d{1,2}\s*[.):-])/i.test(l));
-      if (!lines.length) throw new Error('The AI did not write steps in the expected form. Try again or write them yourself.');
-      setSteps(lines.join('\n'));
-    } catch (e) { Alert.alert('Could not draft the steps', String((e as Error)?.message || e)); } finally { setBusy(false); }
+    try { setSteps(await planJob(idea)); if (!title.trim()) setTitle(idea.trim().slice(0, 40)); }
+    catch (e) { Alert.alert('Could not plan the steps', String((e as Error)?.message || e)); } finally { setBusy(false); }
   };
   // Saving an edit makes the helper the person's own: it no longer says "made by the AI" and no longer counts toward the AI's limit.
-  const save = () => {
-    useCustomHelpers.getState().save({ id: helper?.id ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: title.trim(), summary: summary.trim(), help: help.trim(), steps: steps.trim() });
-    onClose();
+  const save = (thenRun = false) => {
+    const id = helper?.id ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    useCustomHelpers.getState().save({ id, title: title.trim(), summary: summary.trim(), help: help.trim(), steps: steps.trim() });
+    if (thenRun && onRun) onRun(`custom-${id}`); else onClose();
   };
   return (
     <Shell title={helper ? 'Edit helper' : 'Make your own helper'} onBack={onClose}>
@@ -51,11 +47,12 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
       {input({ value: help, set: setHelp, placeholder: 'What to paste or type when it starts (optional)', testID: 'helper-help' })}
       {input({ value: steps, set: setSteps, placeholder: EXAMPLE, testID: 'helper-steps', tall: true })}
       {problems.map((p) => <Text key={p} style={{ color: colors.error }}>{p}</Text>)}
-      <Text style={[styles.note, { color: colors.textSecondary }]}>Not sure how to write the steps? Say what you want and the AI drafts them for you to edit.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>A big job works best in small steps. Say what you want done, and the AI plans two to six short steps for you to read and change. Each step is done on its own, so a small AI is not overloaded.</Text>
       {input({ value: idea, set: setIdea, placeholder: 'For example: turn my rough notes into a polite email', testID: 'helper-idea' })}
       <View style={styles.row}>
-        <Button title={busy ? 'Drafting...' : 'Draft the steps'} variant="outline" onPress={() => void draft()} disabled={busy || idea.trim().length < 8} testID="helper-draft" />
-        <Button title="Save" onPress={save} disabled={!title.trim() || !steps.trim() || problems.length > 0} testID="helper-save" />
+        <Button title={busy ? 'Planning...' : 'Plan it for me'} variant="outline" onPress={() => void draft()} disabled={busy || idea.trim().length < 8} testID="helper-draft" />
+        <Button title="Save" onPress={() => save()} disabled={!title.trim() || !steps.trim() || problems.length > 0} testID="helper-save" />
+        {!!onRun && <Button title="Save and run" onPress={() => save(true)} disabled={!title.trim() || !steps.trim() || problems.length > 0} testID="helper-save-run" />}
         {!!helper && <Button title="Delete" variant="outline" onPress={() => Alert.alert('Delete this helper?', helper.title, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => { useCustomHelpers.getState().remove(helper.id); onClose(); } }])} testID="helper-delete" />}
       </View>
     </Shell>
