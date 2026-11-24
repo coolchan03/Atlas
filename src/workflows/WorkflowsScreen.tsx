@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Alert } from 'react-native';
+import { NavigationRouteContext } from '@react-navigation/native';
 import { useRecordings } from '../atlasRecorder/store';
 import { documentService } from '../services/documentService';
 import { answerRun, approveRun, beginWorkflow, cancelRun, resumeRun, useWorkflowRuns } from './service';
@@ -10,7 +11,9 @@ import { InputView, JobList, RunView, type Kind } from './WorkflowViews';
 /** Multi-step helpers: pick a job, give it text, answer its questions, approve the result. The logic lives in ./service. */
 export const WorkflowsScreen: React.FC = () => {
   const runs = useWorkflowRuns((s) => s.runs);
-  const [kind, setKind] = useState<Kind | null>(null);
+  const route = React.useContext(NavigationRouteContext) as { params?: { job?: string } } | undefined; // none outside a navigator
+  // A skill run in steps arrives with the job to open.
+  const [kind, setKind] = useState<Kind | null>(route?.params?.job ?? null);
   const [text, setText] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);

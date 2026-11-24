@@ -11,13 +11,17 @@ import { bill, meeting } from './everyday';
 import { contract, cook, explain, howItWorks, repair, writing } from './helperJobs';
 import { budget, decision, mealWeek, studyPlan } from './moreJobs';
 import { toWorkflow, useCustomHelpers } from './customHelpers';
+import { skillHelper } from '../skills/skillSteps';
+import { useSkills } from '../skills/skillsStore';
 import { localUniqueId } from '../utils/uniqueId';
 
 type AnyRun = Run<any>;
 const WORKFLOWS: Record<string, Workflow<any>> = { accountant, meeting, bill, repair, cook, explain, writing, howitworks: howItWorks, contract, budget, studyplan: studyPlan, mealweek: mealWeek, decision };
 /** Every helper: the built-in ones, then the ones the person wrote. */
 export const workflowList = (): Array<Workflow<any>> => [...Object.values(WORKFLOWS), ...useCustomHelpers.getState().helpers.map(toWorkflow)];
-const workflowById = (id: string): Workflow<any> | undefined => WORKFLOWS[id] ?? workflowList().find((w) => w.id === id);
+/** The installed skills that are written as steps, as jobs of their own (run from the Skills screen, not listed with the helpers). */
+const skillWorkflows = (): Array<Workflow<any>> => useSkills.getState().skills.flatMap((s) => { const h = skillHelper(s); return h ? [toWorkflow(h)] : []; });
+export const workflowById = (id: string): Workflow<any> | undefined => WORKFLOWS[id] ?? workflowList().find((w) => w.id === id) ?? skillWorkflows().find((w) => w.id === id);
 
 interface RunsState { runs: AnyRun[]; rules: Record<string, string>; put: (r: AnyRun) => void; remove: (id: string) => void; setRules: (rules: Record<string, string>) => void }
 export const useWorkflowRuns = create<RunsState>()(persist((set) => ({

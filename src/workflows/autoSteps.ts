@@ -8,6 +8,8 @@ import { parseSteps } from './customHelpers';
 import { digestText, fitsWhole } from './longText';
 import { planJob } from './planner';
 import { useStepProgress } from './stepProgress';
+import { relevantReferences } from '../skills/selectSkills';
+import type { SkillResource } from '../skills/parseSkill';
 import { currentStepBudget, STEP_SYSTEM, stepPrompt } from './stepPrompt';
 
 const MAX_RESULT_CHARS = 6000;
@@ -21,12 +23,13 @@ const NOTES_TOKENS = 350;
  * then work from the notes. Returns the last step's result, with the steps that were done listed above it. The steps are shown as they run
  * (stepProgress.ts).
  */
-export async function workInSteps(job: string, text: string): Promise<string> {
+export async function workInSteps(job: string, text: string, skill?: { summary: string; steps: string[]; resources?: SkillResource[] }): Promise<string> {
   const progress = useStepProgress.getState();
   const budget = currentStepBudget();
   progress.begin(['Plan the steps']);
   try {
-    const steps = parseSteps(await planJob(job)).steps.flatMap((s) => (s.kind === 'ai' ? [s.text] : []));
+    // An installed skill brings its own steps; otherwise the AI plans them.
+    const steps = skill ? skill.steps : parseSteps(await planJob(job)).steps.flatMap((s) => (s.kind === 'ai' ? [s.text] : []));
     if (steps.length < 2) throw new Error('The job could not be split into steps.');
     const material = text.trim() || job;
     const reads = !fitsWhole(material, budget);
@@ -42,7 +45,8 @@ export async function workInSteps(job: string, text: string): Promise<string> {
     for (let i = 0; i < steps.length; i += 1) {
       const label = `Step ${i + 1} of ${steps.length}`;
       progress.mark(i + offset, 'running', label);
-      const prompt = stepPrompt({ instruction: steps[i], text: notes, known: '', results, budget });
+      const references = skill?.resources?.length ? relevantReferences(`${steps[i]} ${job} ${skill.summary}`, skill.resources, Math.round(budget * 0.25)) : [];
+      const prompt = stepPrompt({ instruction: steps[i], text: notes, known: '', results, budget, references });
       const reply = (await askShaped(STEP_SYSTEM, prompt, { label, maxTokens: STEP_TOKENS })).trim();
       if (!reply) throw new Error(`The AI gave no answer for the step "${steps[i]}".`);
       results.push(reply.slice(0, MAX_RESULT_CHARS));

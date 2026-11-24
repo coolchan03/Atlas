@@ -121,3 +121,14 @@ describe('files that come with a skill', () => {
     expect(relevantReferences('what is the weather', files, 500)).toEqual([]);
   });
 });
+
+describe('a skill read as steps', () => {
+  const { skillSteps } = require('../../../src/skills/skillSteps');
+  it('takes the numbered items (an indented line belongs to its item, a closing paragraph does not), else the sections under headings, else nothing', () => {
+    expect(skillSteps('Intro.\n\n1. First thing.\n   more of the first.\n2) Second thing.\n\nA closing note.')).toEqual(['First thing. more of the first.', 'Second thing.']);
+    expect(skillSteps('# Title\n\n## Gather\nCollect the facts.\n\nAnd the dates.\n\n## Write\nWrite it up.')).toEqual(['Gather Collect the facts. And the dates.', 'Write Write it up.']);
+    expect(skillSteps('Be kind and brief.')).toEqual([]);
+    expect(skillSteps('1. Only one step.')).toEqual([]);
+    expect(skillSteps(Array.from({ length: 20 }, (_, i) => `${i + 1}. Step ${i + 1}.`).join('\n'))).toHaveLength(12);
+  });
+});

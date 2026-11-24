@@ -111,7 +111,14 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     case 'work_in_steps': {
       const job = requireString(call, 'job');
       if (!job) throw new Error('Missing required parameter: job');
-      return require('../../workflows/autoSteps').workInSteps(job, String(call.arguments?.text ?? ''));
+      const named = String(call.arguments?.skill ?? '').trim().toLowerCase().replace(/^\//, '');
+      if (!named) return require('../../workflows/autoSteps').workInSteps(job, String(call.arguments?.text ?? ''));
+      // A skill the user installed, done one of its steps at a time.
+      const skill = require('../../skills/skillsStore').useSkills.getState().skills.find((s: { name: string; enabled: boolean }) => s.enabled && s.name === named);
+      const steps: string[] = skill ? require('../../skills/skillSteps').skillSteps(skill.body) : [];
+      if (!skill) throw new Error(`There is no skill called "${named}" that is switched on.`);
+      if (steps.length < 2) throw new Error(`The "${named}" skill is not written as steps, so it cannot be done in steps.`);
+      return require('../../workflows/autoSteps').workInSteps(job, String(call.arguments?.text ?? ''), { summary: skill.description, steps, resources: skill.resources });
     }
     case 'make_helper': {
       const { saveHelperFromTool } = require('../../workflows/helperFromTool');

@@ -298,6 +298,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: {
       job: { type: 'string', description: 'What to do, in the user\'s words, with every part of it', required: true },
       text: { type: 'string', description: 'The material to work on (a document, notes, an article), when the user gave one' },
+      skill: { type: 'string', description: 'The name of an installed skill whose steps to follow one at a time (for a long skill), when the user called one' },
     },
   },
   {

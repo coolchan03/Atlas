@@ -13,9 +13,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { InputField, Workflow } from './engine';
 import { compileCalc, readNumber, showNumber } from './calc';
 import { digestText, fitsWhole } from './longText';
+import { relevantReferences } from '../skills/selectSkills';
 import { currentStepBudget, STEP_SYSTEM, stepPrompt } from './stepPrompt';
 
-export interface CustomHelper { id: string; title: string; summary: string; help: string; steps: string; createdAt: number; /** Made by the chat AI (make_helper), so the list can say so. */ madeByAi?: boolean }
+export interface CustomHelper { /** Text files that came with a skill run as a helper: the parts a step is about are shown to it. */ resources?: Array<{ name: string; text: string }>; id: string; title: string; summary: string; help: string; steps: string; createdAt: number; /** Made by the chat AI (make_helper), so the list can say so. */ madeByAi?: boolean }
 interface State { helpers: CustomHelper[]; save: (h: Omit<CustomHelper, 'createdAt'>) => void; remove: (id: string) => void }
 
 export const useCustomHelpers = create<State>()(persist((set) => ({
@@ -80,7 +81,7 @@ export function toWorkflow(h: CustomHelper): Workflow<Ctx> {
       const budget = currentStepBudget();
       const digest = ctx.digest ?? (fitsWhole(ctx.text, budget) ? undefined : await digestText(jobOf(h.title, parsed.steps), ctx.text, { budget, ask: (system, user) => ask(system, user) }));
       const reply = await ask(STEP_SYSTEM,
-        stepPrompt({ instruction: s.text, text: digest ?? ctx.text, known, results: ctx.outputs, budget }));
+        stepPrompt({ instruction: s.text, text: digest ?? ctx.text, known, results: ctx.outputs, budget, references: h.resources?.length ? relevantReferences(`${s.text} ${h.summary}`, h.resources, Math.round(budget * 0.25)) : [] }));
       const result = reply.trim().slice(0, 6000);
       if (!result) throw new Error('The AI gave no answer. Try again.');
       return { outputs: [...ctx.outputs, result], ...(digest ? { digest } : {}) };

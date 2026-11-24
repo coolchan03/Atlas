@@ -22,17 +22,18 @@ export const STEP_SYSTEM = 'You follow one instruction using only the informatio
 const OLDER_RESULT_CHARS = 160;
 const MAX_OLDER_RESULTS = 4;
 
-export interface StepInput { instruction: string; text: string; /** Answers and numbers the helper holds ("Tone: Formal", "Total: 57.5"). */ known: string; results: string[]; budget: number }
+export interface StepInput { instruction: string; text: string; /** Answers and numbers the helper holds ("Tone: Formal", "Total: 57.5"). */ known: string; results: string[]; budget: number; /** Pieces of a skill's reference files this step is about (already within a quarter of the budget). */ references?: string[] }
 
 /** The prompt for one step, never longer than `budget` characters. Pure. */
-export function stepPrompt({ instruction, text, known, results, budget }: StepInput): string {
+export function stepPrompt({ instruction, text, known, results, budget, references = [] }: StepInput): string {
   const head = `Instruction: ${instruction.slice(0, 600)}`;
   const latest = results.length ? results[results.length - 1] : '';
   const older = results.slice(0, -1).slice(-MAX_OLDER_RESULTS).map((r, i, all) => `Step ${results.length - all.length + i} (short): ${r.replace(/\s+/g, ' ').slice(0, OLDER_RESULT_CHARS)}`).join('\n');
   const latestBlock = latest ? `\nResult of the step before:\n${latest.slice(0, Math.round(budget * 0.4))}\n` : '';
   const olderBlock = older ? `\nEarlier steps:\n${older}\n` : '';
   const knownBlock = known ? `\nChoices:\n${known.slice(0, Math.round(budget * 0.12))}\n` : '';
-  const fixed = head.length + latestBlock.length + olderBlock.length + knownBlock.length + 12;
+  const referenceBlock = references.length ? `\nFrom the reference files:\n${references.join('\n\n').slice(0, Math.round(budget * 0.25))}\n` : '';
+  const fixed = head.length + latestBlock.length + olderBlock.length + knownBlock.length + referenceBlock.length + 12;
   const room = Math.max(300, budget - fixed);
-  return `${head}\n\nText:\n${fitPrompt(text, room)}\n${knownBlock}${olderBlock}${latestBlock}`;
+  return `${head}\n\nText:\n${fitPrompt(text, room)}\n${knownBlock}${referenceBlock}${olderBlock}${latestBlock}`;
 }

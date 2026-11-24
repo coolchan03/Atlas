@@ -12,7 +12,8 @@ export type RootStackParamList = {
   AgentEdit: { agentId?: string; kind?: 'agent' | 'pal' };
   Learning: { agentId?: string } | undefined;
   TeachList: undefined;
-  Workflows: undefined;
+  /** `job`: a job to open at once (a skill run in steps). */
+  Workflows: { job?: string } | undefined;
   Sensors: undefined;
   CallSetup: undefined;
   CpaPrep: undefined;

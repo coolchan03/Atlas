@@ -5,6 +5,7 @@
  * crowds out the chat. Pure, so it is tested without a device.
  */
 import type { Skill } from './skillsStore';
+import { skillSteps } from './skillSteps';
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'you', 'your', 'use', 'when', 'from', 'are', 'can', 'will', 'has', 'have', 'not', 'any', 'all', 'how', 'what', 'please', 'about', 'into', 'its', 'they', 'them', 'then', 'also', 'such', 'like', 'make', 'just']);
 const words = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
@@ -90,5 +91,7 @@ export function skillsNote(message: string, skills: Skill[], limits: number | { 
   const body = skill.body.length > bodyRoom ? `${skill.body.slice(0, bodyRoom).trimEnd()}\n[... the rest of this skill was left out to fit the model's memory]` : skill.body;
   const refs = files.length ? relevantReferences(message, files, room - body.length) : [];
   const references = refs.length ? `\n\nFROM THE SKILL'S REFERENCE FILES (${files.map((f) => f.name).join(', ')}; only the parts that match the request):\n${refs.join('\n\n')}` : '';
-  return `\n\nSKILL "${skill.name}" (instructions the user installed; follow them for this request):\n${body}${references}`;
+  // A long skill written as steps is better done one step at a time than squeezed into the prompt: the model is pointed to the tool that does that.
+  const hint = skill.body.length > bodyRoom && skillSteps(skill.body).length >= 2 ? `\n[This skill is long. To do the whole job, call work_in_steps with skill "${skill.name}" and the job in the user's words.]` : '';
+  return `\n\nSKILL "${skill.name}" (instructions the user installed; follow them for this request):\n${body}${references}${hint}`;
 }

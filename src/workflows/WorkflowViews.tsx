@@ -8,13 +8,13 @@ import { ScreenBackground } from '../components/ScreenBackground';
 import { Button, Card } from '../components';
 import { recorderService } from '../atlasRecorder/recorderService';
 import { saveMarkdown, saveText } from '../study/exportFiles';
-import { stepTitles, workflowList } from './service';
+import { stepTitles, workflowById, workflowList } from './service';
 import { runItems } from './stepProgress';
 import { StepProgressList } from './StepProgressList';
 import type { InputField } from './engine';
 
 export type Kind = string;
-const titleOf = (id: string): string => workflowList().find((w) => w.id === id)?.title ?? 'Job';
+const titleOf = (id: string): string => workflowById(id)?.title ?? 'Job';
 const fail = (title: string) => (e: unknown) => Alert.alert(title, String((e as Error)?.message || e));
 
 export const Shell: React.FC<{ title: string; onBack: (() => void) | undefined; children: React.ReactNode }> = ({ title, onBack, children }) => {
@@ -87,7 +87,7 @@ const FieldRow: React.FC<{ field: InputField; value: string; onChange: (v: strin
 /** Where the text for a job comes from, any extra choices it asks for, and the start button. */
 export const InputView: React.FC<InputProps> = (p) => {
   const { colors } = useTheme();
-  const input = workflowList().find((w) => w.id === p.kind)!.input;
+  const input = workflowById(p.kind)!.input;
   return (
     <Shell title={titleOf(p.kind)} onBack={p.onBack}>
       <Text style={[styles.note, { color: colors.textSecondary }]}>{input.help}</Text>

@@ -9,6 +9,8 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { parseSkill, type ParsedSkill } from './parseSkill';
 import { useSkills, type Skill as InstalledSkill } from './skillsStore';
 import { pickSkill } from './importSkill';
+import { skillJobId, skillSteps } from './skillSteps';
+import { useNavigation } from '@react-navigation/native';
 import { SKILL_LIBRARY } from './library';
 import { OWN_CATEGORY, SKILL_CATEGORIES, categoryOf, type SkillCategory } from './skillCategories';
 
@@ -17,7 +19,9 @@ type Colors = ReturnType<typeof useTheme>['colors'];
 /** One skill: on/off when it is added, an Add button when it is only offered. Tap the name to read it. */
 function SkillRow({ skill, installed, colors, onAdd, onRemove }: { skill: ParsedSkill; installed?: InstalledSkill; colors: Colors; onAdd: () => void; onRemove: () => void }) {
   const { setEnabled } = useSkills();
+  const navigation = useNavigation<any>();
   const [open, setOpen] = useState(false);
+  const steps = installed ? skillSteps(installed.body).length : 0;
   return (
     <View style={[styles.skill, { borderTopColor: colors.border }]} testID={installed ? `skill-${skill.name}` : undefined}>
       <View style={styles.row}>
@@ -29,6 +33,7 @@ function SkillRow({ skill, installed, colors, onAdd, onRemove }: { skill: Parsed
           ? <Switch value={installed.enabled} onValueChange={(on) => setEnabled(skill.name, on)} testID={`skill-switch-${skill.name}`} />
           : <TouchableOpacity onPress={onAdd} testID={`library-skill-${skill.name}`} accessibilityLabel={`Add the ${skill.name} skill`}><Text style={{ color: colors.primary }}>Add</Text></TouchableOpacity>}
       </View>
+      {steps > 0 && <TouchableOpacity onPress={() => navigation.navigate('Workflows', { job: skillJobId(skill.name) })} testID={`skill-steps-${skill.name}`} accessibilityRole="button"><Text style={{ color: colors.primary }}>Run it in {steps} steps</Text></TouchableOpacity>}
       {!!installed?.resources?.length && <Text style={[styles.meta, { color: colors.textSecondary }]}>{installed.resources.length} reference file{installed.resources.length === 1 ? '' : 's'} kept with it.</Text>}
       {!!installed?.needs.length && <Text style={[styles.warn, { color: colors.error }]}>Expects {installed.needs.join(', ')}, which Atlas cannot run: only its instructions are followed.</Text>}
       {open && (
