@@ -28,6 +28,8 @@ interface WorkflowInput<C> {
   fields?: InputField[];
   /** Offer the person's finished recordings as the source of the text. */
   fromRecording?: boolean;
+  /** Offer to fill the text from a photo: `read` turns the picture into the text (a list of what it shows). */
+  fromPhoto?: { label: string; read: (uri: string, mime: string | undefined) => Promise<string> };
   make: (text: string, fields: Record<string, string>) => C;
 }
 export interface Workflow<C> { id: string; title: string; summary: string; input: WorkflowInput<C>; steps: Step<C>[] }

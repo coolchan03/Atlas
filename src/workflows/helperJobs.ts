@@ -5,6 +5,7 @@
  */
 import { extractJson, type Ask, type Workflow } from './engine';
 import { allergenHits, claimLines, claims, hazardWarnings, list, lostNumbers, missingItems, section, text, type Claim } from './helpers';
+import { readFoodFromPhoto } from './photoList';
 
 const json = (reply: string): Record<string, any> => {
   const parsed = extractJson(reply);
@@ -60,7 +61,8 @@ export const cook: Workflow<CookCtx> = {
   id: 'cook',
   title: 'Dinner from what I have',
   summary: 'List what is in the kitchen. It suggests dinners that use it, checks them against what you cannot eat, and writes the recipe with amounts for your group.',
-  input: { help: 'List what you have, separated by commas or new lines. Salt, pepper, oil and water are assumed.', minChars: 6,
+  input: { help: 'List what you have, separated by commas or new lines, or read it from a photo and fix the list. Salt, pepper, oil and water are assumed.', minChars: 6,
+    fromPhoto: { label: 'Or take a photo of your fridge or shelf. The AI names what it sees, and you can edit the list before starting.', read: readFoodFromPhoto },
     fields: [
       { id: 'diners', label: 'How many people', options: ['1', '2', '4', '6'] },
       { id: 'time', label: 'Time you have', options: ['15 minutes', '30 minutes', '60 minutes'] },
