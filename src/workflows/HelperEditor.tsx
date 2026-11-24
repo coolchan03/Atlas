@@ -29,9 +29,9 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
     setBusy(true);
     try {
       const reply: string = await require('../study/engine').askModel(
-        'You write the steps of a small multi-step helper. Reply with ONLY lines, each starting with field:, ask:, ai: or calc:. field: is a choice or typed answer asked before it starts ("field: Tone | Friendly, Formal"). ask: is a choice asked part-way ("ask: Keep it short? | Yes, No"). ai: is one instruction for the AI. calc: is an exact calculation done by code, never by the AI ("calc: Total | {Price} * {Qty} * (1 + {Tax} / 100)"); {Name} is a field written above it. Use at most 3 field lines, 1 ask line, 4 ai lines and 3 calc lines.',
+        'You write the steps of a small multi-step helper. Reply with ONLY lines. Each line is a numbered step ("1. Do this"), or starts with field:, ask:, ai: or calc:. field: is a choice or typed answer asked before it starts ("field: Tone | Friendly, Formal"). ask: is a choice asked part-way ("ask: Keep it short? | Yes, No"). ai: is one instruction for the AI. calc: is an exact calculation done by code, never by the AI ("calc: Total | {Price} * {Qty} * (1 + {Tax} / 100)"); {Name} is a field written above it. Use at most 3 field lines, 1 ask line, 4 ai lines and 3 calc lines.',
         `The helper should: ${idea.slice(0, 500)}`);
-      const lines = reply.split('\n').map((l) => l.trim()).filter((l) => /^(field|ask|ai|calc)\s*:/i.test(l));
+      const lines = reply.split('\n').map((l) => l.trim()).filter((l) => /^((field|ask|ai|calc)\s*:|(step\s*)?\d{1,2}\s*[.):-])/i.test(l));
       if (!lines.length) throw new Error('The AI did not write steps in the expected form. Try again or write them yourself.');
       setSteps(lines.join('\n'));
     } catch (e) { Alert.alert('Could not draft the steps', String((e as Error)?.message || e)); } finally { setBusy(false); }
@@ -43,7 +43,7 @@ export const HelperEditor: React.FC<{ helper: CustomHelper | null; onClose: () =
   };
   return (
     <Shell title={helper ? 'Edit helper' : 'Make your own helper'} onBack={onClose}>
-      <Text style={[styles.note, { color: colors.textSecondary }]}>A helper is a name plus steps, one per line. Each line starts with field: (asked first), ask: (a choice part-way, with choices after a |) ai: (an instruction for the AI) or calc: (an exact calculation, for example {CALC_EXAMPLE}). The last result is shown for your approval, then saved as a note.</Text>
+      <Text style={[styles.note, { color: colors.textSecondary }]}>A helper is a name plus steps, one per line, done in order; each step can use the results of the ones before it. Just number them: 1. Do this, 2. Then this, 3. Finally this. Other kinds of line: field: (asked first), ask: (a choice part-way, with choices after a |) or calc: (an exact calculation, for example {CALC_EXAMPLE}). The last result is shown for your approval, then saved as a note.</Text>
       {!helper && <Select label="Start from an example" options={EXAMPLE_HELPERS.map((x) => ({ id: x.id, label: x.title, hint: x.summary }))} summary="Split the bill, loan payment, recipe scaler..." testID="helper-example"
         onChange={(id) => { const x = EXAMPLE_HELPERS.find((e) => e.id === id); if (x) { setTitle(x.title); setSummary(x.summary); setHelp(x.help); setSteps(x.steps); } }} />}
       {input({ value: title, set: setTitle, placeholder: 'Name, for example: Reply writer', testID: 'helper-title' })}

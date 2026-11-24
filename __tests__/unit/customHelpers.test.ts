@@ -87,3 +87,28 @@ it('the temperature and budget examples give the right numbers', async () => {
   expect(await run('budget-502030', { f0: '3000' })).toBe('Needs (50%): 1500\nWants (30%): 900\nSavings (20%): 600');
   expect(await run('own-rate', { f0: '100', f1: '0.92' })).toBe('Converted: 92\nBack again: 100');
 });
+
+describe('numbered steps', () => {
+  const steps = '1. List the decisions made.\nStep 2: List who must do what.\n3) Write a short email with both lists.';
+
+  it('reads "1. ...", "Step 2: ..." and "3) ..." as steps for the AI, in order, and still takes the other kinds of line', () => {
+    const p = parseSteps(steps);
+    expect(p.errors).toEqual([]);
+    expect(p.steps.map((s) => s.kind)).toEqual(['ai', 'ai', 'ai']);
+    expect(p.steps.map((s) => s.text)).toEqual(['List the decisions made.', 'List who must do what.', 'Write a short email with both lists.']);
+    expect(parseSteps('field: Tone | Formal, Friendly\n1. Write the reply.\ncalc: Two | 1 + 1').errors).toEqual([]);
+    expect(parseSteps('just some words').errors[0]).toMatch(/numbered step/);
+  });
+
+  it('runs the steps one after the other, each with the results of the ones before it, and shows the last result', async () => {
+    const wf = toWorkflow({ id: 'n', title: 'Follow-up', summary: '', help: '', steps, createdAt: 1 });
+    const prompts: string[] = [];
+    const ask = async (_s: string, u: string) => { prompts.push(u); return `result ${prompts.length}`; };
+    const run = await advance(wf, newRun(wf, 'r', wf.input.make('the meeting notes', {})), { ask });
+    expect(prompts).toHaveLength(3);
+    expect(prompts[0]).toMatch(/Instruction: List the decisions made\./);
+    expect(prompts[1]).toMatch(/Instruction: List who must do what\.[\s\S]*Earlier results:\nresult 1/);
+    expect(prompts[2]).toMatch(/Earlier results:\nresult 1\n\nresult 2/);
+    expect(run.waiting?.summary).toBe('result 3');
+  });
+});

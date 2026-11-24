@@ -3,6 +3,7 @@
  *   field: Tone | Friendly, Formal     a choice asked before it starts (leave out the choices for a typed answer)
  *   ask: Keep it short? | Yes, No      a choice asked part-way through (choices are needed)
  *   ai: Write a reply in that tone.    one AI step: it follows the instruction using the text and your answers
+ *   1. Write a reply in that tone.     the same, written as a numbered step ("Step 2: ..." works too): a helper can be just its steps
  *   calc: Total | {Price} * {Qty}      one exact calculation done by code, not the AI (see calc.ts); {Name} is a field or an earlier calc
  * The last AI result is shown for approval, then saved as a note. The AI never sees anything beyond what you give it.
  */
@@ -30,8 +31,10 @@ const choices = (v: string): string[] => v.split(',').map((x) => x.trim()).filte
 export function parseSteps(source: string): ParsedSteps {
   const out: ParsedSteps = { fields: [], steps: [], errors: [] };
   source.split(/\n+/).map((l) => l.trim()).filter(Boolean).forEach((line, i) => {
-    const m = /^(field|ask|ai|calc)\s*:\s*(.+)$/i.exec(line);
-    if (!m) { out.errors.push(`Line ${i + 1} must start with field:, ask:, ai: or calc:`); return; }
+    // A plain numbered line ("1. Do this", "Step 2: Do that") is an instruction for the AI, so a helper can be written as just its steps.
+    const numbered = /^(?:step\s*)?\d{1,2}\s*[.):-]\s*(.+)$/i.exec(line);
+    const m = numbered ? ['', 'ai', numbered[1]] : /^(field|ask|ai|calc)\s*:\s*(.+)$/i.exec(line);
+    if (!m) { out.errors.push(`Line ${i + 1} must be a numbered step ("1. Do this") or start with field:, ask:, ai: or calc:`); return; }
     const kind = m[1].toLowerCase();
     const [head, rest] = m[2].split('|').map((x) => x.trim());
     if (kind === 'field') out.fields.push({ id: `f${out.fields.length}`, label: head.slice(0, 60), placeholder: head.slice(0, 60), ...(rest ? { options: choices(rest) } : {}) });

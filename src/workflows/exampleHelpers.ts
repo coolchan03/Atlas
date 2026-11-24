@@ -37,6 +37,10 @@ export const EXAMPLE_HELPERS: ExampleHelper[] = [
     steps: 'field: Serves now\nfield: Serves wanted\ncalc: Scale | round({Serves wanted} / {Serves now}, 3)\nai: Rewrite the recipe with every quantity multiplied by the scale, keeping the same units. Do not change the steps.',
   },
   {
+    id: 'step-by-step', title: 'Meeting follow-up', summary: 'Three plain steps, one after the other', help: 'Paste the notes or transcript of the meeting.',
+    steps: '1. List the decisions that were made, one per line.\n2. List who has to do what, and by when, using only what the text says.\n3. Write a short, friendly email to the group with both lists.',
+  },
+  {
     id: 'reply-writer', title: 'Reply writer', summary: 'A reply in the tone you choose', help: 'Paste the message you are answering.',
     steps: 'field: Tone | Friendly, Formal, Short\nai: Write a reply to the text in that tone. Do not invent facts, dates or names.',
   },
