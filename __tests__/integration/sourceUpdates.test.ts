@@ -59,3 +59,22 @@ it('finds newer official pages marked in code, refuses other sites and PDFs, add
   const names = (await ragService.getDocumentsByProject(project.id)).map((d: { name: string }) => d.name);
   expect(names.some((n: string) => n.startsWith('Publication 17 (2024)'))).toBe(true);
 });
+
+it('checks a court case\'s later treatment through the web search, showing the signals found in each result', async () => {
+  jest.resetModules();
+  const { executeToolCall } = require('../../src/services/tools/handlers');
+  const calls: string[] = [];
+  mockSearch.mockImplementation(async (q: string) => { calls.push(q); return { provider: 'x', notes: [], results: [
+    { title: 'Chevron v. NRDC overruled by Loper Bright', url: 'https://www.courtlistener.com/opinion/1/loper-bright/', snippet: 'The Court held that Chevron is overruled and courts must exercise independent judgment.' },
+    { title: 'Smith v. Commissioner affirmed', url: 'https://law.example.org/smith', snippet: 'The appeals court affirmed the Tax Court and later courts followed the holding.' },
+    { title: 'Unrelated page', url: 'https://example.org/x', snippet: 'Nothing about treatment here.' },
+  ] }; });
+  const out = (await executeToolCall({ id: 'c', name: 'case_status', arguments: { case: 'Chevron U.S.A. v. NRDC, 467 U.S. 837 (1984)' }, context: { projectId: 'p' } })).content;
+  expect(calls).toHaveLength(3);
+  expect(calls[0]).toContain('"Chevron U.S.A. v. NRDC, 467 U.S. 837 (1984)" overruled OR reversed');
+  expect(out).toContain('3 results, 1 with negative words');
+  expect(out).toMatch(/Chevron v\. NRDC overruled by Loper Bright[\s\S]*Signals: negative \(overruled\)/);
+  expect(out).toMatch(/Smith v\. Commissioner affirmed[\s\S]*Signals: positive \(affirmed\)/);
+  expect(out).toMatch(/Unrelated page[\s\S]*Signals: none in this text/);
+  expect(out).toContain('open the page with read_url');
+});

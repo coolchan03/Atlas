@@ -56,7 +56,7 @@ const EQUITIES: SourceProfile = {
     { id: 'research', label: 'Analyst research or news', match: /\b(analyst|research|news|article|opinion|rating|outlook|note)\b/i, edition: false, staleDays: 30 },
   ]),
   sites: ['sec.gov', 'finra.org', 'nyse.com', 'nasdaq.com', 'cboe.com', 'cmegroup.com', 'federalreserve.gov', 'treasury.gov'],
-  rules: 'These sources differ in authority and in how fast they go stale. Rank them, highest first: SEC filings, exchange and regulator rules, statements by the company, market data, then analyst research and news. A filing outranks commentary about it. Prices, quotes and news are only true as of their date: always say the date of any figure you use, say when an excerpt shows no date, and treat market data more than a day old as stale. Do not present a forecast, a price target or an opinion as fact, and do not tell the user to buy or sell: give the facts, the sources and the uncertainty.',
+  rules: 'These sources differ in authority and in how fast they go stale. Rank them, highest first: SEC filings, exchange and regulator rules, statements by the company, market data, then analyst research and news. A filing outranks commentary about it. Prices, quotes and news are only true as of their date: always say the date of any figure you use, say when an excerpt shows no date, and treat market data more than a day old as stale. Reason from the sources to a clear, specific conclusion and state how confident you are in it; name the source and date behind each key fact.',
 };
 
 const CRYPTO: SourceProfile = {
@@ -69,7 +69,7 @@ const CRYPTO: SourceProfile = {
     { id: 'research', label: 'Research or news', match: /\b(research|news|article|opinion|analysis|report|thread)\b/i, edition: false, staleDays: 30 },
   ]),
   sites: ['sec.gov', 'cftc.gov', 'fincen.gov', 'treasury.gov', 'federalregister.gov', 'eips.ethereum.org', 'bitcoin.org', 'github.com'],
-  rules: 'These sources differ in authority and in how fast they go stale. Rank them, highest first: the protocol specification, regulator rules and enforcement, project and exchange announcements, on-chain and market data, then research and news. A specification outranks commentary about it, and a newer version of a specification replaces the older one. Prices, on-chain figures and announcements are only true as of their date: say the date of any figure, say when an excerpt shows none, and treat market data more than a day old as stale. Do not present a forecast as fact or tell the user to buy or sell.',
+  rules: 'These sources differ in authority and in how fast they go stale. Rank them, highest first: the protocol specification, regulator rules and enforcement, project and exchange announcements, on-chain and market data, then research and news. A specification outranks commentary about it, and a newer version of a specification replaces the older one. Prices, on-chain figures and announcements are only true as of their date: say the date of any figure, say when an excerpt shows none, and treat market data more than a day old as stale. Reason from the sources to a clear, specific conclusion and state how confident you are in it; name the source and date behind each key fact.',
 };
 
 const LAW: SourceProfile = {
@@ -83,7 +83,7 @@ const LAW: SourceProfile = {
     { id: 'commentary', label: 'Commentary', match: /\b(treatise|law review|commentary|restatement|hornbook|practice guide|journal)\b/i, edition: true },
   ]),
   sites: ['congress.gov', 'govinfo.gov', 'uscode.house.gov', 'ecfr.gov', 'federalregister.gov', 'supremecourt.gov', 'uscourts.gov'],
-  rules: 'These sources differ in authority. Rank them, highest first: the constitution, statutes, regulations, court decisions, agency guidance, then commentary. Rank decides a conflict, not date: a newer decision does not override a statute, and a legislature can amend what a court applied. A court decision binds only the courts below it in the same system. Between editions of the same statute or regulation, use the version in force at the time of the facts. Say which source, section and date you used. If you cannot check that a decision is still good law, say so.',
+  rules: 'These sources differ in authority. Rank them, highest first: the constitution, statutes, regulations, court decisions, agency guidance, then commentary. Rank decides a conflict, not date: a newer decision does not override a statute, and a legislature can amend what a court applied. A court decision binds only the courts below it in the same system. Between editions of the same statute or regulation, use the version in force at the time of the facts. Say which source, section and date you used. Before relying on a court decision, check its later treatment with the case_status tool.',
 };
 
 const BUILT_IN: SourceProfile[] = [ACCOUNTING, EQUITIES, CRYPTO, LAW];

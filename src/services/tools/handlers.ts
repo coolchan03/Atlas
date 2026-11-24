@@ -13,6 +13,7 @@ import { NETWORK_TOOLS, offGridOn } from '../../atlasTools/offGridState';
 import { arg, requireString, EMPTY_WRITE } from './toolArgs';
 import { braveSearch } from './braveSearch';
 import { addSource, findUpdates, resolverFor } from '../../standards/updates';
+import { caseStatus } from '../../standards/caseStatus';
 import { profileFor } from '../../standards/profiles';
 export { braveSearch };
 import { forceHttps, isBlockedUrl } from './urlSafety';
@@ -141,6 +142,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
     case 'standards_check':
     case 'source_updates':
     case 'add_source':
+    case 'case_status':
       return handleStandardsTool(call);
     case 'drug_label': {
       const name = requireString(call, 'name');
@@ -404,6 +406,11 @@ async function handleStandardsTool(call: ToolCall): Promise<string> {
     const topic = requireString(call, 'topic');
     if (!topic) throw new Error('Missing required parameter: topic');
     return require('../../standards/lookup').standardsCheck(topic, web); // NOSONAR
+  }
+  if (call.name === 'case_status') {
+    const name = requireString(call, 'case');
+    if (!name) throw new Error('Missing required parameter: case');
+    return caseStatus(name, web);
   }
   const projectId = call.context?.projectId;
   const held = await heldDocumentNames(projectId);

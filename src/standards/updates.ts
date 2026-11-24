@@ -6,7 +6,7 @@
  *     by the model; a page with no date is marked as unknown rather than guessed.
  *   add_source: puts one official page into the project, only after the person agrees in a dialog that shows the address. A newer
  *     edition of a work the project holds then replaces the older one in answers (taxSources.supersededEditions).
- * Nothing is added without the person, and nothing is checked against a court's later treatment: that needs a citator Atlas does not have.
+ * Nothing is added without the person. A court decision's later treatment is checked separately, with case_status (caseStatus.ts).
  */
 import { hostOf, isOfficialUrl } from './authority';
 import { classifyIn, supersededIn, type SourceProfile } from './profiles';
@@ -79,7 +79,7 @@ export async function findUpdates(source: string, held: string[], via: { search:
     const verdict = marks.length ? marks.map((m) => (m.v === 'newer' ? `NEWER than "${m.h}"` : m.v === 'same' ? `the same edition as "${m.h}"` : `OLDER than "${m.h}"`)).join('; ') : 'not comparable to a held document (no matching series and year): open it and read its date before saying it is newer';
     return `${i + 1}. ${p.title}\n   ${p.url}\n   ${(p.snippet ?? '').replace(/\s+/g, ' ').slice(0, 240)}\n   Checked in code: ${verdict}`;
   });
-  return `${heldLine}\nPages from the official sites about "${query}":\n\n${lines.join('\n\n')}\n\nOnly call a page newer when it says NEWER above or its date is on the page. A new law, ruling, decision, filing or announcement is new, not a newer edition: say what it is and ask whether to add it. To add a page to the project, tell the user which one and ask, then use add_source with its address. Atlas cannot check whether a case is still good law: say so.`;
+  return `${heldLine}\nPages from the official sites about "${query}":\n\n${lines.join('\n\n')}\n\nOnly call a page newer when it says NEWER above or its date is on the page. A new law, ruling, decision, filing or announcement is new, not a newer edition: say what it is and ask whether to add it. To add a page to the project, tell the user which one and ask, then use add_source with its address. To check whether a case is still good law, use case_status.`;
 }
 
 interface AddDeps {

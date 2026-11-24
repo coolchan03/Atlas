@@ -289,8 +289,13 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
   },
   {
     id: 'source_updates', name: 'source_updates', displayName: 'Look for newer sources', icon: 'refresh-cw',
-    description: "Look on the official sites of this project's field only (for tax: IRS, eCFR, the U.S. Code, Congress and the courts; for markets, accounting, law or a profile the user wrote: its own list of sites) for a newer version of a source the project holds, or for something new on a topic. Each page found is marked in code as NEWER, the same edition or OLDER than a document the project already has. Use when the user asks to look for updates, check whether a source is current, or find a newer rule, filing, standard, law or decision. Tell the user what was found and ask before adding anything. Atlas cannot check whether a court case is still good law, or that a price is live: say so.",
+    description: "Look on the official sites of this project's field only (for tax: IRS, eCFR, the U.S. Code, Congress and the courts; for markets, accounting, law or a profile the user wrote: its own list of sites) for a newer version of a source the project holds, or for something new on a topic. Each page found is marked in code as NEWER, the same edition or OLDER than a document the project already has. Use when the user asks to look for updates, check whether a source is current, or find a newer rule, filing, standard, law or decision. Tell the user what was found and ask before adding anything. To check whether a court case is still good law, use case_status.",
     parameters: { source: { type: 'string', description: 'What to look for: a document name in the project, a citation such as "Rev. Proc. 2024-40", "ASC 842" or "10-K Apple", or a topic', required: true } },
+  },
+  {
+    id: 'case_status', name: 'case_status', displayName: 'Check a court case', icon: 'check-circle',
+    description: "Check whether a court case is still good law: searches the web for later treatment (overruled, reversed, vacated, superseded by statute, followed, affirmed) and shows each result with the signals found in its text. Use before relying on a court decision, and whenever the user asks whether a case is still good law. A negative word can describe the case's own appeal rather than later treatment, so open a result with read_url to see which court did what, and when, before saying the case is no longer good law.",
+    parameters: { case: { type: 'string', description: 'The case name and, if known, the citation or court and year, for example "Loper Bright Enterprises v. Raimondo, 603 U.S. 369 (2024)"', required: true } },
   },
   {
     id: 'add_source', name: 'add_source', displayName: 'Add a source to the project', icon: 'plus-circle',

@@ -14,7 +14,7 @@ type ChatLike = { enabledTools?: string[]; agentId?: string | null; projectId?: 
  * update the project's own documents. A project chat always has them (nothing to switch on); a regular chat never
  * sends them, so it has fewer tools to read and one less thing to configure.
  */
-export const PROJECT_TOOL_IDS = [...STUDY_TOOL_IDS, 'search_knowledge_base', 'update_project_document', 'source_updates', 'add_source'];
+export const PROJECT_TOOL_IDS = [...STUDY_TOOL_IDS, 'search_knowledge_base', 'update_project_document', 'source_updates', 'add_source', 'case_status'];
 
 /**
  * Permissions in a few switches instead of one per tool. Atlas only sends the model the tools a message could use

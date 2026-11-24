@@ -27,7 +27,8 @@ it('applies a field\'s ranking, dating and sites to the prompt and to the update
   useProjectStore.getState().updateProject(project.id, { profileId: 'equities' });
   const prompt = await injectRagContext(project.id, 'Apple services revenue growth', 'BASE');
   expect(prompt).toContain('Rank them, highest first: SEC filings');
-  expect(prompt).toContain('do not tell the user to buy or sell');
+  expect(prompt).toContain('Reason from the sources to a clear, specific conclusion and state how confident you are in it');
+  expect(prompt).not.toMatch(/buy or sell|not advice|do not present a forecast/i);
   expect(prompt).toMatch(/AAPL 10-K 2022\.pdf - SEC filing, 2022 \(true as of its date\)/); // an old filing is kept: filings are never replaced
   expect(prompt).toMatch(/AAPL 10-K 2023\.pdf - SEC filing, 2023/);
   expect(prompt).toMatch(/Stale: NVDA price history 2024-01-02\.csv is \d+ days old \(Market data older than 1 day is stale\)/);
