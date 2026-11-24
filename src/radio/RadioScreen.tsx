@@ -22,6 +22,25 @@ const MOODS: SelectOption[] = [{ id: 'any', label: 'Any mood' }, { id: 'calm', l
 const SLEEP: SelectOption[] = [{ id: '0', label: 'Off' }, ...[15, 30, 60, 90].map((m) => ({ id: String(m), label: `${m} minutes`, hint: 'The music fades out and the station stops' }))];
 const HOST: SelectOption[] = [{ id: 'on', label: 'Says what is coming up' }, { id: 'off', label: 'Stays quiet' }];
 
+/** What the station is doing now: the line (break or playing), the song, and the poem with its name while it is read. */
+const NowCard: React.FC<{ run: ReturnType<typeof useRadioRun.getState> }> = ({ run }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="radio-now">
+      <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.meta }} testID="radio-line">{run.line.toUpperCase()}</Text>
+      {!!run.title && <Text style={{ color: colors.text, ...TYPOGRAPHY.h3 }} testID="radio-title">{run.title}</Text>}
+      {!!run.about && <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>{run.about}</Text>}
+      {!!run.poem && run.reading && (
+        <>
+          {!!run.poemTitle && <Text style={{ color: colors.text, ...TYPOGRAPHY.h3 }} testID="radio-poem-title">{run.poemTitle}</Text>}
+          <Text style={{ color: colors.text, ...TYPOGRAPHY.body }} testID="radio-poem">{run.poem.join('\n')}</Text>
+        </>
+      )}
+      {!!run.poem && !run.reading && <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }} testID="radio-poem-coming">{run.poemTitle ? `A poem is coming: ${run.poemTitle}.` : 'A poem is coming.'}</Text>}
+    </View>
+  );
+};
+
 /** The AI radio: say what the station is about, press Start, and it plays songs one after another with a poem read over some of them. */
 export const RadioScreen: React.FC = () => {
   const { colors } = useTheme();
@@ -42,7 +61,7 @@ export const RadioScreen: React.FC = () => {
       <ScreenHeader title="AI radio" />
       <ScrollView contentContainerStyle={[styles.body, wide.column]} keyboardShouldPersistTaps="handled">
         <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>
-          A station that never ends. Each song is rolled from {GENRES.length} genres, {TOPICS.length} topics and {SUBJECTS.length} subjects, the AI picks its instruments, and the tune plays over and over until the song is up. Some songs have a poem read once over the top, in a steady voice.
+          A station that never ends. Each song is rolled from {GENRES.length} genres, {TOPICS.length} topics and {SUBJECTS.length} subjects, the AI picks its instruments, and the tune plays over and over until the song is up. Some songs have a titled poem read once over the top, in a steady voice. Between songs there is a short break while the host says what is next and the AI writes it, so the AI never works while a song plays.
         </Text>
         <Text style={{ color: colors.text, ...TYPOGRAPHY.body }}>Station theme</Text>
         <TextInput
@@ -70,15 +89,7 @@ export const RadioScreen: React.FC = () => {
             <Button title={run.kept ? 'Kept' : 'Keep this song'} variant="outline" onPress={keepSong} disabled={run.kept || !run.title} testID="radio-keep" />
           </View>
         ) : <Button title="Start the radio" onPress={startRadio} testID="radio-start" />}
-        {run.on && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} testID="radio-now">
-            <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.meta }} testID="radio-line">{run.line.toUpperCase()}</Text>
-            {!!run.title && <Text style={{ color: colors.text, ...TYPOGRAPHY.h3 }} testID="radio-title">{run.title}</Text>}
-            {!!run.about && <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>{run.about}</Text>}
-            {!!run.poem && run.reading && <Text style={{ color: colors.text, ...TYPOGRAPHY.body }} testID="radio-poem">{run.poem.join('\n')}</Text>}
-            {!!run.poem && !run.reading && <Text style={{ color: colors.textMuted, ...TYPOGRAPHY.bodySmall }}>A poem is coming.</Text>}
-          </View>
-        )}
+        {run.on && <NowCard run={run} />}
         {run.on && (
           <View style={styles.gap}>
             <Text style={{ color: colors.text, ...TYPOGRAPHY.body }}>Request a song</Text>

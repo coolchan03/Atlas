@@ -6,7 +6,7 @@ import { runStation, type StationDeps, type StationEvent } from '../../src/radio
 
 interface Track { id: number; seconds: number }
 
-function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?: 'good' | 'garbage'; skipFirstSong?: boolean; request?: string; kept?: number[] } = {}) {
+function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?: 'good' | 'garbage' | 'badtitle'; skipFirstSong?: boolean; request?: string; kept?: number[] } = {}) {
   let clock = 1_000_000;
   const realNow = Date.now;
   Date.now = () => clock;
@@ -21,15 +21,21 @@ function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?:
       if (options?.grammar?.includes('instruments')) return '{"style":"jazz","instruments":["sax","piano","upright"]}';
       // Follows the grammar it is given: one line per rule, ending in the first word that rule allows.
       const ends = [...(options?.grammar ?? '').matchAll(/^line\d+ ::=.* " " \(("\w+")/gm)].map((m) => m[1].replace(/"/g, ''));
-      return ends.map((e, i) => `The little thing number ${i + 1} went to the ${e}`).join('\n');
+      const title = options?.grammar?.includes('title ::=') ? `${opts.model === 'badtitle' ? 'Night 99 #1 !!!' : 'The little night walk'}\n` : '';
+      return title + ends.map((e, i) => `The little thing number ${i + 1} went to the ${e}`).join('\n');
     },
     makeTrack: async (score) => { const t = { id: made.length, seconds: score.notes.length }; made.push(t); log.push(`tune:${score.title}`); return t; },
     play: async (t) => { plays += 1; skip = false; log.push(`play:${t.id}`); },
     discard: async (t) => { discarded.push(t.id); },
-    speak: async (text) => { log.push(`say:${text}`); if (opts.skipFirstSong && plays === 1 && !skipped) { skip = true; skipped = true; } return true; },
+    speak: async (text) => { log.push(`say:${text}`); return true; },
     stopSpeaking: () => undefined,
     stopMusic: () => { log.push('music-stopped'); },
-    wait: async (ms) => { clock += ms; if (plays >= (opts.songs ?? 3)) stop = true; return !stop; },
+    wait: async (ms) => {
+      clock += ms;
+      if (opts.skipFirstSong && plays === 1 && !skipped) { skip = true; skipped = true; return true; } // the listener presses Next song a moment into the first song
+      if (plays >= (opts.songs ?? 3)) stop = true;
+      return !stop;
+    },
     skipped: () => skip,
     rng: seeded(7),
     takeRequest: () => (opts.request && !requestTaken ? ((requestTaken = true), opts.request) : null),
@@ -42,18 +48,32 @@ function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?:
 
 const spoken = (log: string[]) => log.filter((l) => l.startsWith('say:')).map((l) => l.slice(4));
 
-it('plays song after song: the host says what is coming, a poem is read once over the song, the old recording is thrown away', async () => {
+it('plays song after song: a break while the host says what is coming and the model writes it, a titled poem is read once over the song, the old recording is thrown away', async () => {
   const radio = build({ theme: 'a haunted lighthouse late-night station', stationName: 'Lamp FM', poemChance: 1 });
   await radio.run();
   const said = spoken(radio.log);
-  expect(said[0]).toMatch(/Lamp FM/); // the first song opens with the station name and the theme
+  expect(said[0]).toMatch(/Lamp FM/); // the first break opens with the station name and the theme
   expect(said[0]).toMatch(/haunted lighthouse/);
   const readings = radio.events.filter((e): e is Extract<StationEvent, { kind: 'poem' }> => e.kind === 'poem');
   expect(readings.length).toBeGreaterThan(0);
-  for (const r of readings) expect(said.filter((s) => s.startsWith(r.lines[0]))).toHaveLength(1); // each poem is read exactly once, whole
+  for (const r of readings) expect(said.filter((s) => s.includes(r.lines[0]))).toHaveLength(1); // each poem is read exactly once, whole
   expect(radio.events.filter((e) => e.kind === 'playing').length).toBe(3);
   expect(radio.events.some((e) => e.kind === 'poem')).toBe(true);
   expect(radio.log.filter((l) => l === 'music-stopped')).toHaveLength(1);
+  // The poem has a name, shown and spoken first.
+  expect(readings[0].poemTitle).toBe('The Little Night Walk');
+  expect(said.some((t) => t.startsWith('A poem called The Little Night Walk.'))).toBe(true);
+  const playingEvent = radio.events.find((e): e is Extract<StationEvent, { kind: 'playing' }> => e.kind === 'playing');
+  expect(playingEvent?.poemTitle).toBe('The Little Night Walk');
+  // The model works in the break, never while a song plays: every break comes before the song it makes, and the tune is made after the break starts.
+  const kinds = radio.events.map((e) => e.kind).filter((k) => k === 'break' || k === 'playing');
+  expect(kinds).toEqual(['break', 'playing', 'break', 'playing', 'break', 'playing']);
+  const firstTune = radio.log.findIndex((l) => l.startsWith('tune:'));
+  const firstPlayLog = radio.log.findIndex((l) => l.startsWith('play:'));
+  expect(firstTune).toBeLessThan(firstPlayLog);
+  const secondBreakAt = radio.events.findIndex((e, i) => e.kind === 'break' && radio.events.slice(0, i).some((x) => x.kind === 'playing'));
+  const tunesBeforeSecondBreak = radio.events.slice(0, secondBreakAt).filter((e) => e.kind === 'preparing' && e.what === 'Writing the tune').length;
+  expect(tunesBeforeSecondBreak).toBe(1); // nothing is prepared in the background during song one
   expect(radio.discarded.length).toBe(radio.made.length); // nothing is left on the phone when the station stops
   expect(radio.events[radio.events.length - 1].kind).toBe('stopped');
 });
@@ -69,6 +89,13 @@ it('has no poem in music-only mode, and carries on without one when the model ca
   expect(garbage.events.filter((e) => e.kind === 'playing').length).toBe(3); // the songs still play, with the dice's own sound
   expect(garbage.events.some((e) => e.kind === 'poem')).toBe(false);
   expect(garbage.events.some((e) => e.kind === 'problem')).toBe(false);
+});
+
+it('leaves the poem out when its title is not a plain name', async () => {
+  const radio = build({ poemChance: 1 }, { model: 'badtitle' });
+  await radio.run();
+  expect(radio.events.some((e) => e.kind === 'poem')).toBe(false);
+  expect(radio.events.filter((e) => e.kind === 'playing').length).toBe(3); // the songs still play
 });
 
 it('stays quiet when the host is turned off', async () => {

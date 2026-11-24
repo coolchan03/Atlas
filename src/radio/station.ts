@@ -1,6 +1,6 @@
 /**
- * The station: rolls a show, gets it ready (sound, tune, poem) while the song before it plays, then plays it. The tune loops for the show's
- * length; the host says what is coming over the start of the song, and the poem, when there is one, is read once, in the phone's voice at a
+ * The station: rolls a show, gets it ready (sound, tune, titled poem) during the break between songs while the host says what is coming, then
+ * plays it. The tune loops for the show's length, and the poem, when there is one, is read once, title first, in the phone's voice at a
  * steady pace, a few seconds in. Everything that touches the phone (the model, the recording, the player, the voice, the clock) comes in
  * through `deps`, so the whole loop runs in a test with a fake clock.
  */
@@ -12,7 +12,7 @@ import { chooseSound, diceSound, tuneFor, type AskModel, type Sound } from './so
 import { writePoem } from './writer';
 
 /** A song that is ready to play. `handle` is whatever the player needs to find it again (the saved track). */
-interface Prepared<H> { show: Show; sound: Sound; title: string; poem: string[] | null; handle: H; voiceText: string | null }
+interface Prepared<H> { show: Show; sound: Sound; title: string; poem: string[] | null; poemTitle: string | null; handle: H; voiceText: string | null }
 
 export interface StationDeps<H> {
   ask: AskModel;
@@ -40,8 +40,10 @@ export interface StationDeps<H> {
 
 export type StationEvent =
   | { kind: 'preparing'; what: string }
-  | { kind: 'playing'; show: Show; title: string; poem: string[] | null }
-  | { kind: 'poem'; lines: string[] }
+  /** The break between songs: the host says what comes next while the model writes it. */
+  | { kind: 'break'; show: Show }
+  | { kind: 'playing'; show: Show; title: string; poem: string[] | null; poemTitle: string | null }
+  | { kind: 'poem'; lines: string[]; poemTitle: string | null }
   | { kind: 'problem'; message: string }
   | { kind: 'stopped' };
 
@@ -54,29 +56,31 @@ async function prepareShow<H>(show: Show, settings: RadioSettings, deps: Station
   const title = titleFor(show);
   deps.report({ kind: 'preparing', what: 'Writing the tune' });
   const handle = await deps.makeTrack(tuneFor(show, sound, title));
-  let poem: string[] | null = null;
+  let written: { title: string; lines: string[] } | null = null;
   if (show.withPoem) {
     deps.report({ kind: 'preparing', what: 'Writing a poem' });
-    poem = (await writePoem(show, settings.theme, deps))?.lines ?? null;
+    written = await writePoem(show, settings.theme, deps);
   }
-  return { show, sound, title, poem, handle, voiceText: poem ? poemForVoice(poem, show.form) : null };
+  return { show, sound, title, poem: written?.lines ?? null, poemTitle: written?.title ?? null, handle, voiceText: written ? poemForVoice(written.lines, show.form, written.title) : null };
 }
 
-/** Plays one prepared song. Returns false when the station was stopped during it. */
-async function playShow<H>(song: Prepared<H>, station: { settings: RadioSettings; deps: StationDeps<H> }, count: number): Promise<boolean> {
-  const { settings, deps } = station;
+/**
+ * Plays one prepared song. `replaced` is the song before it, still looping through the break; it is thrown away once this one is playing.
+ * Returns false when the station was stopped during it.
+ */
+async function playShow<H>(song: Prepared<H>, station: { settings: RadioSettings; deps: StationDeps<H>; replaced: () => Promise<void> }): Promise<boolean> {
+  const { deps } = station;
   await deps.play(song.handle);
-  deps.report({ kind: 'playing', show: song.show, title: song.title, poem: song.poem });
+  await station.replaced();
+  deps.report({ kind: 'playing', show: song.show, title: song.title, poem: song.poem, poemTitle: song.poemTitle });
   const startedAt = Date.now();
-  // The host speaks over the start of the song; the station name is said every third song, so it does not get tiresome.
-  if (settings.host) await deps.speak(count % 3 === 0 ? `${stationId(settings.stationName, settings.theme, deps.rng)} ${nextUp(song.show, deps.rng)}` : nextUp(song.show, deps.rng));
   const total = song.show.seconds * 1000;
   if (song.voiceText && !deps.skipped()) {
     const early = song.show.poemDelay * 1000 - (Date.now() - startedAt);
     if (early > 0 && !(await deps.wait(early))) return false;
     if (!deps.skipped()) {
-      deps.report({ kind: 'poem', lines: song.poem ?? [] });
-      await deps.speak(song.voiceText); // read once
+      deps.report({ kind: 'poem', lines: song.poem ?? [], poemTitle: song.poemTitle });
+      await deps.speak(song.voiceText); // the title and the poem, read once
     }
   }
   if (deps.skipped()) return true;
@@ -84,8 +88,10 @@ async function playShow<H>(song: Prepared<H>, station: { settings: RadioSettings
 }
 
 /**
- * Runs the station until `stopped()` says so (the wait also ends early then). The next song is prepared while the current one plays, so
- * there is no silence between them; the song before it is discarded once the next is playing.
+ * Runs the station until `stopped()` says so (the wait also ends early then). Songs are separated by a break: when a song's time is up, or it
+ * is skipped, the tune that was playing carries on underneath while the host says what comes next and the model chooses the sound, the tune
+ * and the poem for it. The model never works while a song plays, so it cannot make the music stutter. When the next song is ready it starts,
+ * and the one before it is thrown away.
  */
 export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H>, stopped: () => boolean): Promise<void> {
   let history: History = EMPTY_HISTORY;
@@ -100,17 +106,19 @@ export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H
   const discard = async (handle: H): Promise<void> => { if (!deps.isKept(handle)) await deps.discard(handle).catch(() => undefined); };
   let played: Prepared<H> | null = null;
   try {
-    let current = await prepareShow(roll(), settings, deps);
     for (let count = 0; !stopped(); count += 1) {
-      // The next song is made in the background while this one plays.
-      const upcoming: Promise<Prepared<H> | null> = prepareShow(roll(), settings, deps).catch((e) => { deps.report({ kind: 'problem', message: String((e as Error)?.message || e) }); return null; });
-      const finished = await playShow(current, { settings, deps }, count);
-      if (played) await discard(played.handle);
-      played = current;
-      if (!finished || stopped()) { void upcoming.then((u) => u && discard(u.handle)); break; }
-      const next = await upcoming;
-      if (!next) { if (!(await deps.wait(5000))) break; current = await prepareShow(roll(), settings, deps); continue; }
-      current = next;
+      // The break: the next song is made while the host says what it is.
+      const show = roll();
+      deps.report({ kind: 'break', show });
+      const preparing: Promise<Prepared<H> | null> = prepareShow(show, settings, deps).catch((e) => { deps.report({ kind: 'problem', message: String((e as Error)?.message || e) }); return null; });
+      if (settings.host) await deps.speak(count % 3 === 0 ? `${stationId(settings.stationName, settings.theme, deps.rng)} ${nextUp(show, deps.rng)}` : nextUp(show, deps.rng));
+      const next = await preparing;
+      if (stopped()) { if (next) await discard(next.handle); break; }
+      if (!next) { if (!(await deps.wait(5000))) break; continue; } // could not be made: try another
+      const before = played;
+      played = next;
+      const finished = await playShow(next, { settings, deps, replaced: async () => { if (before) await discard(before.handle); } });
+      if (!finished || stopped()) break;
     }
   } catch (e) {
     deps.report({ kind: 'problem', message: String((e as Error)?.message || e) });

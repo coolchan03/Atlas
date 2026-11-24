@@ -191,6 +191,16 @@ function drumNotes({ spec, seed }: Key, bar: number): MusicNote[] {
   return fill.length ? [...pattern.filter((p) => p.beat < base + n - 1), ...fill] : pattern;
 }
 
+/**
+ * A longer tune: the 16 bars, then 16 more with a different melody over the same chords and key (the seed moves by 5, which keeps the key),
+ * so a loop of it takes twice as long to come round. Used by the AI radio, where one tune plays for minutes.
+ */
+export function composeLong(spec: StyleSpec, seed: number): MusicNote[] {
+  const span = BARS * spec.beatsPerBar;
+  const second = composeFromSpec(spec, seed + 5).map((n) => ({ ...n, beat: n.beat + span }));
+  return [...composeFromSpec(spec, seed), ...second];
+}
+
 /** The whole tune: 16 bars of chords, bass, melody and drums. */
 export function composeFromSpec(spec: StyleSpec, seed: number): MusicNote[] {
   const key: Key = { spec, tonic: 48 + (seed % 5), seed };
