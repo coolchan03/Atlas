@@ -50,6 +50,7 @@ export const AtlasHubScreen: React.FC = () => {
     { label: 'Maps', sub: 'Offline maps, GPS, saved places', icon: 'map', color: '#0F766E', to: 'Maps' },
     { label: 'Phrases', sub: 'Show or speak in 10+ languages', icon: 'globe', color: '#1D4ED8', to: 'Phrases' },
     { label: 'Translator', sub: 'Text, live interpreter, conversation, camera', icon: 'repeat', color: '#0369A1', to: 'Translator' },
+    { label: 'Currency', sub: 'Convert money; rates kept on the phone', icon: 'dollar-sign', color: '#047857', to: 'Currency' },
     { label: 'AI radio', sub: 'Endless songs with poems read over them', icon: 'radio', color: '#7C3AED', to: 'Radio' },
     ...(hasCompass ? [{ label: 'Compass', sub: 'Works with no signal', icon: 'compass', color: '#6D28D9', to: 'Compass' }] : []),
     { label: 'Offline Library', sub: 'Atlas packs, WikiMed, Wikipedia', icon: 'database', color: '#92400E', to: 'OfflineLibrary' },
