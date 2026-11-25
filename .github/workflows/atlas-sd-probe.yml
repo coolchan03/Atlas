@@ -1,0 +1,58 @@
+name: Probe stable-diffusion.cpp (Windows)
+
+# Manual. Downloads the stable-diffusion.cpp Windows build, prints its command line help, and makes one small test image
+# so the desktop image engine can be written against what the real executable does.
+on:
+  workflow_dispatch:
+    inputs:
+      model_url:
+        description: 'Direct URL of a small image model (.safetensors / .gguf) to try, blank = only list candidates'
+        type: string
+        default: ''
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+        working-directory: desktop
+      - name: Fetch the CPU build
+        working-directory: desktop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SD_VARIANTS: cpu
+        run: node scripts/fetch-sd.mjs
+      - name: Command line help
+        working-directory: desktop/resources/sd/cpu
+        run: |
+          ls -la
+          for exe in sd-cli.exe sd.exe; do [ -f "$exe" ] && ./$exe --help 2>&1 | head -150 || true; done
+      - name: Candidate models on Hugging Face
+        run: |
+          for q in "sd-turbo gguf" "sdxl-turbo gguf" "stable-diffusion gguf" "sd-turbo"; do
+            echo "== $q"
+            curl -fsS "https://huggingface.co/api/models?search=${q// /+}&sort=downloads&limit=8" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const m of JSON.parse(s))console.log(m.id,m.downloads)})"
+          done
+      - name: Make a test image
+        if: inputs.model_url != ''
+        working-directory: desktop/resources/sd/cpu
+        run: |
+          curl -fL -o model.bin "${{ inputs.model_url }}"
+          ls -la model.bin
+          exe=sd-cli.exe; [ -f "$exe" ] || exe=sd.exe
+          time ./$exe -m model.bin -p "a small red house on a green hill, watercolor" --steps 4 --cfg-scale 1.0 -W 256 -H 256 -s 7 -o out.png -v 2>&1 | tail -60
+          ls -la out.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sd-probe
+          path: desktop/resources/sd/cpu/out.png
+          if-no-files-found: ignore
