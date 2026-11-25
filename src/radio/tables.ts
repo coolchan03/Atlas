@@ -113,10 +113,10 @@ export const SUBJECTS: Entry[] = [
   e('the weatherman', 'weather', 'funny'), e('a travelling band', 'music', 'travel', 'party'), e('my little brother', 'home', 'funny', 'friend'), e('a stray puppy', 'pet', 'happy', 'sad'), e('a night watchman', 'night', 'lonely', 'mystery'),
 ];
 
-export const TONES = ['silly', 'tender', 'dramatic', 'deadpan', 'hopeful', 'grumpy', 'dreamy', 'boastful', 'mournful', 'cheerful', 'mysterious', 'playful'] as const;
+export const TONES = ['silly', 'tender', 'dramatic', 'deadpan', 'hopeful', 'grumpy', 'dreamy', 'boastful', 'mournful', 'cheerful', 'mysterious', 'playful', 'wistful', 'sarcastic', 'eerie', 'triumphant', 'romantic', 'nostalgic', 'rebellious', 'sleepy'] as const;
 export type Tone = typeof TONES[number];
 /** The tones used when only calm songs are wanted. */
-export const CALM_TONES: readonly Tone[] = ['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious'];
+export const CALM_TONES: readonly Tone[] = ['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious', 'wistful', 'nostalgic', 'sleepy'];
 
 /** The shape of a poem: stanzas, lines in each, and which line ends rhyme. */
 export interface Form { id: string; stanzas: number; lines: number; scheme: 'AABB' | 'ABAB' | 'ABCB' | 'AA' }
@@ -127,6 +127,9 @@ export const FORMS: Form[] = [
   { id: '3x4-abcb', stanzas: 3, lines: 4, scheme: 'ABCB' },
   { id: '4x2-aa', stanzas: 4, lines: 2, scheme: 'AA' },
   { id: '1x4-aabb', stanzas: 1, lines: 4, scheme: 'AABB' },
+  { id: '3x2-aa', stanzas: 3, lines: 2, scheme: 'AA' },
+  { id: '2x4-abcb', stanzas: 2, lines: 4, scheme: 'ABCB' },
+  { id: '1x4-abab', stanzas: 1, lines: 4, scheme: 'ABAB' },
 ];
 
 /** How long the song plays before the next one, in seconds. The tune is short and loops until this time is up (never more than five minutes). */

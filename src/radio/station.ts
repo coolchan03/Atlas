@@ -106,7 +106,12 @@ export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H
       const text = await inventTopic(deps.ask, { show: rolled, theme: settings.theme, recent: madeUp });
       if (text) { madeUp.push(text); topic = { id: `invented-${count}`, text, tags: [] }; }
     }
-    const show: Show = topic ? { ...rolled, topic, withPoem: asked ? !settings.musicOnly : rolled.withPoem } : rolled;
+    let subject = rolled.subject;
+    if (!asked && count > 0 && count % INVENT_EVERY === 0) {
+      const text = await inventTopic(deps.ask, { kind: 'subject', show: topic ? { ...rolled, topic } : rolled, theme: settings.theme, recent: madeUp });
+      if (text) { madeUp.push(text); subject = { id: `invented-who-${count}`, text, tags: [] }; }
+    }
+    const show: Show = topic || subject !== rolled.subject ? { ...rolled, subject, ...(topic ? { topic, withPoem: asked ? !settings.musicOnly : rolled.withPoem } : {}) } : rolled;
     history = { genres: [...history.genres, show.genre.id].slice(-6), topics: [...history.topics, show.topic.id].slice(-20), subjects: [...history.subjects, show.subject.id].slice(-20) };
     return show;
   };

@@ -19,7 +19,7 @@ function build(settings: Partial<RadioSettings>, opts: { songs?: number; model?:
     // A fake small model: writes a line for each end word it is told, and picks a style and instruments when asked.
     ask: async (system, _user, options) => {
       if (opts.model === 'garbage') return 'I am a tiny model and I like turtles';
-      if (options?.grammar?.startsWith('root ::= word')) return opts.invent === 'good' ? 'A lighthouse keeper learns to swim' : opts.invent === 'bad' ? 'Sure! Here is a topic: turtles.' : '';
+      if (options?.grammar?.startsWith('root ::= word')) return opts.invent === 'good' ? (system.includes('who or what') ? 'A pigeon who reads the mail slowly' : 'A lighthouse keeper learns to swim') : opts.invent === 'bad' ? 'Sure! Here is a topic: turtles.' : '';
       if (options?.grammar?.includes('instruments')) return '{"style":"jazz","instruments":["sax","piano","upright"]}';
       // Follows the grammar it is given: one line per rule, ending in the first word that rule allows.
       const ends = [...(options?.grammar ?? '').matchAll(/^line\d+ ::=.* " " \(("\w+")/gm)].map((m) => m[1].replace(/"/g, ''));
@@ -147,7 +147,7 @@ it('rolls only calm genres, tones and tunes when calm songs are asked for', () =
     const show = rollShow({ ...DEFAULT_RADIO, calmOnly: true }, rng);
     expect(show.genre.calm).toBe(true);
     expect(show.energy).toBe('calm');
-    expect(['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious']).toContain(show.tone);
+    expect(['tender', 'dreamy', 'hopeful', 'mournful', 'mysterious', 'wistful', 'nostalgic', 'sleepy']).toContain(show.tone);
   }
 });
 
@@ -178,6 +178,15 @@ it('adds the time of day to a break about one time in four, said the way a host 
   expect(breakLine(base, () => 0.1)).toContain('It is 9:41 PM.'); // a low roll adds it
   expect(breakLine(base, () => 0.9)).not.toContain('It is 9:41 PM.'); // a high roll does not
   expect(breakLine({ ...base, name: '  ' }, () => 0.9)).toContain('AI FM'); // an empty name falls back to the default
+});
+
+it('lets the model think up who a song is about on the songs between, and makes use of the new tones and poem shapes', async () => {
+  const radio = build({ poemChance: 1 }, { songs: 4, invent: 'good' });
+  await radio.run();
+  const shows = radio.events.filter((e): e is Extract<StationEvent, { kind: 'break' }> => e.kind === 'break').map((e) => e.show);
+  expect(shows).toHaveLength(4);
+  expect(shows[3].subject.text).toBe('a pigeon who reads the mail slowly');
+  expect(shows[1].subject.text).not.toBe('a pigeon who reads the mail slowly');
 });
 
 it('lets the model think up what every third song is about, and keeps the dice topic when its answer is not a few plain words', async () => {
