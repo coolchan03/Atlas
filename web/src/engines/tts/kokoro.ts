@@ -31,12 +31,13 @@ export function loadKokoro(onProgress?: (fraction: number) => void): Promise<Kok
     const { KokoroTTS } = await import('kokoro-js');
     const gpu = typeof navigator !== 'undefined' && !!(navigator as any).gpu && !!(await (navigator as any).gpu.requestAdapter?.().catch(() => null));
     const files = new Map<string, { loaded: number; total: number }>();
+    let best = 0;
     const progress_callback = (p: any) => {
       if (p?.status === 'progress' && p.file) {
         files.set(p.file, { loaded: p.loaded ?? 0, total: p.total ?? 0 });
         let l = 0, t = 0;
         for (const f of files.values()) { l += f.loaded; t += f.total; }
-        if (t) onProgress?.(Math.min(0.99, l / t));
+        if (t) { best = Math.max(best, Math.min(0.99, l / t)); onProgress?.(best); }
       }
     };
     const attempts: Array<{ device: 'webgpu' | 'wasm'; dtype: 'fp32' | 'q8' }> = gpu ? [{ device: 'webgpu', dtype: 'fp32' }, { device: 'wasm', dtype: 'q8' }] : [{ device: 'wasm', dtype: 'q8' }];

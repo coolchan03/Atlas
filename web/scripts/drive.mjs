@@ -4,8 +4,8 @@ const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); } catch { ({ chromium } = require('playwright')); }
 const url = process.env.URL || 'http://localhost:4173/';
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const ctx = await browser.newContext({ viewport: { width: Number(process.env.W || 412), height: Number(process.env.H || 860) } });
+const browser = await chromium.launch({ args: ['--no-sandbox', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ') : [])] });
+const ctx = await browser.newContext({ permissions: ['microphone'], viewport: { width: Number(process.env.W || 412), height: Number(process.env.H || 860) } });
 const page = await ctx.newPage();
 const errors = [];
 page.on('console', (m) => { if (["error","log","warning"].includes(m.type())) errors.push(`[error] ${m.text().slice(0, 300)}`); });

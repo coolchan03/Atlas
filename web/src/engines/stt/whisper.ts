@@ -42,12 +42,13 @@ export function loadWhisper(model: string, onProgress?: (fraction: number) => vo
       const { pipeline } = await import('@huggingface/transformers');
       const gpu = !!(navigator as any).gpu && !!(await (navigator as any).gpu.requestAdapter?.().catch(() => null));
       const files = new Map<string, { l: number; t: number }>();
+      let best = 0;
       const progress_callback = (e: any) => {
         if (e?.status === 'progress' && e.file) {
           files.set(e.file, { l: e.loaded ?? 0, t: e.total ?? 0 });
           let l = 0, t = 0;
           for (const f of files.values()) { l += f.l; t += f.t; }
-          if (t) onProgress?.(Math.min(0.99, l / t));
+          if (t) { best = Math.max(best, Math.min(0.99, l / t)); onProgress?.(best); }
         }
       };
       const tries: any[] = gpu

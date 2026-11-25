@@ -97,8 +97,10 @@ async function run(r: Row, attempt = 0): Promise<void> {
     // WebGPU models: WebLLM fetches the weights into the browser cache; the model file is a marker.
     const wgpu = webgpuIdFromUrl(r.url);
     if (wgpu) {
+      let best = 0;
       await loadWebLlm(wgpu, (f) => {
-        r.bytesDownloaded = Math.round(f * (r.totalBytes || 1e9));
+        best = Math.max(best, f);
+        r.bytesDownloaded = Math.round(best * (r.totalBytes || 1e9));
         r.status = 'running';
         emitProgress(r);
       });
@@ -114,8 +116,10 @@ async function run(r: Row, attempt = 0): Promise<void> {
     // Speech models: the ggml .bin is replaced by the matching ONNX model (cached by the browser) + a marker file.
     const wid = whisperIdFor(r.url);
     if (wid) {
+      let best = 0;
       await loadWhisper(hfModelFor(wid), (f) => {
-        r.bytesDownloaded = Math.round(f * (r.totalBytes || 100e6));
+        best = Math.max(best, f); // several files download in parallel: report the furthest point, never going back
+        r.bytesDownloaded = Math.round(best * (r.totalBytes || 100e6));
         r.status = 'running';
         emitProgress(r);
       });
