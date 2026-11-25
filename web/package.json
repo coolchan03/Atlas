@@ -17,6 +17,8 @@
     "@sqlite.org/sqlite-wasm": "^3.54.1-build1",
     "@wllama/wllama": "^2.3.5",
     "fflate": "^0.8.2",
+    "fzstd": "^0.1.1",
+    "jspdf": "^4.2.1",
     "kokoro-js": "^1.2.1",
     "pdfjs-dist": "^4.10.38",
     "react-native-web": "^0.21.0",
@@ -25,7 +27,8 @@
     "workbox-expiration": "^7.4.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1",
-    "workbox-strategies": "^7.4.1"
+    "workbox-strategies": "^7.4.1",
+    "xz-decompress": "^0.2.3"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.0",

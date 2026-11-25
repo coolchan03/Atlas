@@ -27,3 +27,6 @@ declare module 'pdfjs-dist/build/pdf.mjs' {
   const m: any;
   export = m;
 }
+declare module 'xz-decompress' {
+  export class XzReadableStream extends ReadableStream<Uint8Array> { constructor(src: ReadableStream<Uint8Array>); }
+}

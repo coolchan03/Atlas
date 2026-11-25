@@ -188,7 +188,7 @@ registerNativeModule('AtlasSensor', {
 });
 
 // ---- memory ------------------------------------------------------------------------------------------
-const FEATURE_LIBS = ['librnllama_wasm.so', 'libsherpa-onnx_wasm.so', 'librnwhisper_wasm.so'];
+const FEATURE_LIBS = ['librnllama_wasm.so', 'libsherpa-onnx_wasm.so', 'librnwhisper_wasm.so', 'libkiwix_js.so'];
 registerNativeModule('DeviceMemoryModule', {
   buildInfo: { abi: 'wasm32', nativeLibs: FEATURE_LIBS },
   async getMemoryInfo() {

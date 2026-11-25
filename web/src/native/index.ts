@@ -4,3 +4,5 @@ import './device';
 import './tts';
 import './pdf';
 import './alarms';
+import './presentation';
+import './kiwix';
