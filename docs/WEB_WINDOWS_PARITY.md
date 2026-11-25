@@ -16,6 +16,7 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
 | LiteRT models, Qualcomm NPU, Hexagon, QNN | yes | no (hidden) | no (hidden). Windows machines have no NPU path here |
 | Vision (pictures to a model) | full | no (text only in WASM) | full with a vision model + projector |
 | Image generation | full | no (needs a child process) | yes, CPU verified (stable-diffusion.cpp, Vulkan on a GPU; SD 1.5, SD-Turbo, SDXL; import your own .safetensors / .gguf) |
+| Offline device sync (chats, projects, agents, files between your devices) | phone to phone over Wi-Fi | no (a browser cannot listen for connections) | **yes**, PC to phone or PC to PC over the local network (the same encrypted protocol as the Android app; Settings > Backup & sync; the PC shows the QR code, the phone scans it; allow Atlas through the Windows firewall on private networks) |
 | Natural voices (Kokoro) | full | **full**: Kokoro-82M on WebGPU (WASM fallback), cached for offline use | full (same engine) |
 | Piper voices (Amy, Ryan, Lessac, Joe, HFC) | full | **full** (VITS ONNX, cached for offline use) | full |
 | KittenTTS, Pocket TTS voice cloning, imported voice files | full | no | no |
