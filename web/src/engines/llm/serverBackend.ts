@@ -203,7 +203,11 @@ class ServerSession implements LlmSession {
 
 export const serverBackend: LlmBackend = {
   id: 'llama-server',
-  supports: (p) => !!host() && /\.gguf$/i.test(p.model),
+  supports: async (p) => {
+    const h = host();
+    if (!h || !/\.gguf$/i.test(p.model)) return false;
+    try { return !!(await h.capabilities()).available; } catch { return false; } // no bundled engine: the WASM engine takes over
+  },
   async load(p, onProgress) {
     const h = host()!;
     const off = h.onProgress?.((_id, pct) => onProgress?.(pct));

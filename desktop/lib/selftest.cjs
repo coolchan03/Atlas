@@ -22,6 +22,15 @@ exports.run = (win, app) => {
             const d = a.openDatabase('selftest' + Date.now());
             d.executeSync('create virtual table x using fts5(c)'); d.executeSync('insert into x values(?)', ['hello world']);
             out.fts = d.executeSync("select c from x where x match 'hello'").rows.length;
+            if (${process.env.ATLAS_SELFTEST_LLM ? 'true' : 'false'}) {
+              const dl = a.rnfs.downloadFile({ fromUrl: 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf', toFile: '/atlas/files/models/selftest.gguf' });
+              await dl.promise;
+              const { initLlama } = await a.llama();
+              const c = await initLlama({ model: '/atlas/files/models/selftest.gguf', n_ctx: 1024, n_threads: 3 });
+              const r = await c.completion({ messages: [{ role: 'user', content: 'Say hello in five words.' }], n_predict: 16, temperature: 0.2 });
+              out.llm = { engine: c.androidLib, reply: r.content };
+              await c.release();
+            }
             out.llama = await h.llama.capabilities();
             out.system = await h.system();
           } catch (e) { out.error = String(e && e.stack || e); }
