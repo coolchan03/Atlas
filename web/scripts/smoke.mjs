@@ -3,7 +3,7 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 let chromium;
-try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); }
+try { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); } catch { ({ chromium } = require('playwright')); }
 
 const url = process.argv[2] || 'http://localhost:4173/';
 const out = process.argv[3] || '/tmp/atlas-web.png';

@@ -17,6 +17,7 @@
     "@sqlite.org/sqlite-wasm": "^3.54.1-build1",
     "@wllama/wllama": "^2.3.5",
     "fflate": "^0.8.2",
+    "kokoro-js": "^1.2.1",
     "react-native-web": "^0.21.0",
     "sql.js": "^1.13.0",
     "workbox-core": "^7.4.1",

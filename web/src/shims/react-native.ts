@@ -8,6 +8,7 @@ import { showDialog, showToast } from './dialog';
 
 export * from 'react-native-web';
 export { NativeModules, NativeEventEmitter };
+export { Image, ImageBackground } from './Image';
 
 const baseSelect = (RNW.Platform as any).select;
 export const Platform = {
