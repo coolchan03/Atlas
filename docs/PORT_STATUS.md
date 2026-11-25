@@ -77,11 +77,12 @@ Remaining ideas (optional features, none blocks the web or Windows app), most va
 3. (done) Offline maps: Mapsforge reader (`web/src/engines/mapsforge`) + canvas `AtlasMapView` (`web/src/map`), verified on a real map (`scripts/map-test.mjs`). Open: better styling, hillshade/contours, text on roads along the line.
 4. Image generation on the web (WebGPU Stable Diffusion) and on Windows (stable-diffusion.cpp as another bundled child process).
 5. MediaPipe GenAI (WebGPU) as a LiteRT engine for the Gemma .litertlm files.
-6. QR scan (BarcodeDetector) and nearby sync over WebRTC.
-7. Windows: tray + close-to-tray, open `.gguf` with Atlas (the preload already forwards the path: `atlasHost.onOpenFile`), protocol handler `atlas://`.
+6. (skipped) QR scan and nearby sync: phone-to-phone pairing, Android only; the scanner has no use without nearby sync.
+7. (done) Windows: tray + close-to-tray while downloads or AI work run, taskbar progress, `atlas://` links, open `.gguf` with Atlas.
 
 ## Log
 (newest first; one line per chunk of work)
+- 2026-11-25 12:50: Narrated slide video export on the web build (canvas + MediaRecorder, MP4 or WebM; `scripts/video-test.mjs` in CI). Core Audit jest fixed (quickImport mock). The Pages site: a `gh-pages` push is blocked by GitHub push protection (a model class name in the bundle looks like a Mistral key), so the workflow now deploys with the Pages artifact action; it needs Settings > Pages > Source: GitHub Actions once (until then the publish step warns and skips). Desktop: quantized V cache now turns flash attention on.
 - 2026-11-25 05:40: run 27 green incl. the real llama-server.exe answering through the packaged Windows app.
 - 2026-11-25 05:30: **GitHub Actions now builds everything.** "Build Atlas for Windows" run 26 is green on windows-latest: web build, llama.cpp b12716 (CPU + Vulkan) bundled, packaged Atlas.exe passes its self-test on Windows, installer + portable exe + zip produced (artifact `atlas-windows`, 591 MB). "Build Atlas web (PWA)" passes install, type-check, build, PWA/offline, LLM, voice, ZIM checks. Fixes it took: onnxruntime-node install script (web/.npmrc), Windows path separators and case-insensitive resolution in the Vite plugins (Board.tsx vs board.ts), llama.cpp release lookup, ignored desktop/build icons.
 - 2026-11-25 05:00: Offline maps done (Mapsforge reader verified on Monaco, canvas map view, place search for the AI). ZIM reader fixed on a real Wikipedia ZIM (found by testing on real data). crawl2 Settings clean. Windows: CORS pass-through for downloads, open .gguf with Atlas verified.
