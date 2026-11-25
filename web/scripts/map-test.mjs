@@ -2,7 +2,8 @@
 // usage: node scripts/map-test.mjs [url] [map file]   (default map: /tmp/monaco.map)
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+let chromium;
+try { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); } catch { ({ chromium } = require('playwright')); }
 import fs from 'node:fs';
 const mapFile = process.argv[3] || '/tmp/monaco.map';
 const b = await chromium.launch({ args: ['--no-sandbox'] });
