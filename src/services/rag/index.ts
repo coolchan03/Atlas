@@ -1,3 +1,5 @@
+import { convertForIndexing } from './convert';
+import { structureAwareChunks } from './structure';
 import { noteIfStandard, noteTaxSource } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
 import { MAX_OCR_PAGES, canReadScans, pagedChunksWithScans } from './pageChunks';
@@ -82,7 +84,11 @@ async function readAndChunk(args: { fileName: string; filePath: string; attachme
   const head = paged?.ocrPages.length ? paged.chunks.slice(0, 12).map((c) => c.content).join('\n') : source.textContent;
   noteIfStandard(fileName, head);
   noteTaxSource(fileName, head);
-  return { source, chunks: paged?.chunks ?? chunkDocument(source.textContent), note: scanNote(paged) };
+  // Conversion (clean text, web pages and tables as Markdown) then segmentation along the document's own structure; what was changed is said in the note.
+  const converted = paged ? null : convertForIndexing(fileName, source.textContent);
+  const chunks = paged?.chunks ?? structureAwareChunks(converted!.text) ?? chunkDocument(converted!.text);
+  const convNote = converted?.notes.length ? `Converted: ${converted.notes.join('; ')}.` : '';
+  return { source, chunks, note: [scanNote(paged), convNote].filter(Boolean).join(' ') || scanNote(paged) };
 }
 
 /** Passages embedded, and saved, per step. */
