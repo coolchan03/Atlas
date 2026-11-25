@@ -1,2 +1,3 @@
-// Web implementations of the app's native modules register here. See ./registry.ts.
-export {};
+// Web implementations of the app's native modules register themselves here (see ./registry.ts).
+import './downloadManager';
+import './device';

@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable",
+      "WebWorker"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "types": [
+      "vite/client"
+    ],
+    "paths": {
+      "@atlas-web/requireInterop": [
+        "./src/shims/requireInterop.ts"
+      ]
+    }
+  },
+  "include": [
+    "src/shims/**/*",
+    "src/host/**/*",
+    "src/engines/**/*",
+    "src/native/**/*",
+    "src/pwa/**/*","src/env.d.ts",
+    "vite.config.ts",
+    "vite-plugins/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

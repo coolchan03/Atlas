@@ -332,6 +332,6 @@ export function fs(): FsBackend {
   if (backend) return backend;
   const hostFs = (globalThis as any).atlasHost?.fs as FsBackend | undefined;
   if (hostFs) return (backend = hostFs);
-  backend = typeof navigator !== 'undefined' && navigator.storage?.getDirectory ? new OpfsFs() : new MemoryFs();
+  backend = typeof navigator !== 'undefined' && !!navigator.storage?.getDirectory ? new OpfsFs() : new MemoryFs();
   return backend;
 }
