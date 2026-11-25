@@ -22,7 +22,7 @@ const labels = async () => page.evaluate(() => {
   for (const e of document.querySelectorAll('[tabindex="0"],[role=button],[role=tab],[role=switch],a')) {
     const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > innerHeight) continue;
     const t = (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].slice(0, 40); const k = t + '@' + Math.round(r.top / 20);
-    if (t && !seen.has(k)) { seen.add(k); out.push(t); }
+    if (t && /[A-Za-z]{3}/.test(t) && !seen.has(k)) { seen.add(k); out.push(t); }
   } return out; });
 const crashed = async () => (await page.getByText('Something went wrong').count()) > 0;
 await boot();
