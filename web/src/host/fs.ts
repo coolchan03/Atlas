@@ -70,6 +70,28 @@ import { DesktopFs } from './desktopFs';
 // ---------------------------------------------------------------------------------------------
 // OPFS implementation
 // ---------------------------------------------------------------------------------------------
+/** Writes through a worker with sync access handles when createWritable is missing (older Safari / iOS). */
+const hasWritable = () => !(typeof location !== 'undefined' && location.search.includes('nowritable')) && typeof FileSystemFileHandle !== 'undefined' && 'createWritable' in FileSystemFileHandle.prototype;
+let worker: Worker | null = null;
+let rpcSeq = 1;
+const rpcWait = new Map<number, { res: (v: any) => void; rej: (e: Error) => void }>();
+function rpc(msg: Record<string, unknown>, transfer: Transferable[] = []): Promise<any> {
+  if (!worker) {
+    worker = new Worker(new URL('./opfsWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e) => { const w = rpcWait.get(e.data.id); if (!w) return; rpcWait.delete(e.data.id); e.data.error ? w.rej(new Error(e.data.error)) : w.res(e.data.result); };
+  }
+  const id = rpcSeq++;
+  return new Promise((res, rej) => { rpcWait.set(id, { res, rej }); worker!.postMessage({ id, ...msg }, transfer); });
+}
+async function workerWriter(path: string, keep: boolean): Promise<FsWriter> {
+  const handle: number = await rpc({ op: 'open', path, keep });
+  return {
+    write: (chunk) => { const copy = chunk.slice().buffer as ArrayBuffer; return rpc({ op: 'write', handle, data: copy }, [copy]); },
+    close: () => rpc({ op: 'close', handle }),
+    abort: () => rpc({ op: 'close', handle }),
+  };
+}
+
 class OpfsFs implements FsBackend {
   readonly kind = 'opfs' as const;
   private rootP: Promise<FileSystemDirectoryHandle> | null = null;
@@ -112,12 +134,25 @@ class OpfsFs implements FsBackend {
     }
   }
   async writeFile(path: string, data: Uint8Array | Blob | string) {
+    if (!hasWritable()) {
+      const w = await workerWriter(norm(path), false);
+      const bytes = await toBytes(data);
+      for (let i = 0; i < bytes.length; i += 8 * 1024 * 1024) await w.write(bytes.subarray(i, i + 8 * 1024 * 1024));
+      if (!bytes.length) await w.write(new Uint8Array(0));
+      return w.close();
+    }
     const h = await this.fileHandle(path, true);
     const w = await (h as any).createWritable();
     await w.write(data as any);
     await w.close();
   }
   async appendFile(path: string, data: Uint8Array | string) {
+    if (!hasWritable()) {
+      await this.fileHandle(path, true);
+      const w = await workerWriter(norm(path), true);
+      await w.write(await toBytes(data));
+      return w.close();
+    }
     const h = await this.fileHandle(path, true);
     const size = (await h.getFile()).size;
     const w = await (h as any).createWritable({ keepExistingData: true });
@@ -220,6 +255,7 @@ class OpfsFs implements FsBackend {
     await this.unlink(from);
   }
   async openWriter(path: string, keep = false): Promise<FsWriter> {
+    if (!hasWritable()) return workerWriter(norm(path), keep);
     const h = await this.fileHandle(path, true);
     const size = keep ? (await h.getFile()).size : 0;
     const w = await (h as any).createWritable({ keepExistingData: keep });
