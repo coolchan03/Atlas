@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+// A stand-in for llama.cpp's llama-server, used to test the desktop engine manager without the real binary.
+// Understands: --list-devices, -m, --port, --host, -c, -ngl, --mmproj, --embedding; serves /health /props /v1/models /tokenize /v1/chat/completions.
+const http = require('node:http');
+const a = process.argv.slice(2);
+if (a.includes('--list-devices')) { console.log('Available devices:\n  Vulkan0: Fake GPU (8192 MiB, 8000 MiB free)'); process.exit(0); }
+const get = (f) => { const i = a.indexOf(f); return i >= 0 ? a[i + 1] : undefined; };
+const port = Number(get('--port')); const ngl = Number(get('-ngl') || 0); const ctx = Number(get('-c') || 4096);
+console.error(`load_tensors: loading model ${get('-m')}`);
+console.error(`load_tensors: offloaded ${ngl > 0 ? 24 : 0}/24 layers to GPU`);
+console.error('llama_context: n_ctx = ' + ctx);
+let ready = false;
+setTimeout(() => { ready = true; console.error('main: server is listening on http://127.0.0.1:' + port); }, 700);
+http.createServer((req, res) => {
+  // like the real server: CORS for the page's origin
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*'); res.setHeader('Access-Control-Allow-Headers', '*');
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  let body = ''; req.on('data', (d) => (body += d)); req.on('end', () => {
+    if (req.url === '/health') { res.writeHead(ready ? 200 : 503); return res.end('{}'); }
+    res.setHeader('content-type', 'application/json');
+    if (req.url === '/props') return res.end(JSON.stringify({ default_generation_settings: { n_ctx: ctx }, modalities: { vision: !!get('--mmproj') } }));
+    if (req.url === '/v1/models') return res.end(JSON.stringify({ data: [{ id: 'm', meta: { n_ctx_train: 8192, n_params: 135000000, arch: 'llama' } }] }));
+    if (req.url === '/tokenize') return res.end(JSON.stringify({ tokens: [1, 2, 3, 4] }));
+    if (req.url === '/v1/chat/completions') {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const send = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+      send({ choices: [{ delta: { content: 'Hello' } }] }); send({ choices: [{ delta: { content: ' from llama-server' }, finish_reason: 'stop' }] });
+      send({ choices: [], usage: { prompt_tokens: 5, completion_tokens: 4 }, timings: { predicted_per_second: 50, predicted_n: 4, predicted_ms: 80, prompt_n: 5, prompt_ms: 10 } });
+      res.write('data: [DONE]\n\n'); return res.end();
+    }
+    res.end('{}');
+  });
+}).listen(port, '127.0.0.1');

@@ -28,6 +28,7 @@ function webDir() {
   return path.join(__dirname, '..', 'web', 'dist-desktop'); // dev: straight from the web build
 }
 function llamaDir() {
+  if (process.env.ATLAS_LLAMA_DIR) return process.env.ATLAS_LLAMA_DIR; // tests: a stand-in engine
   const packaged = path.join(process.resourcesPath || '', 'llama');
   if (fs.existsSync(packaged)) return packaged;
   return path.join(__dirname, 'resources', 'llama');
@@ -79,6 +80,13 @@ function setupSession() {
         "connect-src 'self' atlas-file: blob: data: http: https: ws: wss:",
         "frame-src 'self' atlas-file: blob:",
       ].join('; ')];
+    }
+    // The engine child process listens on loopback only; the page may call it whatever its build's CORS rules are.
+    if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(details.url)) {
+      for (const k of Object.keys(h)) if (/^access-control-allow-(origin|headers|methods)$/i.test(k)) delete h[k];
+      h['Access-Control-Allow-Origin'] = ['*'];
+      h['Access-Control-Allow-Headers'] = ['*'];
+      h['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS'];
     }
     cb({ responseHeaders: h });
   });

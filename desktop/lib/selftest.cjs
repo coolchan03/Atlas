@@ -28,7 +28,7 @@ exports.run = (win, app) => {
               const { initLlama } = await a.llama();
               const c = await initLlama({ model: '/atlas/files/models/selftest.gguf', n_ctx: 1024, n_threads: 3 });
               const r = await c.completion({ messages: [{ role: 'user', content: 'Say hello in five words.' }], n_predict: 16, temperature: 0.2 });
-              out.llm = { engine: c.androidLib, reply: r.content };
+              out.llm = { engine: c.androidLib, reply: r.content, gpu: c.gpu, devices: c.devices };
               await c.release();
             }
             out.llama = await h.llama.capabilities();

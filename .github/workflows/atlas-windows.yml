@@ -32,7 +32,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Fast check on Linux: the Electron shell starts, the bridge and disk file system work, a model downloads and answers
+  # through the WASM engine, and the llama-server manager drives a stand-in engine (desktop/test/fake-llama).
+  shell-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+            desktop/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund && ATLAS_TARGET=desktop npx vite build
+        working-directory: web
+      - run: npm ci --no-audit --no-fund
+        working-directory: desktop
+      - name: Shell self-test with a real small model (WASM engine)
+        working-directory: desktop
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgtk-3-0 libnss3 libasound2t64 || true
+          ATLAS_SELFTEST=1 ATLAS_SELFTEST_LLM=1 ATLAS_NO_SANDBOX=1 xvfb-run -a ./node_modules/.bin/electron . --no-sandbox --disable-gpu | tee selftest.log
+          grep -q "SELFTEST PASSED" selftest.log
+      - name: Shell self-test with the stand-in llama-server
+        working-directory: desktop
+        run: |
+          ATLAS_LLAMA_DIR=$PWD/test/fake-llama ATLAS_SELFTEST=1 ATLAS_SELFTEST_LLM=1 ATLAS_NO_SANDBOX=1 xvfb-run -a ./node_modules/.bin/electron . --no-sandbox --disable-gpu | tee selftest2.log
+          grep -q "SELFTEST PASSED" selftest2.log
+          grep -q '"engine":"llama-server"' selftest2.log
+
   windows:
+    needs: shell-test
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
