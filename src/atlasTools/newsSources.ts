@@ -89,10 +89,11 @@ export const WORDS_PER_MINUTE = 150;
 
 /**
  * How many stories fill the chosen length. Each story is a short summary (about 60 spoken words, 40 without
- * reading the article), not a full read of it. At least three, at most thirty.
+ * reading the article), not a full read of it. At least three, at most forty-five (thirty was too few for a 15 minute show: the stories
+ * found could not carry it, and the briefing stopped near 12 minutes).
  */
 export const storyBudget = (minutes: number, deep = true) =>
-  Math.max(3, Math.min(30, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 60 : 40))));
+  Math.max(3, Math.min(45, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 60 : 40))));
 
 /** Script lines per story (about 20 spoken words each) so the stories add up to the chosen length. */
 export const linesPerStory = (minutes: number, stories: number, cap = 8) =>
@@ -222,3 +223,32 @@ export function isThinDetail(detail: string, title: string): boolean {
 
 /** The line that goes with a story's material when it is thin: the script says so briefly instead of inventing details. */
 export const HEADLINE_ONLY_NOTE = 'Only the headline was available for this story: report the headline in one short sentence and say details were not available. Do not add facts.';
+
+/** Stories about killings, shootings, stabbings, fatal crashes and the like: a few are news, a briefing made of them is a bad start to a day. */
+const VIOLENT = /\b(murder\w*|homicide|shooting|shot dead|gunman|stabb\w+|massacre|manslaughter|slain|beheaded|hostage|kidnapp\w+|killed|dead|dies|died|death toll|fatal(ly)?|deadly)\b|\b(crash(es|ed)?|collision|collided|wreck|pile-?up|rollover|overturned|derail\w*)\b.{0,70}\b(kill\w*|dead|die[sd]?|fatal\w*|injur\w+|hospital\w*|victims?)\b|\b(kill\w*|dead|die[sd]?|fatal\w*|injur\w+|victims?)\b.{0,70}\b(crash(es|ed)?|collision|wreck|pile-?up|rollover)\b/i;
+/** A listener who asked for crime, crash or safety stories gets them. */
+const WANTS_VIOLENT = /\b(crime|crimes|police|accidents?|crash(es)?|traffic|safety|shootings?|true crime|law enforcement|courts?)\b/i;
+
+/** True when a headline is about a killing, a shooting or a deadly crash. Pure. */
+export const isViolentStory = (h: Pick<Headline, 'title' | 'desc'>): boolean => VIOLENT.test(`${h.title} ${h.desc.slice(0, 200)}`);
+/** True when one of the listener's interests asks for that kind of story. */
+export const wantsViolentNews = (interests: string[]): boolean => interests.some((i) => WANTS_VIOLENT.test(i));
+
+/** Fun-fact areas: science and nature first, then the odd corners of everything. Picked at random, so facts are not about whatever country the news is about. */
+const FUN_FACT_AREAS = [
+  'astronomy', 'black holes', 'chemistry', 'the human body', 'octopuses', 'deep sea animals', 'volcanoes', 'mathematics', 'quantum physics', 'fungi', 'dinosaurs', 'bird migration',
+  'glaciers', 'the periodic table', 'bioluminescence', 'plant biology', 'genetics', 'insects', 'the brain', 'electricity', 'sound', 'light', 'crystals', 'ocean currents',
+  'comets and asteroids', 'bees', 'whales', 'trees', 'the moon', 'DNA', 'earthquakes', 'sleep', 'the immune system', 'rainbows', 'caves', 'coral reefs', 'spiders', 'magnets',
+  'the speed of light', 'prime numbers', 'ancient clocks', 'languages of the world', 'musical instruments', 'bridges', 'the Sun', 'planets', 'viruses', 'bats', 'sharks', 'frogs',
+];
+/** Topics to look for a fun fact in, best first: two science or nature areas picked at random, then the listener's interests as a fallback. Pure given the random numbers. */
+export function funFactTopics(interests: string[], rng: () => number = Math.random): string[] {
+  const shuffle = <T,>(list: T[]): T[] => list.map((x) => ({ x, r: rng() })).sort((a, b) => a.r - b.r).map((o) => o.x);
+  return [...shuffle(FUN_FACT_AREAS).slice(0, 2), ...shuffle(interests.map((t) => t.trim()).filter(Boolean))];
+}
+const AMERICAN = /\b(united states|u\.s\.a?\b|usa|american|americans|america)\b/i;
+/** True when a page is about the United States or something American: fun facts are meant to be from anywhere, so these are passed over. */
+export const americaCentric = (title: string, text: string): boolean => AMERICAN.test(`${title} ${text.slice(0, 400)}`);
+
+/** The outlet is named for one story in five, so the briefing does not say where every story came from. Pure. */
+export const namesOutlet = (n: number): boolean => n % 5 === 0;

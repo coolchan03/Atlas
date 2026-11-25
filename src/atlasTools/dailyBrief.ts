@@ -10,7 +10,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Source, StudyResult, askModel, useStudyStore, writeEpisode } from '../study/engine';
-import { HEADLINE_ONLY_NOTE, WORDS_PER_MINUTE, avoided, isThinDetail, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, parseScreenReply, pickStories, screenPrompt, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
+import { HEADLINE_ONLY_NOTE, WORDS_PER_MINUTE, americaCentric, avoided, funFactTopics, isViolentStory, namesOutlet, wantsViolentNews, isThinDetail, cleanHeadlines, feedsFor, isPromotional, linesPerStory, onTopic, parseScreenReply, pickStories, screenPrompt, similarity, splitOutlet, spokenMinutes, storyBudget, type Headline } from './newsSources';
 
 export const BRIEF_PROJECT = 'daily-brief';
 /** The quiet beat after the chime before each story starts, so every story lands before the next. */
@@ -157,10 +157,12 @@ async function storyDetail(h: Headline, deep: boolean): Promise<{ text: string; 
 async function libraryFacts(topic: string, startN: number): Promise<Source[]> {
   try {
     const { searchLibrary, readArticle } = require('./offlineLibrary');
-    const hits = await searchLibrary(topic, 2);
+    const hits = await searchLibrary(topic, 4);
     const out: Source[] = [];
-    for (const h of hits.slice(0, 1)) {
+    for (const h of hits.slice(0, 4)) {
+      if (out.length) break;
       const a = await readArticle(h.uri, h.path, 1400);
+      if (americaCentric(a.title, a.text)) continue; // facts are from anywhere, not only the United States
       out.push({ n: startN + out.length, doc: `${h.library}: ${a.title}`, part: 1, text: a.text.replace(/\s+/g, ' ').slice(0, 1200), origin: 'library' });
     }
     return out;
@@ -208,7 +210,7 @@ async function wikiSummary(title: string): Promise<{ title: string; text: string
 async function webFacts(topic: string, startN: number): Promise<Source[]> {
   const make = (page: { title: string; text: string }, definition: boolean): Source[] => {
     const text = (definition ? withoutDefinition(page.text) : page.text).slice(0, 1200);
-    return text.length < 50 ? [] : [{ n: startN, doc: `Wikipedia: ${page.title}`, part: 1, text, origin: 'web' }];
+    return text.length < 50 || americaCentric(page.title, text) ? [] : [{ n: startN, doc: `Wikipedia: ${page.title}`, part: 1, text, origin: 'web' }];
   };
   try {
     // The best matches are the famous pages everyone knows, so the search starts a random way down its results (and falls back to the top when that is empty).
@@ -249,7 +251,7 @@ export type FunFactResult =
  * result says why: no interests, off-grid mode, no connection, or pages that were found but were not suitable.
  */
 export async function funFactAttempt(interests: string[], tries = 3): Promise<FunFactResult> {
-  const order = interests.map((t) => t.trim()).filter(Boolean).map((t) => ({ t, r: Math.random() })).sort((a, b) => a.r - b.r).map((x) => x.t);
+  const order = funFactTopics(interests);
   if (!order.length) return { kind: 'none', why: 'no-interests', tried: [] };
   const tried: string[] = [];
   let connectionFailed = false;
@@ -269,7 +271,7 @@ export async function funFactAttempt(interests: string[], tries = 3): Promise<Fu
 /** The sentence the preview shows when no fact came back: the real reason, and what the person can do. */
 export function noFunFactMessage(result: Extract<FunFactResult, { kind: 'none' }>): string {
   switch (result.why) {
-    case 'no-interests': return 'Add at least one interest first: the fun fact is chosen from them.';
+    case 'no-interests': return 'No topic to look in.';
     case 'off-grid': return 'Off-grid mode is on, so Wikipedia is not used. Only the offline library was searched, and it had nothing on these interests.';
     case 'offline': return 'The phone could not reach Wikipedia. Check the connection and press again.';
     default: return `Pages were found for ${result.tried.join(', ')}, but none was a suitable article for a fun fact. Press again to try other pages or interests.`;
@@ -278,9 +280,9 @@ export function noFunFactMessage(result: Extract<FunFactResult, { kind: 'none' }
 
 type OutlineItem = { topic: string; sources: Source[]; always?: boolean };
 
-function storyHeader(h: Headline): string {
+function storyHeader(h: Headline, outlet: boolean): string {
   const when = h.date ? new Date(h.date).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '';
-  return [`Headline: ${h.title}`, h.source && `Outlet: ${h.source}`, when && `Published: ${when}`].filter(Boolean).join('\n');
+  return [`Headline: ${h.title}`, outlet && h.source && `Outlet: ${h.source}`, when && `Published: ${when}`].filter(Boolean).join('\n');
 }
 
 /** One outline item for one real story: its headline, outlet, time and any detail found. */
@@ -289,10 +291,12 @@ async function storyItem({ h, interest, deep, n }: { h: Headline; interest: stri
   // A story with little more than its headline gets one more try: the article itself.
   if (!deep && isThinDetail(detail.text || h.desc || '', h.title)) detail = await storyDetail(h, true);
   const thin = isThinDetail(detail.text || h.desc || '', h.title);
-  const outlet = h.source ? ` (${h.source})` : '';
+  // The model is only told the outlet for one story in five (the others cannot name it), so the show does not say where every story came from.
+  const outletName = namesOutlet(n) ? h.source : undefined;
+  const named = !!outletName;
   return {
-    topic: `${h.title}${outlet} - ${interest}`,
-    sources: [{ n, doc: h.source || 'News', part: 1, text: `${storyHeader(h)}\n${detail.text || h.desc || ''}${thin ? `\n${HEADLINE_ONLY_NOTE}` : ''}`.slice(0, 1800), origin: 'web', url: detail.url || h.url }],
+    topic: `${h.title}${outletName ? ` (${outletName})` : ''} - ${interest}`,
+    sources: [{ n, doc: outletName || 'News', part: 1, text: `${storyHeader(h, named)}\n${detail.text || h.desc || ''}${thin ? `\n${HEADLINE_ONLY_NOTE}` : ''}`.slice(0, 1800), origin: 'web', url: detail.url || h.url }],
   };
 }
 
@@ -300,7 +304,8 @@ async function storyItem({ h, interest, deep, n }: { h: Headline; interest: stri
 async function libraryItems(interests: string[], withNews: boolean, firstN: number): Promise<OutlineItem[]> {
   const out: OutlineItem[] = [];
   let n = firstN;
-  for (const topic of interests.slice(0, withNews ? 2 : 6)) {
+  // With the news, the fun fact comes from a random science or nature area (the interests are only the fallback), so it is not about the same country as the news.
+  for (const topic of withNews ? funFactTopics(interests).slice(0, 3) : interests.slice(0, 6)) {
     let facts = await libraryFacts(topic, n);
     let factSource = 'offline library';
     if (!facts.length && withNews && !offGridNow()) {
@@ -357,10 +362,17 @@ async function gatherStories(o: { interests: string[]; minutes: number; deep: bo
     perInterest.forEach((list, k) => { perInterest[k] = list.filter((h) => !gone.has(h)); });
   }
   // A few more than the length needs are read, so the script can keep going until it really reaches the length.
-  const want = Math.min(30, budget + 4);
+  const want = Math.min(50, budget + 4);
   const picked: Picked[] = [];
-  for (const pick of pickStories(perInterest, Math.min(40, budget * 2))) {
+  // Stories about killings, shootings and deadly crashes go to the back of each topic's list, and only about one in ten of the calm stories' number is let through, unless a topic asks for them.
+  const calm = !wantsViolentNews(interests);
+  if (calm) perInterest.forEach((list, k) => { perInterest[k] = [...list.filter((h) => !isViolentStory(h)), ...list.filter(isViolentStory)]; });
+  const calmCount = perInterest.reduce((n, list) => n + list.filter((h) => !isViolentStory(h)).length, 0);
+  const violentCap = Math.max(1, Math.floor(calmCount / 9)); // about one in ten of what is told, however few stories there are
+  let violent = 0;
+  for (const pick of pickStories(perInterest, Math.min(80, budget * 2))) {
     if (picked.length >= want) break;
+    if (calm && isViolentStory(pick.headline)) { if (violent >= violentCap) continue; violent += 1; }
     // The same event under another outlet's wording is one card, not two.
     if (picked.some((x) => similarity(x.headline.title, pick.headline.title) >= 0.5 || (!!x.headline.url && !/news\.google\.com/.test(x.headline.url) && x.headline.url === pick.headline.url))) continue;
     picked.push(pick);
@@ -482,7 +494,7 @@ export async function makeBriefing(onStep: (m: string) => void, voicesAvailable:
   const r = await writeEpisode([], {
     title: `${gotNews ? 'Daily briefing' : 'Offline edition'} - ${date}`,
     prompt: gotNews
-      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved); name the outlet only now and then. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote}${calendarFlights.length ? ' Live flight status is included in the sources - read it and report the current status (on time, delayed, gate, etc.) when covering their flight.' : ''} Mention their travel naturally when relevant.` : ''}`
+      ? `A daily news briefing for ${date} on: ${interests.join(', ')}. Each item is one real story: summarize it in your own words in two to four sentences (what happened, who is involved); do not say which outlet reported it unless the item names one. Never read an article aloud or quote it, and report only what its source says.${weatherLine ? ` At the start, briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` The listener has these plans today: ${calendarNote}${calendarFlights.length ? ' Live flight status is included in the sources - read it and report the current status (on time, delayed, gate, etc.) when covering their flight.' : ''} Mention their travel naturally when relevant.` : ''}`
       : `An "offline edition" for ${date}: there is no live news today, so share interesting things from the library about: ${interests.join(', ')}.${weatherLine ? ` Briefly mention the weather: ${weatherLine}` : ''}${calendarNote ? ` Mention the listener's plans: ${calendarNote}` : ''}`,
     minutes: p.minutes,
     hosts: withExperts ? 3 : voicesAvailable >= 2 ? p.hosts : 1,

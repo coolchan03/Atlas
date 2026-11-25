@@ -56,8 +56,7 @@ describe('funFactAttempt', () => {
       if (/list=search/.test(url)) return { ok: true, text: async () => JSON.stringify({ query: { search: /srsearch=sea/.test(url) ? [{ title: 'Octopus' }] : [] } }) };
       return /summary\/Octopus$/.test(url) ? { ok: true, text: async () => JSON.stringify({ title: 'Octopus', extract: ARTICLE }) } : { ok: false, status: 404, text: async () => 'not found' };
     });
-    jest.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0.9); // interests are tried in this order: nothing-here, then sea
-    const r = await funFactAttempt(['nothing-here', 'sea']);
+    const r = await funFactAttempt(['nothing-here', 'sea'], 4); // two science areas, then the interests: the one that has a page is reached
     expect(r.kind).toBe('found');
     expect((global as any).fetch.mock.calls.filter((c: string[]) => /list=search/.test(c[0])).length).toBeGreaterThanOrEqual(2);
   });
@@ -70,9 +69,22 @@ describe('funFactAttempt', () => {
     expect((global as any).fetch).not.toHaveBeenCalled();
   });
 
-  it('says why when there is nothing: no interests', async () => {
-    expect(await funFactAttempt([])).toMatchObject({ kind: 'none', why: 'no-interests' });
-    expect(await funFactAttempt(['  ', ''])).toMatchObject({ kind: 'none', why: 'no-interests' });
+  it('looks in science and nature areas first, even with no interests, and the interests are the fallback', async () => {
+    wiki({}, []);
+    const none = await funFactAttempt([]);
+    expect(none).toMatchObject({ kind: 'none', why: 'nothing-suitable' });
+    expect((none as any).tried).toHaveLength(2); // two random areas, no interests to add
+    const withInterests = await funFactAttempt(['sea life', 'planets'], 4);
+    expect((withInterests as any).tried).toHaveLength(4);
+    expect((withInterests as any).tried.slice(2).sort()).toEqual(['planets', 'sea life']); // the interests come after the two areas
+  });
+
+  it('passes over pages about the United States, so the facts are not all American', async () => {
+    wiki({ 'Liberty Bell': { extract: 'The Liberty Bell is an American symbol of independence in Philadelphia, a bell cast long ago with a famous crack along its side.' }, Octopus: { extract: ARTICLE } }, ['Liberty Bell', 'Octopus']);
+    jest.spyOn(Math, 'random').mockReturnValue(0); // tries the first page first
+    const r = await funFactAttempt(['sea life']);
+    expect(r.kind).toBe('found');
+    if (r.kind === 'found') expect(r.fact.page).toBe('Wikipedia: Octopus');
   });
 
   it('says why when there is nothing: off-grid mode (and never touches the network)', async () => {
@@ -87,7 +99,8 @@ describe('funFactAttempt', () => {
   it('says why when there is nothing: the pages were found but none was suitable', async () => {
     wiki({ Mercury: { extract: 'Mercury may refer to: the planet, the element, the Roman god, or a record label, among others.' } }, ['Mercury']);
     const r = await funFactAttempt(['planets']);
-    expect(r).toMatchObject({ kind: 'none', why: 'nothing-suitable', tried: ['planets'] });
+    expect(r).toMatchObject({ kind: 'none', why: 'nothing-suitable' });
+    expect((r as any).tried).toContain('planets');
     expect(noFunFactMessage(r as any)).toMatch(/none was a suitable article/);
   });
 
@@ -100,6 +113,7 @@ describe('funFactAttempt', () => {
   it('previewFunFact still returns the fact or null', async () => {
     wiki({ Octopus: { extract: ARTICLE } }, ['Octopus']);
     expect((await previewFunFact(['sea life']))?.page).toBe('Wikipedia: Octopus');
+    wiki({}, []);
     expect(await previewFunFact([])).toBeNull();
   });
 });

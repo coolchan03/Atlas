@@ -1,4 +1,4 @@
-import { sectionFor, feedsFor, isPromotional, splitOutlet, cleanHeadlines, pickStories, storyBudget, similarity, linesPerStory, onTopic, spokenMinutes, avoided } from '../../../src/atlasTools/newsSources';
+import { isViolentStory, wantsViolentNews, funFactTopics, americaCentric, namesOutlet, sectionFor, feedsFor, isPromotional, splitOutlet, cleanHeadlines, pickStories, storyBudget, similarity, linesPerStory, onTopic, spokenMinutes, avoided } from '../../../src/atlasTools/newsSources';
 import { parseRss } from '../../../src/atlasTools/dailyBrief';
 
 const NOW = Date.parse('2026-10-19T15:00:00Z');
@@ -63,8 +63,8 @@ describe('daily briefing news sources', () => {
     expect(picked.map(p => p.headline.title)).toEqual(['us1', 'w1', 'b1', 'us2', 'b2']);
     expect(storyBudget(1)).toBe(3);
     expect(storyBudget(5)).toBe(13);
-    expect(storyBudget(10, false)).toBe(30);
-    expect(storyBudget(30)).toBe(30);
+    expect(storyBudget(10, false)).toBe(38);
+    expect(storyBudget(30)).toBe(45);
   });
 
   it('sizes the script to the length the user picked', () => {
@@ -158,5 +158,33 @@ describe('AI screening of headlines', () => {
     expect(user).toContain('sports');
     expect(user).toContain('1. Bears win');
     expect(user).toContain('2. Mars water found');
+  });
+});
+
+describe('a calmer briefing', () => {
+  const h = (title: string, desc = '') => ({ title, desc });
+  it('knows violent stories, and not market crashes or a crash course', () => {
+    for (const t of ['Man killed in head-on crash on Highway 9', 'Three dead after truck collides with bus', 'Gunman opens fire at mall, police say', 'Fatal pile-up closes interstate']) expect(isViolentStory(h(t))).toBe(true);
+    for (const t of ['Stock market crash fears ease as rates hold', 'A crash course in sourdough', 'New bridge opens ahead of schedule', 'Telescope finds a planet with two suns']) expect(isViolentStory(h(t))).toBe(false);
+  });
+  it('lets a listener who asked for crime or crash stories have them', () => {
+    expect(wantsViolentNews(['local news', 'true crime'])).toBe(true);
+    expect(wantsViolentNews(['science', 'cooking'])).toBe(false);
+  });
+});
+
+describe('fun facts from anywhere, and the outlet said now and then', () => {
+  it('starts with two science or nature areas and keeps the interests as the fallback', () => {
+    const topics = funFactTopics(['Chicago', 'jazz']);
+    expect(topics).toHaveLength(4);
+    expect(topics.slice(2).sort()).toEqual(['Chicago', 'jazz']);
+    expect(new Set(funFactTopics([], () => 0.5)).size).toBe(2);
+  });
+  it('turns away pages about the United States', () => {
+    expect(americaCentric('Liberty Bell', 'The Liberty Bell is a symbol in the United States of America.')).toBe(true);
+    expect(americaCentric('Octopus', 'The octopus has three hearts.')).toBe(false);
+  });
+  it('names the outlet for one story in five', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter(namesOutlet)).toEqual([5, 10]);
   });
 });

@@ -23,7 +23,7 @@ import { uvAdvice, type WeatherData } from '../atlasTools/weather';
 import { fmtTemp, useUnits } from '../atlasTools/units';
 
 const EMPTY: never[] = [];
-const LENGTHS = [3, 5, 10, 15];
+const LENGTHS = [3, 5, 10, 15, 20];
 const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /** Progress while today's briefing is being made: current step, steps done, time so far. */
