@@ -204,3 +204,48 @@ export const Vibration = {
     }
   },
 };
+
+// Hardware back button: browsers have none inside the page. The handlers are kept so code that registers one
+// keeps working; the Escape key and the browser's own back gesture trigger them in registration order.
+const backHandlers: Array<() => boolean | null | undefined> = [];
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    for (let i = backHandlers.length - 1; i >= 0; i--) if (backHandlers[i]()) { e.preventDefault(); return; }
+  });
+}
+export const BackHandler = {
+  addEventListener(_event: string, handler: () => boolean | null | undefined) {
+    backHandlers.push(handler);
+    return { remove: () => { const i = backHandlers.indexOf(handler); if (i >= 0) backHandlers.splice(i, 1); } };
+  },
+  removeEventListener(_event: string, handler: () => boolean | null | undefined) {
+    const i = backHandlers.indexOf(handler);
+    if (i >= 0) backHandlers.splice(i, 1);
+  },
+  exitApp() { window.close(); },
+};
+
+// react-native-web's InteractionManager does not run a plain function task the way React Native does
+// (the chat screen waited on it forever before loading a model). Same contract as React Native: run the
+// task after pending interactions, i.e. on the next frame, and return { then, done, cancel }.
+export const InteractionManager = {
+  Events: { interactionStart: 'interactionStart', interactionComplete: 'interactionComplete' },
+  runAfterInteractions(task?: (() => unknown) | { run?: () => unknown }) {
+    let cancelled = false;
+    const promise = new Promise<unknown>((resolve) => {
+      const go = () => {
+        if (cancelled) return;
+        const r = typeof task === 'function' ? task() : task?.run?.();
+        resolve(r);
+      };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(go, 0));
+      else setTimeout(go, 0);
+    });
+    return { then: promise.then.bind(promise), done: promise.then.bind(promise), cancel: () => { cancelled = true; } };
+  },
+  createInteractionHandle: () => 1,
+  clearInteractionHandle: () => undefined,
+  setDeadline: () => undefined,
+  addListener: () => ({ remove: () => undefined }),
+};

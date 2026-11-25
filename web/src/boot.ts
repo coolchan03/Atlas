@@ -15,3 +15,26 @@ import { openDatabase } from './host/sqlite';
 import * as rnfs from './shims/react-native-fs';
 import { NativeModules, bus } from './native/registry';
 (globalThis as any).__atlas = { fs, openDatabase, rnfs, NativeModules, bus, llama: () => import('./shims/llama-rn'), whisper: () => import('./shims/whisper-rn') };
+
+// ?trace in the URL logs every native-module call that starts and whether it ever finishes (finds hung awaits).
+if (typeof location !== 'undefined' && location.search.includes('trace')) {
+  const pending = new Map<number, string>();
+  let n = 0;
+  (globalThis as any).__pending = () => [...pending.values()];
+  const wrap = (obj: any, prefix: string) => {
+    for (const k of Object.keys(obj)) {
+      const f = obj[k];
+      if (typeof f !== 'function') continue;
+      obj[k] = (...a: any[]) => {
+        const id = ++n;
+        pending.set(id, `${prefix}.${k}(${a.map((x) => (typeof x === 'string' ? x.slice(0, 40) : typeof x)).join(',')})`);
+        const r = f.apply(obj, a);
+        if (r && typeof r.then === 'function') r.then(() => pending.delete(id), () => pending.delete(id));
+        else pending.delete(id);
+        return r;
+      };
+    }
+  };
+  for (const [name, mod] of Object.entries(NativeModules)) wrap(mod, name);
+  wrap((rnfs as any).default, 'RNFS');
+}
