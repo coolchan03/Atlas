@@ -24,6 +24,24 @@ export const WEBGPU_MODELS: WebGpuModel[] = [
   { id: 'DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC', name: 'DeepSeek R1 7B', params: 7, vramMB: 5106, org: 'deepseek-ai', note: 'Step-by-step reasoning. Needs 8 GB+ GPU.' },
 ];
 
+/**
+ * GPUs without the shader-f16 feature (many integrated GPUs, older drivers, Safari) cannot run the f16 builds. For them the
+ * catalog switches to the f32 builds of the same models, using WebLLM's own list for which ones exist and what they need.
+ */
+export async function adaptToAdapter(): Promise<void> {
+  let f16 = false;
+  try { f16 = !!(await (navigator as any).gpu.requestAdapter())?.features?.has('shader-f16'); } catch { /* no adapter */ }
+  if (f16) return;
+  const webllm: any = await import('@mlc-ai/web-llm');
+  const have = new Map<string, number>((webllm.prebuiltAppConfig?.model_list ?? []).map((m: any) => [m.model_id, m.vram_required_MB]));
+  const adapted: WebGpuModel[] = [];
+  for (const m of WEBGPU_MODELS) {
+    const id32 = m.id.replace('-q4f16_1-MLC', '-q4f32_1-MLC');
+    if (have.has(id32)) adapted.push({ ...m, id: id32, vramMB: have.get(id32) ?? m.vramMB });
+  }
+  WEBGPU_MODELS.splice(0, WEBGPU_MODELS.length, ...adapted);
+}
+
 export const REPO = 'mlc-ai';
 export const repoIdFor = (m: WebGpuModel) => `${REPO}/${m.id}`;
 export const fileNameFor = (id: string) => `${id}.webgpu.gguf`;

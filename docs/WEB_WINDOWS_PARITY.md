@@ -53,3 +53,14 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
   Whisper (Models > Speech) never leaves the device.
 - **File access.** A browser cannot read arbitrary folders. Imports go through the file picker. The Windows app can open any file
   you pick and keeps its data in a normal folder you can back up.
+
+## Windows app: requirements and troubleshooting
+
+- Windows 10 or 11, 64-bit. Roughly 700 MB of disk for the app and more for models (stored in `%APPDATA%\Atlas\data`, open it from Help > Open the data folder).
+- **AI engine.** The installer bundles llama.cpp (`llama-server.exe`): a Vulkan build (NVIDIA, AMD and Intel GPUs, current graphics driver) and a CPU build. Atlas picks the GPU build when a GPU is found and falls back to the CPU build, then to the in-app WebAssembly engine.
+  If the engine does not start, install the "Microsoft Visual C++ Redistributable (x64)" and update the graphics driver.
+- **Speech and natural voices** (Whisper, Kokoro, Piper) run inside the app on the GPU through WebGPU, or on the CPU. They download once, then work offline.
+- **Models on another computer** (Ollama, LM Studio) work as on the phone: Models > Add Remote Server.
+- **Unsigned installer.** Builds are not code signed, so Windows SmartScreen may say "unknown publisher": More info > Run anyway.
+- **Updates** come from GitHub releases (the app checks 15 seconds after start and installs on exit).
+- **WebGPU models** (the "(WebGPU)" entries in Models) run on the GPU inside the app. GPUs without 16-bit shader support automatically get the 32-bit builds of the same models.

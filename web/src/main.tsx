@@ -10,6 +10,7 @@ async function start() {
   // WebGPU models join the Models list (see engines/llm/webgpuCatalog.ts); must be set before the app's modules load.
   if ((navigator as any).gpu) {
     const cat = await import('./engines/llm/webgpuCatalog');
+    await cat.adaptToAdapter().catch(() => undefined);
     (globalThis as any).__ATLAS_EXTRA_MODELS__ = cat.recommendedEntries();
     cat.installHfInterceptor();
   }
