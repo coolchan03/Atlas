@@ -27,6 +27,7 @@ import { Switch } from 'react-native';
 import logger from '../utils/logger';
 import { briefTrace, noteBriefTrace } from '../atlasVoice/briefTrace';
 import { shareItem } from '../utils/shareItem';
+import { EpisodeAudioButtons } from './EpisodeAudioButtons';
 import { speakAndWait, stop, listVoices, TtsVoice, keepScreenOn } from '../atlasVoice/tts';
 import { useAtlasVoiceStore } from '../atlasVoice/store';
 import { cancelVideoExport, exportSlidesVideo, openVideo, shareVideo, videoExportAvailable, VideoExportCancelled, type SavedVideo, type VideoProgress } from '../services/videoExport';
@@ -580,6 +581,14 @@ export const StudyScreen: React.FC = () => {
                   </TouchableOpacity>
                 )}
               </View>
+              {(() => {
+                const brief = projectId === BRIEF_PROJECT;
+                const prefs = useBriefPrefs.getState();
+                return (
+                  <EpisodeAudioButtons audioKey={`${projectId}-${v.createdAt}`} title={textHeading(v)} items={v.podcast!.map((l) => ({ text: l.text, ...castVoice(l.host, v.hosts ?? 2) }))}
+                    tunes={brief && prefs.jingles !== false ? { storyStarts: v.storyStarts ?? [], pauseSeconds: STORY_PAUSE_SECONDS, intro: true } : undefined} jingleVolume={prefs.jingleVolume ?? 'normal'} />
+                );
+              })()}
               <SourceChips nums={v.sources.map((s) => s.n)} sources={v.sources} onOpen={openSource} colors={colors} />
             </View>
           )}
