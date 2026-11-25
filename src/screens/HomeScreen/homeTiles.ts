@@ -20,6 +20,16 @@ export function moveTile(keys: string[], prefs: HomeTilePrefs | undefined, move:
   return { ...prefs, order: all };
 }
 
+/** Drops a tile into the place of another one (dragging a tile over it): the dragged tile takes that place and the ones between shift by one. */
+export function moveTileTo(keys: string[], prefs: HomeTilePrefs | undefined, move: { key: string; onto: string }): HomeTilePrefs {
+  const all = arrangeTiles(keys, prefs, true);
+  const from = all.indexOf(move.key);
+  const to = all.indexOf(move.onto);
+  if (from < 0 || to < 0 || from === to) return { ...prefs, order: all };
+  all.splice(to, 0, ...all.splice(from, 1));
+  return { ...prefs, order: all };
+}
+
 /** Shows or hides a tile. Settings is never hidden: it is the way back. */
 export function toggleTile(prefs: HomeTilePrefs | undefined, key: string): HomeTilePrefs {
   if (key === 'settings') return prefs ?? {};
