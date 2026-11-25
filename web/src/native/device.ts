@@ -5,6 +5,7 @@ import * as crypto_ from './crypto';
 import { fs, norm, baseName } from '../host/fs';
 import { blobUrlFor, saveToUser } from '../host/files';
 import { mapInfo, mapPlaces } from '../map/places';
+import { setBusy } from '../host/busy';
 
 const nav: any = typeof navigator !== 'undefined' ? navigator : {};
 const host = () => (globalThis as any).atlasHost;
@@ -89,7 +90,7 @@ async function downloadText(name: string, text: string, mime: string) {
 registerNativeModule('AtlasDevice', {
   addListener() {}, removeListeners() {},
   async setKeepScreenOn(on: boolean) { screenLock = await lock('screen', on, screenLock); return true; },
-  async setAiWorkActive(on: boolean) { aiLock = await lock('screen', on, aiLock); return true; },
+  async setAiWorkActive(on: boolean) { setBusy('ai', on); aiLock = await lock('screen', on, aiLock); return true; },
   async setTorch(on: boolean) { return setTorch(on); },
   async magneticDeclination() { return 0; },
   async hasCompass() { return typeof DeviceOrientationEvent !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0); },

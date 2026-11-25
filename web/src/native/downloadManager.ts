@@ -2,6 +2,7 @@
 // startDownload -> events DownloadProgress / DownloadComplete / DownloadError, rows that survive an app
 // restart (partial files are resumed with HTTP Range), retry with back-off, cancel, move-when-done.
 import { bus, registerNativeModule } from './registry';
+import { setBusy, setTaskbarProgress } from '../host/busy';
 import { fs, norm, baseName, dirName } from '../host/fs';
 import { downloadToFile } from '../host/download';
 import { hash as sha256File } from '../shims/react-native-fs';
@@ -50,8 +51,10 @@ const load = () => {
   } catch { /* ignore */ }
 };
 const pathFor = (r: Row) => `${DIR}/${r.downloadId}-${r.fileName.replace(/[^\w.\-]+/g, '_')}`;
-const emitProgress = (r: Row) =>
+const emitProgress = (r: Row) => {
+  reportBusy();
   bus.emit('DownloadProgress', { downloadId: r.downloadId, fileName: r.fileName, modelId: r.modelId, bytesDownloaded: r.bytesDownloaded, totalBytes: r.totalBytes, status: r.status, reason: r.reason, reasonCode: r.reasonCode });
+};
 
 function codeForStatus(status: number): string {
   if ([401, 403, 404, 416, 429].includes(status)) return `http_${status}`;
@@ -73,6 +76,15 @@ async function holdAwake(on: boolean) {
   } catch { /* not allowed (background tab) */ }
 }
 const anyRunning = () => [...rows.values()].some((r) => r.status === 'running' || r.status === 'retrying');
+/** Keeps the Windows app informed: busy while a download runs, and the taskbar bar shows the overall progress. */
+function reportBusy() {
+  const active = [...rows.values()].filter((r) => r.status === 'running' || r.status === 'retrying' || r.status === 'pending');
+  setBusy('downloads', active.length > 0);
+  if (!active.length) return;
+  const total = active.reduce((n, r) => n + (r.totalBytes || 0), 0);
+  const done = active.reduce((n, r) => n + r.bytesDownloaded, 0);
+  setTaskbarProgress(total > 0 ? done / total : null);
+}
 
 async function run(r: Row, attempt = 0): Promise<void> {
   if (ctl.has(r.downloadId)) return;
@@ -199,6 +211,7 @@ async function run(r: Row, attempt = 0): Promise<void> {
   } finally {
     ctl.delete(r.downloadId);
     persist();
+    reportBusy();
     if (!anyRunning()) void holdAwake(false);
   }
 }
@@ -236,6 +249,7 @@ registerNativeModule('DownloadManagerModule', {
     await fs().unlink(pathFor(r)).catch(() => undefined);
     rows.delete(id);
     persist();
+    reportBusy();
   },
   async retryDownload(id: string) {
     const r = rows.get(id);

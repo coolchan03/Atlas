@@ -168,11 +168,16 @@ export const Linking = {
   canOpenURL: async () => true,
   openSettings: async () => undefined,
   sendIntent: async () => undefined,
+  // PWA shortcuts open "?open=chat"; the Windows app is launched with an atlas:// argument. Both reach the app as the
+  // atlas://app/<where> links the phone's launcher shortcuts use.
   getInitialURL: async () => {
+    const host = (globalThis as any).atlasHost;
+    if (host?.initialUrl) return host.initialUrl as string;
     const u = new URL(window.location.href);
-    return u.searchParams.get('open') || u.searchParams.get('url') || null;
+    const open = u.searchParams.get('open');
+    return open ? `atlas://app/${open}` : u.searchParams.get('url') || null;
   },
-  addEventListener: (_type: string, _cb: (e: { url: string }) => void) => ({ remove: () => undefined }),
+  addEventListener: (type: string, cb: (e: { url: string }) => void) => (type === 'url' ? bus.addListener('AtlasOpenUrl', (e: { url: string }) => cb(e)) : { remove: () => undefined }),
 };
 
 export const Share = {

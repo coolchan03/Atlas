@@ -12,7 +12,7 @@ exports.run = (win, app) => {
       try {
         result = await win.webContents.executeJavaScript(`(async () => {
           const h = window.atlasHost;
-          const out = { host: !!h, kind: h && h.kind, isolated: crossOriginIsolated, sab: typeof SharedArrayBuffer !== 'undefined', webgpu: !!navigator.gpu };
+          const out = { initialUrl: h && h.initialUrl, host: !!h, kind: h && h.kind, isolated: crossOriginIsolated, sab: typeof SharedArrayBuffer !== 'undefined', webgpu: !!navigator.gpu };
           try {
             const a = window.__atlas;
             await a.rnfs.writeFile('/atlas/files/selftest.txt', 'héllo disk');
@@ -46,7 +46,7 @@ exports.run = (win, app) => {
       } catch { /* optional */ }
       console.log('SELFTEST ' + JSON.stringify(result));
       if (errors.length) console.log('CONSOLE ERRORS ' + JSON.stringify(errors.slice(0, 8)));
-      const ok = result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && /Skip|YOURS|Atlas/i.test(result.text || '');
+      const ok = result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && (result.initialUrl || /Skip|YOURS|Atlas/i.test(result.text || ''));
       console.log(ok ? 'SELFTEST PASSED' : 'SELFTEST FAILED');
       app.exit(ok ? 0 : 1);
     }, 6000);

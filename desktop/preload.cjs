@@ -16,6 +16,11 @@ ipcRenderer.on('app:open-file', (_e, p) => {
   const cbs = listeners.get('app:open-file');
   if (cbs && cbs.size) for (const cb of cbs) cb(p); else waitingOpen.push(p);
 });
+const waitingUrls = [];
+ipcRenderer.on('app:open-url', (_e, url) => {
+  const cbs = listeners.get('app:open-url');
+  if (cbs && cbs.size) for (const cb of cbs) cb(url); else waitingUrls.push(url);
+});
 const on = (ev, cb) => {
   if (!listeners.has(ev)) listeners.set(ev, new Set());
   listeners.get(ev).add(cb);
@@ -46,6 +51,10 @@ contextBridge.exposeInMainWorld('atlasHost', {
   system: () => inv('system:info'),
   powerSaveBlocker: (on_) => inv('power:block', on_),
   notify: (title, body) => inv('notify', title, body),
+  initialUrl: ipcRenderer.sendSync('app:initial-url'),
+  onOpenUrl: (cb) => { const off = on('app:open-url', cb); for (const u of waitingUrls.splice(0)) cb(u); return off; },
+  setBusy: (on_) => inv('app:busy', !!on_),
+  setProgress: (f) => inv('app:progress', f),
   onOpenFile: (cb) => { const off = on('app:open-file', cb); for (const p of waitingOpen.splice(0)) cb(p); return off; },
   window: { minimize: () => inv('win:minimize'), toggleMaximize: () => inv('win:maximize'), close: () => inv('win:close'), setTitleBar: (c) => inv('win:titlebar', c) },
   update: { check: () => inv('update:check'), install: () => inv('update:install') },

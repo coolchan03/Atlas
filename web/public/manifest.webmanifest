@@ -65,9 +65,20 @@
       ]
     },
     {
-      "name": "Emergency cards",
-      "short_name": "Emergency",
-      "url": "./?open=atlas",
+      "name": "Voice call",
+      "short_name": "Call",
+      "url": "./?open=call",
+      "icons": [
+        {
+          "src": "icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Recorder",
+      "short_name": "Record",
+      "url": "./?open=record",
       "icons": [
         {
           "src": "icons/icon-96.png",

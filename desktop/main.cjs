@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, session, Menu, Notification, powerSaveBlocker, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, Menu, Notification, powerSaveBlocker, nativeTheme, Tray, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const diskfs = require('./lib/diskfs.cjs');
@@ -20,6 +20,11 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 
 let win = null;
+let tray = null;
+let quitting = false;
+let busy = false; // the page reports downloads / generation in flight: closing the window then hides it instead of quitting
+let toldAboutTray = false;
+const launchUrl = process.argv.slice(1).find((a) => /^atlas:\/\//i.test(a)) || null; // an atlas:// link that started the app
 let pendingOpen = process.argv.slice(isDev ? 2 : 1).filter((a) => /\.(gguf|txt|md|pdf|json)$/i.test(a) && fs.existsSync(a));
 
 function webDir() {
@@ -37,6 +42,32 @@ function llamaDir() {
 /** A file Windows opened with Atlas (double click on a .gguf): made reachable, then handed to the app as a virtual path. */
 function sendOpenFile(p) {
   try { diskfs.allow(p); win?.webContents.send('app:open-file', diskfs.virtualFor(p)); } catch { /* ignore */ }
+}
+
+/** An atlas:// link (launcher shortcut, "Open with"): handed to the page, which routes it like the phone's shortcuts. */
+function sendOpenUrl(url) {
+  if (!/^atlas:\/\//i.test(url)) return;
+  if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); win.webContents.send('app:open-url', url); }
+}
+
+function showWindow() {
+  if (!win) return createWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+function createTray() {
+  if (tray) return;
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('Atlas');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open Atlas', click: showWindow },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWindow);
 }
 
 function createWindow() {
@@ -62,6 +93,17 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) void shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('app://')) { e.preventDefault(); if (/^https?:/i.test(url)) void shell.openExternal(url); } });
   win.webContents.on('did-finish-load', () => { for (const p of pendingOpen.splice(0)) sendOpenFile(p); });
+  // While a download or a reply is in progress, closing the window keeps Atlas running in the tray so the work finishes.
+  win.on('close', (e) => {
+    if (quitting || !busy) return;
+    e.preventDefault();
+    win.hide();
+    createTray();
+    if (!toldAboutTray && Notification.isSupported()) {
+      toldAboutTray = true;
+      new Notification({ title: 'Atlas is still working', body: 'It keeps running in the tray until the work is done. Quit from the tray icon.' }).show();
+    }
+  });
   win.on('closed', () => { win = null; });
   if (process.env.ATLAS_SELFTEST) require('./lib/selftest.cjs').run(win, app);
 }
@@ -106,6 +148,7 @@ function setupSession() {
 }
 
 function registerIpc() {
+  ipcMain.on('app:initial-url', (e) => { e.returnValue = launchUrl; });
   const ops = diskfs.ops;
   for (const name of ['read', 'readRange', 'write', 'append', 'stat', 'exists', 'mkdir', 'readdir', 'unlink', 'move', 'copy', 'hash', 'writerOpen', 'writerWrite', 'writerClose', 'usage']) {
     // Errors travel as data so Electron does not log a stack for every ordinary ENOENT; preload re-throws them.
@@ -164,6 +207,14 @@ function registerIpc() {
     else if (!on && blocker != null) { powerSaveBlocker.stop(blocker); blocker = null; }
   });
   ipcMain.handle('notify', (_e, title, body) => { if (Notification.isSupported()) new Notification({ title, body, icon: path.join(__dirname, 'build', 'icon.png') }).show(); });
+  ipcMain.handle('app:busy', (_e, on) => {
+    busy = !!on;
+    if (!busy) {
+      win?.setProgressBar(-1);
+      if (win && !win.isVisible()) { quitting = true; app.quit(); } // the hidden app finished its work: nothing left to keep alive
+    }
+  });
+  ipcMain.handle('app:progress', (_e, fraction) => win?.setProgressBar(fraction >= 0 && fraction <= 1 ? fraction : -1));
   ipcMain.handle('win:minimize', () => win?.minimize());
   ipcMain.handle('win:maximize', () => (win?.isMaximized() ? win.unmaximize() : win?.maximize()));
   ipcMain.handle('win:close', () => win?.close());
@@ -193,13 +244,16 @@ function buildMenu() {
 }
 
 app.on('second-instance', (_e, argv) => {
-  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+  for (const a of argv.slice(1)) if (/^atlas:\/\//i.test(a)) sendOpenUrl(a);
   for (const a of argv.slice(1)) if (/\.(gguf|txt|md|pdf|json)$/i.test(a) && fs.existsSync(a)) sendOpenFile(a);
 });
+app.on('open-url', (e, url) => { e.preventDefault(); sendOpenUrl(url); });
 app.on('open-file', (e, p) => { e.preventDefault(); if (win) sendOpenFile(p); else pendingOpen.push(p); });
 
 app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark';
+  try { app.setAsDefaultProtocolClient('atlas'); } catch { /* not allowed (portable build, dev run) */ }
   const data = app.getPath('userData');
   diskfs.init(path.join(data, 'data'));
   secrets.init(data);
@@ -213,4 +267,4 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 app.on('window-all-closed', () => { llama.stopAll(); if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => llama.stopAll());
+app.on('before-quit', () => { quitting = true; llama.stopAll(); });

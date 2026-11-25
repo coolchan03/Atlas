@@ -103,6 +103,14 @@
         "repo": "Atlas",
         "releaseType": "release"
       }
+    ],
+    "protocols": [
+      {
+        "name": "Atlas",
+        "schemes": [
+          "atlas"
+        ]
+      }
     ]
   }
 }

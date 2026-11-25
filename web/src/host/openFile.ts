@@ -1,8 +1,10 @@
 // Windows: "Open with Atlas" on a .gguf (or a double click) hands the path to the app, which imports the model.
 import { Alert } from '../shims/react-native';
+import { bus } from '../native/registry';
 
 export function listenForOpenedFiles() {
   const host = (globalThis as any).atlasHost;
+  host?.onOpenUrl?.((url: string) => bus.emit('AtlasOpenUrl', { url }));
   if (!host?.onOpenFile) return;
   host.onOpenFile(async (virtualPath: string) => {
     const name = virtualPath.split('/').pop() ?? 'file';
