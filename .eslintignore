@@ -2,3 +2,7 @@
 android/app/build/
 ios/build/
 coverage/
+
+# Web (PWA) and Windows (Electron) ports have their own tooling
+web/
+desktop/

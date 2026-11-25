@@ -7,7 +7,7 @@ module.exports = {
   ],
   // Stale agent git-worktrees under .claude/worktrees/ each carry a full repo copy, which collide in Haste's
   // module map. Exclude them so they are not test-collected as duplicates.
-  modulePathIgnorePatterns: ['<rootDir>/.claude/worktrees/'],
+  modulePathIgnorePatterns: ['<rootDir>/.claude/worktrees/', '<rootDir>/web/', '<rootDir>/desktop/'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     // Mirrors the metro alias.
