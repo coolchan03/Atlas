@@ -16,6 +16,7 @@ async function xz(data: Uint8Array): Promise<Uint8Array> {
 }
 
 export class Zim {
+  private titles: Promise<Uint32Array | null> | null = null;
   private cache = new Map<number, Promise<Dirent>>();
   private clusters = new Map<number, Promise<Uint8Array>>();
   private constructor(
@@ -152,13 +153,14 @@ export class Zim {
     const variants = [...new Set([prefix, prefix.toLowerCase(), prefix.charAt(0).toUpperCase() + prefix.slice(1), prefix.replace(/\b\w/g, (c) => c.toUpperCase())])];
     for (const p of variants) {
       if (out.length >= limit) break;
-      let lo = 0, hi = this.h.entries - 1;
+      const total = await this.titleCount();
+      let lo = 0, hi = total - 1;
       const titleAt = async (i: number) => { const idx = await this.titleIndex(i); const d = await this.dirent(idx); return { d, idx, key: d.ns + d.title }; };
       for (const ns of ['C', 'A']) {
-        lo = 0; hi = this.h.entries - 1;
+        lo = 0; hi = total - 1;
         const key = ns + p;
         while (lo < hi) { const mid = (lo + hi) >> 1; if ((await titleAt(mid)).key < key) lo = mid + 1; else hi = mid; }
-        for (let i = lo; i < this.h.entries && out.length < limit; i++) {
+        for (let i = lo; i < total && out.length < limit; i++) {
           const { d, idx, key: k } = await titleAt(i);
           if (!k.startsWith(key)) break;
           const real = await this.follow(idx).catch(() => -1);
@@ -173,9 +175,31 @@ export class Zim {
     }
     return out;
   }
+  /**
+   * Entry numbers in title order. Old files keep that list at `titlePtr`; new files (the pointer is all ones) store it as the
+   * entry `X/listing/titleOrdered/v0` (or v1): a plain array of little-endian u32 entry numbers.
+   */
+  private titleList(): Promise<Uint32Array | null> {
+    return (this.titles ??= (async () => {
+      if (this.h.titlePtr < this.size) return null;
+      for (const name of ['listing/titleOrdered/v1', 'listing/titleOrdered/v0']) {
+        const i = await this.findUrl('X', name);
+        if (i < 0) continue;
+        const b = await this.blob(await this.follow(i));
+        return new Uint32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength - (b.byteLength % 4)));
+      }
+      throw new Error('This ZIM file has no title index.');
+    })());
+  }
   private async titleIndex(i: number): Promise<number> {
+    const list = await this.titleList();
+    if (list) return list[i];
     const b = await this.read(this.h.titlePtr + i * 4, 4);
     return new DataView(b.buffer, b.byteOffset).getUint32(0, true);
+  }
+  /** Number of entries in the title order. */
+  private async titleCount(): Promise<number> {
+    return (await this.titleList())?.length ?? this.h.entries;
   }
 }
 
