@@ -17,16 +17,17 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
 | Vision (pictures to a model) | full | no (text only in WASM) | full with a vision model + projector |
 | Image generation | full | no | no (planned: stable-diffusion.cpp) |
 | Natural voices (Kokoro) | full | **full**: Kokoro-82M on WebGPU (WASM fallback), cached for offline use | full (same engine) |
-| Other voices (Piper, KittenTTS, Pocket TTS voice cloning) | full | no | no |
+| Piper voices (Amy, Ryan, Lessac, Joe, HFC) | full | **full** (VITS ONNX, cached for offline use) | full |
+| KittenTTS, Pocket TTS voice cloning, imported voice files | full | no | no |
 | System voice (read aloud) | Android voices | browser / OS voices (on Windows: the installed Windows voices) | Windows voices |
 | Speech to text | Whisper (whisper.cpp) | Whisper through transformers.js (WebGPU / WASM), offline after the first download; browser speech recognition as the "system" recogniser | same as web |
 | Hands-free voice mode, read aloud, podcasts (with Kokoro) | full | full | full |
 | Offline library (Atlas packs), search, RAG | full | full (SQLite + FTS5 in WebAssembly, saved to browser storage) | full |
-| Kiwix encyclopedias (ZIM) | native libkiwix | no (planned) | no (planned) |
+| Kiwix encyclopedias (ZIM) | native libkiwix, full-text search | **partial**: in-app ZIM reader (zstd / xz / stored clusters), search by article title, article text. No full-text (Xapian) search. Downloading from Kiwix mirrors from a browser can be blocked by the mirror's CORS rules: download the .zim and import it with the file picker | same reader, no CORS limit |
 | Offline maps (Mapsforge) | native map view | no (planned: MapLibre) | no (planned) |
 | GPS, compass, torch, sensors | yes | where the browser exposes them (phones: GPS, compass, light, motion; torch on some Android Chrome) | location by IP / Windows location service; no compass or torch on most PCs |
 | Camera / photo import | yes | yes (file picker, camera capture on phones) | file picker |
-| Documents (PDF, Word, ...) | yes | yes | yes |
+| Documents (PDF, Word, ...) | yes | yes (PDF through pdf.js incl. page images for scans) | yes |
 | Share to Atlas | Android share sheet | PWA share target (text and links) | open files with Atlas (.gguf and documents) |
 | Reminders / alarms | exact alarms | notifications while the app is open | notifications while the app runs |
 | Background work with the screen off | foreground service | limited by the browser (a screen wake lock is held during downloads and generation) | **full** (the window can be hidden; downloads and generation continue) |

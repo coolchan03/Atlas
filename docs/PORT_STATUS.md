@@ -79,6 +79,7 @@ Rules for the port (so the mobile app is never touched or broken):
 
 ## Log
 (newest first; one line per chunk of work)
+- 2026-11-25: UI crawl (web/scripts/crawl.mjs, ~87 controls over all tabs) found no crashes. ZIM reader tested on a generated ZIM (zim-test.mjs), Piper voices verified, Electron shell downloads and runs a real model through the WASM engine.
 - 2026-11-25: VERIFIED through the real UI in headless Chromium: Models search -> download GGUF -> select -> chat reply -> reload keeps model and chat. Desktop widths use the app's tablet rail layout. PDF (pdf.js) and task-alarm modules added.
 - 2026-11-25: VERIFIED in headless Chromium (web/scripts/llm-e2e.mjs, voice-e2e.mjs): GGUF download -> wllama load -> reply (14 tok/s on a 135M model, CPU); Kokoro speaks -> WAV -> Whisper tiny.en returns the exact sentence. WebGPU model catalog (WebLLM) written (not run: no GPU in the sandbox).
 - 2026-11-25 (after restart): TTS, voice input, audio recorder, whisper, Image file:// shim, LiteRT hidden on web. `web/scripts/crawl.mjs` presses every button on every tab to find crashes (run after each change).

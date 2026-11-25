@@ -5,7 +5,7 @@ import { bus, registerNativeModule } from './registry';
 import { fs, dirName } from '../host/fs';
 import { speechChunks } from '../engines/tts/chunks';
 import { PcmQueue, toWav, type Chunk } from '../engines/tts/pcmPlayer';
-import { isKokoro, kokoroInstalled, loadKokoro, removeKokoro, speakerCount, synth } from '../engines/tts/kokoro';
+import { isNeural, speakers, load as loadVoice, synth, installed as installedVoices, remove as removeVoice, playbackRateFor } from '../engines/tts/neural';
 
 const synthApi: SpeechSynthesis | undefined = typeof speechSynthesis !== 'undefined' ? speechSynthesis : undefined;
 let rate = 1;
@@ -83,7 +83,7 @@ async function neuralSpeak(text: string, id: string, rateNow: number) {
         if (job.stopped) return;
         const chunk = await synth(p, neural!.id, neural!.sid, rateNow);
         if (job.stopped) return;
-        last = q.push(chunk);
+        last = q.push(chunk, playbackRateFor(neural!.id, rateNow));
       }
       await last;
       finish(job);
@@ -117,7 +117,7 @@ async function runStream(s: Stream) {
         while (s.q.buffered > 4 && !s.job.stopped) await new Promise((r) => setTimeout(r, 120));
         const chunk = await synth(next, neural.id, neural.sid, rate);
         if (s.job.stopped) return;
-        last = s.q.push(chunk);
+        last = s.q.push(chunk, playbackRateFor(neural.id, rate));
       } else {
         const { done } = sayChunk(next, s.lang, () => { if (!started) { started = true; bus.emit('AtlasTtsStart', { utteranceId: s.job.id }); } });
         last = done;
@@ -133,7 +133,7 @@ registerNativeModule('AtlasTts', {
   addListener() {}, removeListeners() {},
   async warmUp() {
     synthApi?.getVoices();
-    if (neural) void loadKokoro().catch(() => undefined);
+    if (neural) void loadVoice(neural.id).catch(() => undefined);
     return true;
   },
   async setRate(r: number) { rate = r || 1; return true; },
@@ -188,7 +188,7 @@ registerNativeModule('AtlasTts', {
   async stop() { synthApi?.cancel(); stopCurrent(); return true; },
   async cancelSynthesis() { fileCancel = true; return true; },
   async listVoices(lang: string) {
-    if (neural) return Array.from({ length: speakerCount(neural.id) }, (_, i) => ({ name: `sid:${i}`, locale: 'en-US', quality: 500 }));
+    if (neural) return Array.from({ length: speakers(neural.id) }, (_, i) => ({ name: `sid:${i}`, locale: 'en-US', quality: 500 }));
     const get = () => synthApi?.getVoices() ?? [];
     let voices = get();
     if (!voices.length && synthApi) await new Promise<void>((res) => { const t = setTimeout(res, 1500); synthApi.addEventListener('voiceschanged', () => { clearTimeout(t); res(); }, { once: true }); }), (voices = get());
@@ -215,23 +215,24 @@ registerNativeModule('AtlasTts', {
   },
   // ---- natural voices --------------------------------------------------------------------------------
   async setNeuralVoice(id: string, sid: number) {
-    if (!isKokoro(id)) throw new Error('This voice is not available in the web build yet. Kokoro voices are.');
+    if (!isNeural(id)) throw new Error('This voice is not available in the web build yet. Kokoro and Piper voices are.');
+    await loadVoice(id);
     neural = { id, sid };
-    await loadKokoro();
-    return speakerCount(id);
+    return speakers(id);
   },
   async setNeuralSpeaker(sid: number) { if (neural) neural.sid = sid; return true; },
   async installedNeuralVoices() {
-    return kokoroInstalled() ? [{ id: 'kokoro-v1-en', bytes: 92 * 1024 * 1024 }, { id: 'kokoro-en', bytes: 92 * 1024 * 1024 }] : [];
+    return installedVoices();
   },
   async downloadNeuralVoice(id: string) {
-    if (!isKokoro(id)) throw new Error('This voice package is not available in the web build yet. Kokoro voices work offline once downloaded.');
-    await loadKokoro((p) => bus.emit('AtlasVoiceDownload', { id, progress: p }));
+    if (!isNeural(id)) throw new Error('This voice package is not available in the web build yet. Kokoro and Piper voices work offline once downloaded.');
+    await loadVoice(id, (p) => bus.emit('AtlasVoiceDownload', { id, progress: p }));
     return true;
   },
   async cancelNeuralDownload() { return true; },
   async deleteNeuralVoice(id: string) {
-    if (isKokoro(id)) { neural = null; await removeKokoro(); }
+    if (neural?.id === id) neural = null;
+    await removeVoice(id);
     return true;
   },
   async importNeuralVoice() { throw new Error('Importing voice files needs the Android or Windows app.'); },

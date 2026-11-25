@@ -12,6 +12,7 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
+    "@diffusionstudio/vits-web": "^1.0.3",
     "@huggingface/transformers": "^4.3.2",
     "@mlc-ai/web-llm": "^0.2.89",
     "@sqlite.org/sqlite-wasm": "^3.54.1-build1",

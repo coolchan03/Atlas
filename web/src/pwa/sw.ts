@@ -38,6 +38,12 @@ registerRoute(
   new CacheFirst({ cacheName: 'atlas-bundled-assets', plugins: [isolationPlugin, new ExpirationPlugin({ maxAgeSeconds: 365 * 86400, maxEntries: 40 })] }),
 );
 
+// WebAssembly / data files that voice and speech engines fetch from public CDNs (phonemiser, ONNX runtime) are kept on first use.
+registerRoute(
+  ({ url }) => url.origin !== self.location.origin && /(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com)/.test(url.host),
+  new StaleWhileRevalidate({ cacheName: 'atlas-cdn-engines', plugins: [new ExpirationPlugin({ maxAgeSeconds: 365 * 86400, maxEntries: 60 })] }),
+);
+
 // WASM engines and fonts loaded from other origins (CDN fallbacks) are refreshed in the background.
 registerRoute(
   ({ request, url }) => url.origin !== self.location.origin && ['script', 'font', 'style'].includes(request.destination),
