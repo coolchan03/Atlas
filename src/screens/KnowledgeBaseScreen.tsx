@@ -1,5 +1,6 @@
 import { OfficialStandardButton } from '../components/OfficialStandardButton';
 import { DocRoleLine } from '../components/DocRoleLine';
+import { ResearchLibrariesSection } from '../components/ResearchLibrariesSection';
 import { describeLibrary, type LibraryStats } from '../services/rag/libraryStats';
 import { IndexStopped, gate, useIndexControl } from '../services/rag/indexControl';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -268,6 +269,8 @@ export const KnowledgeBaseScreen: React.FC = () => {
           <TouchableOpacity onPress={control.stop} accessibilityRole="button" testID="kb-stop"><Text style={{ color: colors.error }}>Stop</Text></TouchableOpacity>
         </View>
       )}
+
+      <ResearchLibrariesSection projectId={projectId} />
 
       {!!describeLibrary(stats) && !indexingFile && <Text style={styles.docSize} testID="kb-library-size">{describeLibrary(stats)}</Text>}
 
