@@ -28,8 +28,8 @@ After that, airplane mode is fine.
 The same app runs on a PC.
 
 - **Windows app:** download `Atlas-<version>-Setup.exe` (installer) or `Atlas-<version>-Portable.exe` (no install) from the [releases page](https://github.com/coolchan03/Atlas/releases). It bundles llama.cpp, so models run at full speed on the CPU or any GPU (Vulkan, optional CUDA). Models, chats and the library live in `%APPDATA%\Atlas\data`.
-- **Web app (PWA):** open the site, press **Install**, and it works offline like an app. Models run in your browser (WebAssembly, WebGPU for voices and speech). See [what works where](docs/WEB_WINDOWS_PARITY.md).
-- **Build it yourself:** `cd web && npm ci && npm run build` for the web app, `cd desktop && npm ci && npm run web && npm run llama && npm run dist` for the Windows app. GitHub Actions builds both (`atlas-web.yml`, `atlas-windows.yml`).
+- **Web app (PWA):** open **https://coolchan03.github.io/Atlas/**, press **Install**, and it works offline like an app. Models run in your browser (WebAssembly, WebGPU for voices and speech). See [what works where](docs/WEB_WINDOWS_PARITY.md).
+- **Build it yourself:** `cd web && npm ci && npm run build` for the web app, `cd desktop && npm ci && npm run web && npm run llama && npm run dist` for the Windows app. GitHub Actions builds both (`atlas-web.yml` publishes the site to GitHub Pages through the `gh-pages` branch, `atlas-windows.yml` builds the installer). One-time setup for the site: Settings > Pages > Source: Deploy from a branch > `gh-pages` / root.
 
 ## What it does
 

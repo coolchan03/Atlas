@@ -1,8 +1,10 @@
 name: Build Atlas web (PWA)
 
 # Builds the installable web app (react-native-web + Vite) from the same source as the Android app, checks it in a real
-# browser (boots, installs a service worker, opens with the network off), and publishes it to GitHub Pages from the
-# default branch. Every run also keeps the built site as a workflow file (atlas-web.zip) to host anywhere.
+# browser (boots, installs a service worker, opens with the network off), and publishes it as a GitHub Pages site
+# (https://<owner>.github.io/<repo>/) by pushing the built files to the gh-pages branch. One-time setup: Settings > Pages >
+# Build and deployment > Source "Deploy from a branch" > branch gh-pages, folder / (root). Every run also keeps the built
+# site as a workflow file (atlas-web) to host anywhere.
 on:
   push:
     branches: [main, claude/wizardly-brown-yik8o4]
@@ -16,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: 'Publish to GitHub Pages (needs Settings > Pages > Source: GitHub Actions)'
+        description: 'Publish to the gh-pages branch even when run from a branch other than main'
         type: boolean
         default: false
 
@@ -89,21 +91,36 @@ jobs:
           path: web/smoke.png
           if-no-files-found: ignore
           retention-days: 7
-      - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main' || inputs.deploy == true
-        with:
-          path: web/dist
 
-  deploy:
+  # The site is pushed to the gh-pages branch (one commit, replaced every time, so the branch never grows). Pushes made with the
+  # workflow's own token do not start other workflows.
+  publish:
     needs: build
-    if: github.ref == 'refs/heads/main' || inputs.deploy == true
+    if: github.event_name == 'push' || inputs.deploy == true
     runs-on: ubuntu-latest
     permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      contents: write
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: atlas-web
+          path: site
+      - name: Add the files GitHub Pages wants
+        run: |
+          touch site/.nojekyll
+          cp site/index.html site/404.html   # a deep link or a refresh still opens the app
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Atlas web build ${{ github.run_number }} (${{ github.sha }})'
+      - name: Turn on GitHub Pages for the gh-pages branch (needs repository admin rights; skipped when the token lacks them)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/pages" -f "source[branch]=gh-pages" -f "source[path]=/" || echo "::notice title=Pages::Set Settings > Pages > Source to 'Deploy from a branch', gh-pages, / (root) once."
