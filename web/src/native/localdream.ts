@@ -144,6 +144,28 @@ async function validateCheckpoint(path: string) {
   }
 }
 
+/**
+ * A model downloaded from the catalog (imageCatalog.ts) is a bare .gguf in its folder. The first load gives it the
+ * same layout an imported one has: model.gguf, the manifest and the ready marker. The architecture is read from the
+ * file; the folder name (which carries the repository and file name) settles the two checkpoints that do not state it.
+ */
+async function adoptDownloadedCheckpoint(dir: string) {
+  const backend = fs();
+  const entries = (await backend.readdir(dir).catch(() => [])).filter((e) => e.isFile && /\.(gguf|safetensors?)$/i.test(e.name) && !e.name.startsWith('model.'));
+  const file = entries.sort((a, b) => b.size - a.size)[0];
+  if (!file) throw new Error('Directly imported image model manifest is missing');
+  const info = await inspectFile(file.path, file.name);
+  const hint = baseName(dir).toLowerCase();
+  // The folder name says SDXL for the catalog's SDXL files, whose general.architecture is the generic "sd" of every Stable Diffusion GGUF.
+  let family = /sdxl|xl[-_]?(base|turbo)/.test(hint) ? 'sdxl' : info.family;
+  if (family === 'unknown') family = /sd[-_]?turbo|stable[-_]?diffusion|sd[-_]?v?1|sd15/.test(hint) ? 'sd15' : 'unknown';
+  if (!SUPPORTED.includes(family)) throw new Error('Cannot identify a supported image architecture. Atlas will not guess and render corrupt images.');
+  const ext = /\.gguf$/i.test(file.name) ? 'gguf' : 'safetensors';
+  await backend.move(file.path, `${dir}/model.${ext}`);
+  await writeManifest(dir, { family, variant: variantOf(`${hint}${file.name}`), primary: `model.${ext}`, support: [] });
+  await backend.writeFile(`${dir}/_ready`, '');
+}
+
 let loaded: { dir: string; threads?: number } | null = null;
 let generating = false;
 
@@ -232,7 +254,7 @@ if (host()) registerNativeModule('LocalDreamModule', {
   async loadModel(p: { modelPath: string; threads?: number }) {
     if (!p.modelPath) throw new Error('modelPath is required');
     const dir = norm(p.modelPath);
-    if (!(await fs().exists(manifestPath(dir)))) throw new Error('Directly imported image model manifest is missing');
+    if (!(await fs().exists(manifestPath(dir)))) await adoptDownloadedCheckpoint(dir);
     const m = await readManifest(dir);
     await validateCheckpoint(`${dir}/${m.primary}`);
     loaded = { dir, threads: p.threads };

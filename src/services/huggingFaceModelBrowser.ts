@@ -2,8 +2,11 @@ export interface HFImageModel {
   id: string;
   name: string;
   displayName: string;
-  backend: 'mnn' | 'qnn';
+  backend: 'mnn' | 'qnn' | 'sdcpp';
   variant?: string;
+  /** sd.cpp checkpoints (the Windows app's catalog): the architecture and variant of the weights. */
+  nativeImageFamily?: 'sd15' | 'sdxl' | 'flux' | 'z_image' | 'anima' | 'chroma';
+  nativeImageVariant?: 'base' | 'turbo';
   downloadUrl: string;
   fileName: string;
   size: number;

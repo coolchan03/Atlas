@@ -153,5 +153,10 @@ export function hfModelToDescriptor(
     coremlFiles: hfModel._coremlFiles,
     repo: hfModel.repo,
     attentionVariant: hfModel._coremlAttentionVariant,
+    // A single sd.cpp weight file: downloaded into its own folder with the app's multi-file downloader.
+    ...(hfModel.backend === 'sdcpp' ? {
+      huggingFaceRepo: hfModel.repo, huggingFaceFiles: [{ path: hfModel.fileName, size: hfModel.size }],
+      nativeImageFamily: hfModel.nativeImageFamily, nativeImageVariant: hfModel.nativeImageVariant,
+    } : {}),
   };
 }

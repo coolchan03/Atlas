@@ -26,8 +26,11 @@ export interface ImageModelDescriptor {
   downloadUrl: string;
   size: number;
   style: string;
-  backend: 'mnn' | 'qnn' | 'coreml';
+  backend: 'mnn' | 'qnn' | 'coreml' | 'sdcpp';
   variant?: string;
+  /** sd.cpp checkpoints (the Windows app's catalog): the architecture and variant, known before the file is opened. */
+  nativeImageFamily?: ONNXImageModel['nativeImageFamily'];
+  nativeImageVariant?: ONNXImageModel['nativeImageVariant'];
   huggingFaceRepo?: string;
   huggingFaceFiles?: { path: string; size: number }[];
   /** Multi-file download manifest (Core ML full-precision models) */

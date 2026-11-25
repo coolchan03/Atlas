@@ -14,6 +14,8 @@ export function imageDescriptorFromMetadata(modelId: string, meta: Record<string
     size: meta.imageModelSize ?? 0,
     style: meta.imageModelStyle ?? '',
     backend: meta.imageModelBackend ?? 'coreml',
+    nativeImageFamily: meta.imageModelNativeFamily,
+    nativeImageVariant: meta.imageModelNativeVariant,
     attentionVariant: meta.imageModelAttentionVariant,
     huggingFaceRepo: meta.imageModelRepo,
     huggingFaceFiles: meta.imageModelHuggingFaceFiles,

@@ -421,6 +421,9 @@ class HardwareService {
   }
   async getImageModelRecommendation(): Promise<ImageModelRecommendation> {
     if (this.cachedImageRecommendation) return this.cachedImageRecommendation;
+    // The Windows app has no phone chip to read: it says which stable-diffusion.cpp checkpoints suit this PC (web/src/native/imageCatalog.ts).
+    const desktopRec = (globalThis as any).__ATLAS_IMAGE_RECOMMENDATION__;
+    if (typeof desktopRec === 'function') return (this.cachedImageRecommendation = desktopRec());
     const socInfo = await this.getSoCInfo();
     const ramGB = this.getTotalMemoryGB();
     let rec: ImageModelRecommendation;

@@ -64,6 +64,9 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
           _coreml: true, _coremlFiles: m.files,
           _coremlAttentionVariant: m.attentionVariant,
         })));
+      } else if (typeof (globalThis as any).__ATLAS_IMAGE_CATALOG__ === 'function') {
+        // The Windows app lists stable-diffusion.cpp checkpoints instead of the Android MNN / QNN packages (see web/src/native/imageCatalog.ts).
+        setAvailableHFModels(await (globalThis as any).__ATLAS_IMAGE_CATALOG__(forceRefresh));
       } else {
         const socInfo = await hardwareService.getSoCInfo();
         setAvailableHFModels(await fetchAvailableModels(forceRefresh, { skipQnn: !socInfo.hasNPU }));
@@ -132,7 +135,8 @@ export function useImageModels(setAlertState: (s: AlertState) => void) {
       setImageRec(rec);
       if (!userChangedBackendFilter && Platform.OS !== 'ios') {
         let filter: 'qnn' | 'mnn' | 'all';
-        if (rec.recommendedBackend === 'qnn') filter = 'qnn';
+        if (rec.recommendedBackend === 'sdcpp') filter = 'all';
+        else if (rec.recommendedBackend === 'qnn') filter = 'qnn';
         else if (rec.recommendedBackend === 'mnn') filter = 'mnn';
         else filter = 'all';
         setBackendFilter(filter);

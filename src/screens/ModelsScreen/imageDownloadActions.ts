@@ -23,7 +23,9 @@ interface ImageMetadata {
   imageModelDescription: string;
   imageModelSize: number;
   imageModelStyle?: string;
-  imageModelBackend?: 'mnn' | 'qnn' | 'coreml';
+  imageModelBackend?: 'mnn' | 'qnn' | 'coreml' | 'sdcpp';
+  imageModelNativeFamily?: ONNXImageModel['nativeImageFamily'];
+  imageModelNativeVariant?: ONNXImageModel['nativeImageVariant'];
   imageModelRepo?: string;
   imageModelAttentionVariant?: string;
   imageModelDownloadUrl?: string;
@@ -180,6 +182,7 @@ function buildImageModel(modelInfo: ImageModelDescriptor, modelPath: string): ON
     id: modelInfo.id, name: modelInfo.name, description: modelInfo.description,
     modelPath, downloadedAt: new Date().toISOString(), size: modelInfo.size,
     style: modelInfo.style, backend: modelInfo.backend, attentionVariant: modelInfo.attentionVariant,
+    ...(modelInfo.backend === 'sdcpp' ? { nativeImageFamily: modelInfo.nativeImageFamily, nativeImageVariant: modelInfo.nativeImageVariant, supportFiles: [] } : {}),
   };
 }
 
@@ -276,6 +279,8 @@ export async function downloadHuggingFaceModel(
       imageModelSize: modelInfo.size,
       imageModelStyle: modelInfo.style,
       imageModelBackend: modelInfo.backend,
+      imageModelNativeFamily: modelInfo.nativeImageFamily,
+      imageModelNativeVariant: modelInfo.nativeImageVariant,
       imageModelRepo: modelInfo.huggingFaceRepo,
       imageModelHuggingFaceFiles: modelInfo.huggingFaceFiles,
     },
@@ -465,7 +470,7 @@ export async function proceedWithDownload(
         await extractImageModelZip(zipPath, modelDir);
         logger.log(`[ImageDownload] unzip took ${Date.now() - t1}ms modelId=${modelInfo.id}`);
         // A partial unzip must NEVER be marked _ready (see ensureImageExtractionComplete).
-        await ensureImageExtractionComplete({ backend: modelInfo.backend, modelDir, zipPath, modelId: modelInfo.id });
+        await ensureImageExtractionComplete({ backend: modelInfo.backend === 'sdcpp' ? undefined : modelInfo.backend, modelDir, zipPath, modelId: modelInfo.id });
         const resolvedModelDir = modelInfo.backend === 'coreml' ? await resolveCoreMLModelDir(modelDir) : modelDir;
         await RNFS.writeFile(`${modelDir}/_ready`, '', 'utf8'); // not swallowed, see above
         await RNFS.unlink(zipPath).catch(() => {});

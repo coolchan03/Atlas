@@ -51,6 +51,11 @@ exports.run = (win, app) => {
               sub.remove();
               const list = await L.getGeneratedImages();
               out.image = { family: info.family, variant: imp.variant, gpu: gpu.enumerated, steps, width: img.width, height: img.height, size: (await a.fs().stat(img.imagePath)).size, listed: list.length, loaded: await L.getLoadedBackend() };
+              // A catalog download is a bare checkpoint in a folder: the first load adopts it (manifest, model.<ext>, ready marker).
+              await a.fs().mkdir('/atlas/files/image_models/sdcpp_sd_turbo_demo');
+              await a.fs().writeFile('/atlas/files/image_models/sdcpp_sd_turbo_demo/downloaded.safetensors', bytes);
+              await L.loadModel({ modelPath: '/atlas/files/image_models/sdcpp_sd_turbo_demo', backend: 'sdcpp' });
+              out.image.adopted = (await a.fs().exists('/atlas/files/image_models/sdcpp_sd_turbo_demo/atlas-image.json')) && (await a.fs().exists('/atlas/files/image_models/sdcpp_sd_turbo_demo/model.safetensors'));
               await L.deleteGeneratedImage(img.id);
               await L.unloadModel();
             }
@@ -69,7 +74,7 @@ exports.run = (win, app) => {
       } catch { /* optional */ }
       console.log('SELFTEST ' + JSON.stringify(result));
       if (errors.length) console.log('CONSOLE ERRORS ' + JSON.stringify(errors.slice(0, 8)));
-      const imageOk = !process.env.ATLAS_SELFTEST_IMAGE || (result.image && result.image.family === 'sd15' && result.image.width === 256 && result.image.size > 100 && result.image.steps.join() === '1,2,3,4' && result.image.listed === 1);
+      const imageOk = !process.env.ATLAS_SELFTEST_IMAGE || (result.image && result.image.family === 'sd15' && result.image.width === 256 && result.image.size > 100 && result.image.steps.join() === '1,2,3,4' && result.image.listed === 1 && result.image.adopted === true);
       const ok = imageOk && result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && (result.initialUrl || /Skip|YOURS|Atlas/i.test(result.text || ''));
       console.log(ok ? 'SELFTEST PASSED' : 'SELFTEST FAILED');
       app.exit(ok ? 0 : 1);

@@ -151,7 +151,7 @@ export interface SoCInfo {
 }
 
 export interface ImageModelRecommendation {
-  recommendedBackend: 'qnn' | 'mnn' | 'coreml' | 'all';
+  recommendedBackend: 'qnn' | 'mnn' | 'coreml' | 'sdcpp' | 'all';
   qnnVariant?: '8gen2' | '8gen1' | 'min';
   /** Substrings matched against model name to identify recommended models */
   recommendedModels?: string[];
