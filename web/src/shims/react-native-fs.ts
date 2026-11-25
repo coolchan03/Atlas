@@ -131,6 +131,12 @@ export async function moveFile(from: string, to: string) {
 export async function copyFile(from: string, to: string) {
   await boot();
   await fs().mkdir(dirName(to));
+  // A big file that a file picker just placed in the scratch folder is moved, not copied: a second multi-GB copy
+  // would double the storage used and the time taken (the scratch copy is only ever an intermediate).
+  if (norm(from).startsWith('/atlas/cache/picked/') && (await fs().stat(from)).size > 50 * 1024 * 1024) {
+    await fs().move(from, to);
+    return;
+  }
   await fs().copy(from, to);
 }
 export async function copyFileAssets(assetPath: string, dest: string) {

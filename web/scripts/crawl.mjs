@@ -19,7 +19,8 @@ const boot = async () => { errs = []; await page.goto(url, { waitUntil: 'load' }
   if (await page.getByText('Skip for Now', { exact: true }).count()) { await page.getByText('Skip for Now', { exact: true }).first().click(); await page.waitForTimeout(1200); } };
 const labels = async () => page.evaluate(() => {
   const out = []; const seen = new Set();
-  for (const e of document.querySelectorAll('[tabindex="0"],[role=button],[role=tab],[role=switch],a')) {
+  for (const e of document.querySelectorAll('*')) {
+    if (getComputedStyle(e).cursor !== 'pointer') continue;
     const r = e.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || r.bottom < 0 || r.top > innerHeight) continue;
     const t = (e.innerText || e.getAttribute('aria-label') || '').trim().split('\n')[0].slice(0, 40); const k = t + '@' + Math.round(r.top / 20);
     if (t && /[A-Za-z]{3}/.test(t) && !seen.has(k)) { seen.add(k); out.push(t); }

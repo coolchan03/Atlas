@@ -20,6 +20,7 @@ for (const step of process.argv.slice(2)) {
     else if (cmd === 'fill') { const [ph, ...t] = arg.split('|'); await page.getByPlaceholder(ph).first().fill(t.join('|')); }
     else if (cmd === 'xy') { const [x, y] = arg.split(',').map(Number); await page.mouse.click(x, y); }
     else if (cmd === 'press') await page.keyboard.press(arg)
+    else if (cmd === 'choose') page.once('filechooser', (fc) => fc.setFiles(arg))
     else if (cmd === 'wait') await page.waitForTimeout(Number(arg));
     else if (cmd === 'shot') await page.screenshot({ path: arg });
     else if (cmd === 'type') await page.keyboard.type(arg);

@@ -1,9 +1,8 @@
-import { Platform } from 'react-native';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { showAlert, AlertState } from '../../components/CustomAlert';
 import { useAppStore } from '../../stores';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
-import { inspectNativeImageFile, importNativeImageFile } from './nativeImageImport';
+import { canInspectNativeImageFile, inspectNativeImageFile, importNativeImageFile } from './nativeImageImport';
 
 /**
  * Import a text model (.gguf, or model + vision file, or .litertlm) from the phone's storage.
@@ -27,7 +26,7 @@ export async function quickImportModel(deps: {
       if (/\.safetensors?$/i.test(file.name)) {
         return await importNativeImageFile(file.uri, file.name, deps);
       }
-      if (Platform.OS === 'android' && /\.gguf$/i.test(file.name)) {
+      if (canInspectNativeImageFile() && /\.gguf$/i.test(file.name)) {
         const info = await inspectNativeImageFile(file.uri, file.name);
         if (info.kind === 'image' || info.kind === 'lora' || info.kind === 'unsupported') {
           return await importNativeImageFile(file.uri, file.name, deps);

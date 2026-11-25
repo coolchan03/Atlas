@@ -12,6 +12,9 @@ type Deps = {
 
 export type ImageFileInfo = { kind: 'image' | 'lora' | 'unsupported' | 'unknown'; family: NonNullable<ONNXImageModel['nativeImageFamily']> };
 
+/** Whether this build can tell an image .gguf from a language .gguf (the Android image engine is present). Without it every .gguf is a language model. */
+export const canInspectNativeImageFile = (): boolean => Platform.OS === 'android' && !!NativeModules.LocalDreamModule?.inspectAtlasImageFile;
+
 export async function inspectNativeImageFile(uri: string, name: string): Promise<ImageFileInfo> {
   if (Platform.OS !== 'android' || !NativeModules.LocalDreamModule?.inspectAtlasImageFile) {
     throw new Error('Direct image models require the Android Atlas app.');

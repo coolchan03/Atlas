@@ -19,7 +19,7 @@ import { getDirectorySize } from './utils';
 import { useTextModels } from './useTextModels';
 import { useImageModels } from './useImageModels';
 import { importGgufFiles, getErrorMessage } from './importHelpers';
-import { inspectNativeImageFile, importNativeImageFile } from './nativeImageImport';
+import { canInspectNativeImageFile, inspectNativeImageFile, importNativeImageFile } from './nativeImageImport';
 import { importVoiceAt, isVoiceArchive, selectVoice } from '../../atlasVoice/neural';
 import { isPickerStuck } from '../../utils/pickerErrorUtils';
 
@@ -221,7 +221,7 @@ export function useModelsScreen() {
         await importNativeImageFile(firstUri, firstFileName, { setImportProgress, setAlertState });
         return;
       }
-      if (Platform.OS === 'android' && resolvedFiles.length === 1 && /\.gguf$/i.test(firstFileName)) {
+      if (canInspectNativeImageFile() && resolvedFiles.length === 1 && /\.gguf$/i.test(firstFileName)) {
         const info = await inspectNativeImageFile(firstUri, firstFileName);
         if (info.kind === 'image' || info.kind === 'lora') {
           await importNativeImageFile(firstUri, firstFileName, { setImportProgress, setAlertState });

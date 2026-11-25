@@ -2,7 +2,17 @@
 import { prepareSqlite } from './host/sqlite';
 import { fs } from './host/fs';
 
+/** Files the pickers left in the scratch folder (anything older than a day) are removed so they never pile up. */
+async function sweepPicked() {
+  try {
+    const dir = '/atlas/cache/picked';
+    if (!(await fs().exists(dir))) return;
+    for (const e of await fs().readdir(dir)) if (Date.now() - e.mtime > 24 * 3600 * 1000 || e.mtime === 0) await fs().unlink(e.path);
+  } catch { /* best effort */ }
+}
+
 export async function boot() {
+  void sweepPicked();
   try {
     // Ask the browser not to evict our storage (models, library packs, chats are all in it).
     void navigator.storage?.persist?.();
