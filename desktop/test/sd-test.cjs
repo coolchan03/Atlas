@@ -35,7 +35,9 @@ assert.throws(() => sd.buildArgs({ ...base, family: 'flux', variant: 'base', par
   fs.writeFileSync(path.join(model, 'model.safetensors'), Buffer.from('x'));
   fs.writeFileSync(path.join(model, 'atlas-image.json'), JSON.stringify({ family: 'sd15', variant: 'base', primary: 'model.safetensors', support: [] }));
   const steps = [];
-  sd.init(path.join(__dirname, 'fake-sd'), { real: (p) => p, virtual: (p) => p, onProgress: (e) => steps.push(e) });
+  // Virtual paths (/atlas/...) live under the temp folder, as the app's disk file system maps them under its data folder.
+  const real = (p) => (p.startsWith('/atlas/') ? path.join(dir, 'data', p) : p);
+  sd.init(path.join(__dirname, 'fake-sd'), { real, virtual: (p) => p, onProgress: (e) => steps.push(e) });
   assert.equal(sd.available(), true);
   assert.equal(sd.probe('vulkan').enumerated, true);
   for (const computeBackend of ['vulkan', 'cpu']) {
