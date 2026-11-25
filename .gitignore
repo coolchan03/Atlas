@@ -104,3 +104,7 @@ web/dist-desktop/
 desktop/dist/
 desktop/out/
 desktop/resources/llama/
+
+# the desktop icons live in desktop/build (a folder name the Xcode rules above would otherwise ignore)
+!desktop/build/
+!desktop/build/**
