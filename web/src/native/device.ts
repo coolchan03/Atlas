@@ -191,7 +191,8 @@ registerNativeModule('AtlasSensor', {
 });
 
 // ---- memory ------------------------------------------------------------------------------------------
-const FEATURE_LIBS = ['librnllama_wasm.so', 'libsherpa-onnx_wasm.so', 'librnwhisper_wasm.so', 'libkiwix_js.so'];
+// libatlas_sdcli.so is the name the app's build rules look for: the Windows app lists it when stable-diffusion.cpp is bundled.
+const FEATURE_LIBS = ['librnllama_wasm.so', 'libsherpa-onnx_wasm.so', 'librnwhisper_wasm.so', 'libkiwix_js.so', ...(host()?.image?.available ? ['libatlas_sdcli.so'] : [])];
 registerNativeModule('DeviceMemoryModule', {
   buildInfo: { abi: 'wasm32', nativeLibs: FEATURE_LIBS },
   async getMemoryInfo() {

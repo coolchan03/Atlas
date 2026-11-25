@@ -11,6 +11,7 @@
     "web": "cd ../web && npx --prefix ../desktop cross-env ATLAS_TARGET=desktop vite build",
     "start": "electron . --no-sandbox",
     "llama": "node scripts/fetch-llama.mjs",
+    "sd": "node scripts/fetch-sd.mjs",
     "pack": "electron-builder --win --dir",
     "dist": "electron-builder --win nsis portable",
     "test": "node scripts/selftest.cjs"
@@ -52,6 +53,13 @@
       {
         "from": "resources/llama",
         "to": "llama",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/sd",
+        "to": "sd",
         "filter": [
           "**/*"
         ]

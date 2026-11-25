@@ -4,6 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const diskfs = require('./lib/diskfs.cjs');
 const llama = require('./lib/llama.cjs');
+const sd = require('./lib/sd.cjs');
 const secrets = require('./lib/secrets.cjs');
 const windowState = require('./lib/windowState.cjs');
 const proto = require('./lib/protocol.cjs');
@@ -37,6 +38,13 @@ function llamaDir() {
   const packaged = path.join(process.resourcesPath || '', 'llama');
   if (fs.existsSync(packaged)) return packaged;
   return path.join(__dirname, 'resources', 'llama');
+}
+
+function sdDir() {
+  if (process.env.ATLAS_SD_DIR) return process.env.ATLAS_SD_DIR; // tests: a stand-in engine
+  const packaged = path.join(process.resourcesPath || '', 'sd');
+  if (fs.existsSync(packaged)) return packaged;
+  return path.join(__dirname, 'resources', 'sd');
 }
 
 /** A file Windows opened with Atlas (double click on a .gguf): made reachable, then handed to the app as a virtual path. */
@@ -201,6 +209,12 @@ function registerIpc() {
   });
   ipcMain.handle('llama:stop', (_e, id) => llama.stop(id));
   ipcMain.handle('system:info', () => llama.systemInfo());
+  // Image generation (stable-diffusion.cpp). `available` is read synchronously at startup: it decides whether the app offers image models at all.
+  ipcMain.on('image:available', (e) => { e.returnValue = sd.available(); });
+  ipcMain.handle('image:probe', (_e, api) => sd.probe(api));
+  ipcMain.handle('image:status', () => sd.status());
+  ipcMain.handle('image:generate', (_e, req) => sd.generate(req));
+  ipcMain.handle('image:cancel', () => sd.cancel());
   let blocker = null;
   ipcMain.handle('power:block', (_e, on) => {
     if (on && blocker == null) blocker = powerSaveBlocker.start('prevent-display-sleep');
@@ -258,6 +272,7 @@ app.whenReady().then(async () => {
   diskfs.init(path.join(data, 'data'));
   secrets.init(data);
   llama.init(llamaDir(), (id, pct) => win?.webContents.send('llama:progress', id, pct));
+  sd.init(sdDir(), { real: diskfs.real, virtual: diskfs.virtualFor, onProgress: (e) => win?.webContents.send('image:progress', e) });
   proto.registerHandlers(webDir());
   setupSession();
   registerIpc();
@@ -266,5 +281,5 @@ app.whenReady().then(async () => {
   if (!isDev) setTimeout(() => void checkForUpdates(), 15000);
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
-app.on('window-all-closed', () => { llama.stopAll(); if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { quitting = true; llama.stopAll(); });
+app.on('window-all-closed', () => { llama.stopAll(); sd.stopAll(); if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => { quitting = true; llama.stopAll(); sd.stopAll(); });

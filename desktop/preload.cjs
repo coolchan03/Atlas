@@ -9,6 +9,7 @@ const inv = async (ch, ...a) => {
   return r;
 };
 const listeners = new Map();
+ipcRenderer.on('image:progress', (_e, ev) => { for (const cb of listeners.get('image:progress') || []) cb(ev); });
 ipcRenderer.on('llama:progress', (_e, id, pct) => { for (const cb of listeners.get('llama:progress') || []) cb(id, pct); });
 // Files opened before the page has registered a listener (a double click that launched the app) are kept and delivered later.
 const waitingOpen = [];
@@ -47,6 +48,11 @@ contextBridge.exposeInMainWorld('atlasHost', {
   llama: {
     capabilities: () => inv('llama:capabilities'), start: (o) => inv('llama:start', o), stop: (id) => inv('llama:stop', id),
     onProgress: (cb) => on('llama:progress', cb),
+  },
+  image: {
+    available: ipcRenderer.sendSync('image:available'),
+    probe: (api) => inv('image:probe', api), status: () => inv('image:status'), cancel: () => inv('image:cancel'),
+    generate: (req) => inv('image:generate', req), onProgress: (cb) => on('image:progress', cb),
   },
   system: () => inv('system:info'),
   powerSaveBlocker: (on_) => inv('power:block', on_),

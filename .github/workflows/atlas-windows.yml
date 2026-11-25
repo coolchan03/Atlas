@@ -107,6 +107,17 @@ jobs:
           mkdir -p resources/llama
           node scripts/fetch-llama.mjs || echo "::warning title=No llama.cpp engine bundled::The app will use its built-in WebAssembly engine."
           mkdir -p resources/llama
+      # Image generation (stable-diffusion.cpp's sd-cli.exe). Optional: without it the app hides image models.
+      - name: Download stable-diffusion.cpp (sd-cli.exe)
+        continue-on-error: true
+        working-directory: desktop
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p resources/sd
+          node scripts/fetch-sd.mjs || echo "::warning title=No image engine bundled::The app will not offer image models."
+          mkdir -p resources/sd
       - name: Start-up check of the packaged shell (unpacked app, runs the page test)
         working-directory: desktop
         shell: bash

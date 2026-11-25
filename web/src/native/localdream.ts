@@ -7,14 +7,18 @@ import { bus, registerNativeModule } from './registry';
 import { fs, norm, baseName } from '../host/fs';
 
 interface ImageHost {
-  capabilities(): Promise<{ available: boolean }>;
   probe(api: string): Promise<{ enumerated: boolean; backend: string; detail: string; nativeOutput: string }>;
   status(): Promise<Record<string, unknown>>;
   generate(req: Record<string, unknown>): Promise<{ id: string; imagePath: string; width: number; height: number; seed: number }>;
   cancel(): Promise<boolean>;
   onProgress(cb: (e: { step: number; totalSteps: number; progress: number; previewPath?: string }) => void): void;
 }
-const host = (): ImageHost | undefined => (globalThis as any).atlasHost?.image;
+// `available` is false when this build of the app ships without the engine: then the module is not registered at all,
+// and the app says image generation is not in this build (the same as an Android build without the engine library).
+const host = (): ImageHost | undefined => {
+  const h = (globalThis as any).atlasHost?.image;
+  return h?.available ? h : undefined;
+};
 
 const GENERATED = '/atlas/files/generated_images';
 const SUPPORTED = ['sd15', 'sdxl', 'flux', 'z_image', 'anima', 'chroma'];
@@ -143,6 +147,7 @@ async function validateCheckpoint(path: string) {
 let loaded: { dir: string; threads?: number } | null = null;
 let generating = false;
 
+if (host()) host()!.onProgress((e) => bus.emit('LocalDreamProgress', e));
 if (host()) registerNativeModule('LocalDreamModule', {
   addListener() {}, removeListeners() {},
   getConstants() {
@@ -251,7 +256,6 @@ if (host()) registerNativeModule('LocalDreamModule', {
     if (!loaded) throw new Error('No directly imported image model is loaded');
     if (generating) throw new Error('Image generation already in progress');
     generating = true;
-    h.onProgress((e) => bus.emit('LocalDreamProgress', e));
     try {
       await fs().mkdir(GENERATED);
       return await h.generate({ modelDir: loaded.dir, outputDir: GENERATED, params });

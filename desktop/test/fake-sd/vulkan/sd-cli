@@ -1,0 +1,30 @@
+#!/usr/bin/env node
+// A stand-in for stable-diffusion.cpp's sd-cli, used to test the desktop image engine manager without the real binary.
+// Understands: --list-devices, -m / --diffusion-model, -o, -W, -H, --steps, -p, --preview-path. Draws a progress bar with
+// carriage returns like the real one, writes a small valid PNG.
+const fs = require('node:fs');
+const zlib = require('node:zlib');
+const a = process.argv.slice(2);
+const get = (f) => { const i = a.indexOf(f); return i >= 0 ? a[i + 1] : undefined; };
+if (a.includes('--list-devices')) { console.log(process.env.FAKE_SD_GPU === '0' ? 'No devices' : 'vulkan0\tFake GPU (8192 MiB)'); process.exit(0); }
+const crc = (buf) => { let c, t = []; for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } let r = 0xffffffff; for (const b of buf) r = t[(r ^ b) & 255] ^ (r >>> 8); return (r ^ 0xffffffff) >>> 0; };
+const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+const png = (w, h) => {
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const raw = Buffer.alloc((w * 3 + 1) * h); for (let y = 0; y < h; y++) { raw[y * (w * 3 + 1)] = 0; for (let x = 0; x < w * 3; x++) raw[y * (w * 3 + 1) + 1 + x] = (x + y) & 255; }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+};
+const w = Number(get('-W') || 512), h = Number(get('-H') || 512), steps = Number(get('--steps') || 4);
+console.error('[INFO ] loading tensors from ' + (get('-m') || get('--diffusion-model')));
+console.error('[INFO ] prompt: ' + get('-p') + ' backend: ' + get('--backend'));
+let i = 0;
+const tick = () => {
+  i++;
+  process.stderr.write(`\r  |${'='.repeat(i)}${' '.repeat(steps - i)}| ${i}/${steps} - 0.05s/it`);
+  if (get('--preview-path') && i % 2 === 0) { try { fs.writeFileSync(get('--preview-path').replace('%04d', String(i).padStart(4, '0')), png(8, 8)); } catch { /* ignore */ } }
+  if (i < steps) return setTimeout(tick, 400);
+  process.stderr.write('\n[INFO ] decoding latents (vae)\n');
+  fs.writeFileSync(get('-o'), png(w, h));
+  console.error('[INFO ] save result image to ' + get('-o'));
+};
+setTimeout(tick, 200);
