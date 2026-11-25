@@ -329,6 +329,30 @@ class MemoryFs implements FsBackend {
   }
 }
 
+// Writes started by code that cannot await them (the audio recorder's synchronous stop()) are tracked here;
+// every read waits for the pending write of the same path, so "stop recording, then read the file" is safe.
+const pendingWrites = new Map<string, Promise<unknown>>();
+export function trackWrite(path: string, p: Promise<unknown>) {
+  const key = norm(path);
+  const done = p.catch(() => undefined).finally(() => { if (pendingWrites.get(key) === done) pendingWrites.delete(key); });
+  pendingWrites.set(key, done);
+}
+const settle = (path: string) => pendingWrites.get(norm(path)) ?? null;
+function withPending(b: FsBackend): FsBackend {
+  const readers = ['readFile', 'readRange', 'stat', 'exists', 'getFile', 'copy', 'move', 'readdir', 'unlink', 'appendFile', 'openWriter'] as const;
+  const wrapped: any = Object.create(b);
+  for (const m of readers) {
+    wrapped[m] = async (...args: any[]) => {
+      const w = settle(args[0]);
+      if (w) await w;
+      if (m === 'copy' || m === 'move') { const w2 = settle(args[1]); if (w2) await w2; }
+      return (b as any)[m](...args);
+    };
+  }
+  if (b.hash) wrapped.hash = async (p: string, a: string) => { const w = settle(p); if (w) await w; return b.hash!(p, a); };
+  return wrapped as FsBackend;
+}
+
 let backend: FsBackend | null = null;
 export function setFsBackend(b: FsBackend) {
   backend = b;
@@ -336,7 +360,7 @@ export function setFsBackend(b: FsBackend) {
 export function fs(): FsBackend {
   if (backend) return backend;
   const raw = (globalThis as any).atlasHost?.fsRaw;
-  if (raw) return (backend = new DesktopFs(raw));
-  backend = typeof navigator !== 'undefined' && !!navigator.storage?.getDirectory ? new OpfsFs() : new MemoryFs();
+  if (raw) return (backend = withPending(new DesktopFs(raw)));
+  backend = withPending(typeof navigator !== 'undefined' && !!navigator.storage?.getDirectory ? new OpfsFs() : new MemoryFs());
   return backend;
 }

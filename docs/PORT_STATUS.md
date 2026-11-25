@@ -33,15 +33,15 @@ Rules for the port (so the mobile app is never touched or broken):
 - [x] device-info, haptics (vibrate), edge-to-edge, keyboard-controller, reanimated (own implementation), gesture-handler (package web build), svg (package web build), vector-icons fonts, slider
 - [x] op-sqlite -> official sqlite-wasm (FTS5), saved to OPFS
 - [x] react-native-zip-archive -> fflate
-- [ ] react-native-voice -> Web Speech API
-- [ ] react-native-audio-api -> Web Audio / MediaRecorder
+- [x] react-native-voice -> Web Speech API (processLocally where supported)
+- [x] react-native-audio-api -> Web Audio (recorder writes WAV to the virtual fs, decodeAudioData reads app paths)
 - [x] llama.rn shim over engine layer; wllama backend + llama-server backend written (browser inference NOT yet run end to end: needs a model file)
-- [ ] whisper.rn -> WASM whisper (or Web Speech fallback), desktop: whisper.cpp
+- [x] whisper.rn -> transformers.js Whisper (WebGPU/WASM); the ggml .bin download is replaced by an ONNX model fetch + marker file (both browser and Windows app)
 
 ### M3. NativeModules on web
 - [x] DownloadManagerModule (fetch streaming to OPFS, resume, progress events)
 - [x] AtlasDevice (crypto byte-compatible with Android, location, compass, torch, wake lock, share, calendar .ics)
-- [ ] AtlasTts (speechSynthesis; desktop: Windows SAPI/OneCore voices)
+- [x] AtlasTts (speechSynthesis incl. Windows voices; Kokoro natural voices via kokoro-js on WebGPU/WASM; stream speaking; synthesizeToFile with Kokoro)
 - [x] AtlasMediaControls (MediaSession API)
 - [x] AtlasSensor (Generic Sensor API where available)
 - [ ] DeviceMemoryModule, AtlasShare (Web Share API), AtlasQrScanner (BarcodeDetector), AtlasTaskAlarms (Notifications / timers), AtlasPresentationExporter, AtlasVideo, AtlasKiwix, AtlasNearbySync, AtlasSpeakers
@@ -72,12 +72,13 @@ Rules for the port (so the mobile app is never touched or broken):
 1. Smoke-test every top-level screen for crashes (script all tabs / Settings screens)
 2. AtlasTts + atlasVoice (speechSynthesis; Kokoro / Piper via WebGPU ONNX), voice input (Web Speech API), whisper (transformers.js)
 3. react-native-audio-api shim (recorder, AudioContext player)
-4. WebGPU LLM engine (WebLLM) + model catalog entries for it; hide LiteRT/Vulkan/QNN options on web
+4. WebGPU LLM engine (WebLLM): plan = pseudo `webllm://<id>` files, DownloadManager substitutes the fetch (like whisper) and writes a marker .gguf; catalog entries injected by an alias-override of src/services/huggingface.ts. Also consider MediaPipe GenAI for the LiteRT Gemma models.
 5. Electron app (desktop/) + llama-server bundling + CI workflows
 6. Maps (MapLibre, PMTiles), Kiwix (kiwix-js / zim reader), image generation (WebGPU stable diffusion), QR scanner
 7. Install / update banner UI, docs/WEB_WINDOWS_PARITY.md, README
 
 ## Log
 (newest first; one line per chunk of work)
+- 2026-11-25 (after restart): TTS, voice input, audio recorder, whisper, Image file:// shim, LiteRT hidden on web. `web/scripts/crawl.mjs` presses every button on every tab to find crashes (run after each change).
 - 2026-11-25 03:1x: Electron shell verified headless; CI workflows for web + Windows written.
 - 2026-11-25 02:xx: PWA manifest/icons/SW/COI done and verified offline; sqlite-wasm; AtlasDevice crypto; engine layer.

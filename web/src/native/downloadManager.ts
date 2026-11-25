@@ -5,6 +5,7 @@ import { bus, registerNativeModule } from './registry';
 import { fs, norm, baseName, dirName } from '../host/fs';
 import { downloadToFile } from '../host/download';
 import { hash as sha256File } from '../shims/react-native-fs';
+import { whisperIdFor, hfModelFor, loadWhisper, writeMarker } from '../engines/stt/whisper';
 
 type Status = 'pending' | 'running' | 'retrying' | 'waiting_for_network' | 'completed' | 'failed' | 'cancelled';
 interface Row {
@@ -90,6 +91,24 @@ async function run(r: Row, attempt = 0): Promise<void> {
     const need = Math.max(0, (r.totalBytes || 0) - r.bytesDownloaded);
     if (free.quota && need && free.quota - free.used < need) {
       throw Object.assign(new Error('Not enough storage space'), { code: 'disk_full' });
+    }
+    // Speech models: the ggml .bin is replaced by the matching ONNX model (cached by the browser) + a marker file.
+    const wid = whisperIdFor(r.url);
+    if (wid) {
+      await loadWhisper(hfModelFor(wid), (f) => {
+        r.bytesDownloaded = Math.round(f * (r.totalBytes || 100e6));
+        r.status = 'running';
+        emitProgress(r);
+      });
+      await writeMarker(to, wid);
+      const size = (await fs().stat(to)).size;
+      r.bytesDownloaded = size;
+      r.totalBytes = size;
+      r.status = 'completed';
+      r.localUri = `file://${to}`;
+      persist();
+      bus.emit('DownloadComplete', { downloadId: r.downloadId, fileName: r.fileName, modelId: r.modelId, bytesDownloaded: size, totalBytes: size, status: 'completed', localUri: r.localUri });
+      return;
     }
     const res = await downloadToFile({
       url: r.url,
