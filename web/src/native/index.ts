@@ -6,3 +6,4 @@ import './pdf';
 import './alarms';
 import './presentation';
 import './kiwix';
+import './speakers';

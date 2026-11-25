@@ -192,8 +192,10 @@ const FEATURE_LIBS = ['librnllama_wasm.so', 'libsherpa-onnx_wasm.so', 'librnwhis
 registerNativeModule('DeviceMemoryModule', {
   buildInfo: { abi: 'wasm32', nativeLibs: FEATURE_LIBS },
   async getMemoryInfo() {
-    const total = (Number(nav.deviceMemory) || 4) * 1024 ** 3;
     const used = (performance as any).memory?.usedJSHeapSize ?? 0;
+    const hostSys = host()?.system ? await host().system().catch(() => null) : null;
+    if (hostSys) return { processAvailableBytes: Math.max(512 * 1024 ** 2, hostSys.freeMem * 0.9), footprintBytes: used, totalBytes: hostSys.totalMem };
+    const total = (Number(nav.deviceMemory) || 4) * 1024 ** 3;
     // A browser tab can use roughly half of the reported device memory before the OS steps in.
     return { processAvailableBytes: Math.max(256 * 1024 ** 2, total * 0.5 - used), footprintBytes: used, totalBytes: total };
   },

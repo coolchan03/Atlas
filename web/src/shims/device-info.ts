@@ -1,7 +1,9 @@
 // react-native-device-info on the web, from the browser's own (coarse) signals.
 const nav: any = typeof navigator !== 'undefined' ? navigator : {};
 const memGB = () => Number(nav.deviceMemory) || 4; // Chrome reports 0.25 .. 8
-const totalMemory = () => memGB() * 1024 ** 3;
+// Windows app: the real machine memory (cached at start-up from the main process); browsers only report a capped figure.
+const sys = () => (globalThis as any).__atlasSys as { totalMem: number; freeMem: number } | undefined;
+const totalMemory = () => sys()?.totalMem ?? memGB() * 1024 ** 3;
 
 async function battery(): Promise<any | null> {
   try {
@@ -23,7 +25,11 @@ export const getPowerState = async () => {
   const b = await battery();
   return { batteryLevel: b?.level ?? 1, batteryState: b?.charging ? 'charging' : 'unplugged', lowPowerMode: false };
 };
-export const getModel = () => (nav.userAgentData?.platform ? `${nav.userAgentData.platform} browser` : 'Web browser');
+export const getModel = () => {
+  const h = (globalThis as any).atlasHost;
+  if (h) return `${h.platform === 'win32' ? 'Windows PC' : h.platform === 'darwin' ? 'Mac' : 'Linux PC'}${(globalThis as any).__atlasSys?.cpuModel ? ` (${(globalThis as any).__atlasSys.cpuModel.replace(/\(R\)|\(TM\)/g, '').trim()})` : ''}`;
+  return nav.userAgentData?.platform ? `${nav.userAgentData.platform} browser` : 'Web browser';
+};
 export const getBrand = () => 'Web';
 export const getDeviceId = () => 'web';
 export const getHardware = async () => 'web';

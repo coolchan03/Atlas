@@ -7,6 +7,7 @@ export async function boot() {
     // Ask the browser not to evict our storage (models, library packs, chats are all in it).
     void navigator.storage?.persist?.();
   } catch { /* optional */ }
+  try { (globalThis as any).__atlasSys = await (globalThis as any).atlasHost?.system?.(); } catch { /* browser */ }
   await Promise.all([prepareSqlite().catch((e) => console.warn('[boot] sqlite', e)), fs().mkdir('/atlas/files').catch(() => undefined)]);
 }
 

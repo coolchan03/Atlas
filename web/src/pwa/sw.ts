@@ -23,7 +23,8 @@ const isolate = (res: Response): Response => {
 const isolationPlugin = { cachedResponseWillBeUsed: async ({ cachedResponse }: { cachedResponse?: Response }) => (cachedResponse ? isolate(cachedResponse) : cachedResponse) };
 addPlugins([isolationPlugin]);
 
-self.skipWaiting();
+// A new version waits until the person presses Update in the banner (or closes every tab): activating it under a running page
+// would delete the old hashed files that the page may still import lazily. The first install has nothing to wait for.
 clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
