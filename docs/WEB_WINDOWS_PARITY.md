@@ -15,7 +15,7 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
 | WebGPU models | no | planned (WebLLM) | planned |
 | LiteRT models, Qualcomm NPU, Hexagon, QNN | yes | no (hidden) | no (hidden). Windows machines have no NPU path here |
 | Vision (pictures to a model) | full | no (text only in WASM) | full with a vision model + projector |
-| Image generation | full | no | no (planned: stable-diffusion.cpp) |
+| Image generation | full | no (needs a child process) | yes, CPU verified (stable-diffusion.cpp, Vulkan on a GPU; SD 1.5, SD-Turbo, SDXL; import your own .safetensors / .gguf) |
 | Natural voices (Kokoro) | full | **full**: Kokoro-82M on WebGPU (WASM fallback), cached for offline use | full (same engine) |
 | Piper voices (Amy, Ryan, Lessac, Joe, HFC) | full | **full** (VITS ONNX, cached for offline use) | full |
 | KittenTTS, Pocket TTS voice cloning, imported voice files | full | no | no |
