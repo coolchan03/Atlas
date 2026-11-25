@@ -7,6 +7,7 @@
 import type { MusicScore } from '../music/types';
 import { breakLine } from './announce';
 import { rollShow, type History, type RadioSettings, type Random, type Show, EMPTY_HISTORY } from './dice';
+import { inventTopic, INVENT_EVERY } from './invent';
 import { poemForVoice } from './poem';
 import { chooseSound, diceSound, tuneFor, type AskModel, type Sound } from './sound';
 import { writePoem } from './writer';
@@ -95,11 +96,17 @@ async function playShow<H>(song: Prepared<H>, station: { settings: RadioSettings
  */
 export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H>, stopped: () => boolean): Promise<void> {
   let history: History = EMPTY_HISTORY;
-  const roll = (): Show => {
+  const madeUp: string[] = [];
+  const roll = async (count: number): Promise<Show> => {
     const rolled = rollShow(settings, deps.rng, history);
-    // A request becomes the next song's topic, and it gets a poem unless poems are off.
+    // A request becomes the next song's topic, and it gets a poem unless poems are off. Otherwise now and then the model thinks the topic up.
     const asked = deps.takeRequest();
-    const show: Show = asked ? { ...rolled, topic: { id: `request-${history.topics.length}`, text: asked, tags: [] }, withPoem: !settings.musicOnly } : rolled;
+    let topic = asked ? { id: `request-${history.topics.length}`, text: asked, tags: [] as string[] } : null;
+    if (!topic && count % INVENT_EVERY === INVENT_EVERY - 1) {
+      const text = await inventTopic(deps.ask, { show: rolled, theme: settings.theme, recent: madeUp });
+      if (text) { madeUp.push(text); topic = { id: `invented-${count}`, text, tags: [] }; }
+    }
+    const show: Show = topic ? { ...rolled, topic, withPoem: asked ? !settings.musicOnly : rolled.withPoem } : rolled;
     history = { genres: [...history.genres, show.genre.id].slice(-6), topics: [...history.topics, show.topic.id].slice(-20), subjects: [...history.subjects, show.subject.id].slice(-20) };
     return show;
   };
@@ -108,7 +115,7 @@ export async function runStation<H>(settings: RadioSettings, deps: StationDeps<H
   try {
     for (let count = 0; !stopped(); count += 1) {
       // The break: the next song is made while the host says what it is.
-      const show = roll();
+      const show = await roll(count);
       deps.report({ kind: 'break', show });
       const preparing: Promise<Prepared<H> | null> = prepareShow(show, settings, deps).catch((e) => { deps.report({ kind: 'problem', message: String((e as Error)?.message || e) }); return null; });
       if (settings.host) await deps.speak(breakLine({ previous: played?.show, next: show, name: settings.stationName, theme: settings.theme, withTheme: count % 3 === 0, now: new Date(Date.now()) }, deps.rng));
