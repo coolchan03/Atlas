@@ -10,7 +10,12 @@ const inv = async (ch, ...a) => {
 };
 const listeners = new Map();
 ipcRenderer.on('llama:progress', (_e, id, pct) => { for (const cb of listeners.get('llama:progress') || []) cb(id, pct); });
-ipcRenderer.on('app:open-file', (_e, p) => { for (const cb of listeners.get('app:open-file') || []) cb(p); });
+// Files opened before the page has registered a listener (a double click that launched the app) are kept and delivered later.
+const waitingOpen = [];
+ipcRenderer.on('app:open-file', (_e, p) => {
+  const cbs = listeners.get('app:open-file');
+  if (cbs && cbs.size) for (const cb of cbs) cb(p); else waitingOpen.push(p);
+});
 const on = (ev, cb) => {
   if (!listeners.has(ev)) listeners.set(ev, new Set());
   listeners.get(ev).add(cb);
@@ -41,7 +46,7 @@ contextBridge.exposeInMainWorld('atlasHost', {
   system: () => inv('system:info'),
   powerSaveBlocker: (on_) => inv('power:block', on_),
   notify: (title, body) => inv('notify', title, body),
-  onOpenFile: (cb) => on('app:open-file', cb),
+  onOpenFile: (cb) => { const off = on('app:open-file', cb); for (const p of waitingOpen.splice(0)) cb(p); return off; },
   window: { minimize: () => inv('win:minimize'), toggleMaximize: () => inv('win:maximize'), close: () => inv('win:close'), setTitleBar: (c) => inv('win:titlebar', c) },
   update: { check: () => inv('update:check'), install: () => inv('update:install') },
 });

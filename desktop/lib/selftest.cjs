@@ -34,6 +34,8 @@ exports.run = (win, app) => {
             out.llama = await h.llama.capabilities();
             out.system = await h.system();
           } catch (e) { out.error = String(e && e.stack || e); }
+          await new Promise((r) => setTimeout(r, 1500));
+          out.imported = Object.keys(localStorage).some((k) => (localStorage.getItem(k) || '').includes('local_import'));
           out.text = document.body.innerText.slice(0, 80).replace(/\\n+/g, ' | ');
           return out;
         })()`);
