@@ -14,7 +14,7 @@ function load(opts: { picked?: Picked[] | 'cancel' | 'throw'; os?: string; kind?
     types: { allFiles: '*/*' }, errorCodes: { OPERATION_CANCELED: 'OPERATION_CANCELED' }, isErrorWithCode: (e: any) => !!e?.code,
   }));
   const importNative = jest.fn(async () => true);
-  jest.doMock('../../../src/screens/ModelsScreen/nativeImageImport', () => ({ inspectNativeImageFile: jest.fn(async () => ({ kind: opts.kind ?? 'unknown', family: 'sdxl' })), importNativeImageFile: importNative }));
+  jest.doMock('../../../src/screens/ModelsScreen/nativeImageImport', () => ({ canInspectNativeImageFile: () => (opts.os ?? 'android') === 'android', inspectNativeImageFile: jest.fn(async () => ({ kind: opts.kind ?? 'unknown', family: 'sdxl' })), importNativeImageFile: importNative }));
   const importGguf = jest.fn(async (_files: unknown, deps: { addDownloadedModel: (m: unknown) => void }) => { if (opts.textAdds) deps.addDownloadedModel({ id: 'm1', name: 'M', filePath: '/m', fileName: 'm.gguf', fileSize: 1 }); });
   jest.doMock('../../../src/screens/ModelsScreen/importHelpers', () => ({ importGgufFiles: importGguf, getErrorMessage: (e: any) => `err:${e?.message}` }));
   const { quickImportModel } = require('../../../src/screens/ModelsScreen/quickImport');
