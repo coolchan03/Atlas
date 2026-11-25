@@ -93,14 +93,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # The site is pushed to the gh-pages branch (one commit, replaced every time, so the branch never grows). Pushes made with the
-  # workflow's own token do not start other workflows.
+  # The built site goes to GitHub Pages as a Pages artifact (no branch is pushed, so push protection never scans the minified
+  # bundles, where a model class name looks like a key). One-time setup: Settings > Pages > Source: GitHub Actions. If the
+  # github-pages environment only allows main, add this branch under Settings > Environments > github-pages.
   publish:
     needs: build
     if: github.event_name == 'push' || inputs.deploy == true
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -110,18 +115,8 @@ jobs:
         run: |
           touch site/.nojekyll
           cp site/index.html site/404.html   # a deep link or a refresh still opens the app
-      - uses: peaceiris/actions-gh-pages@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: site
-          publish_branch: gh-pages
-          force_orphan: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Atlas web build ${{ github.run_number }} (${{ github.sha }})'
-      - name: Turn on GitHub Pages for the gh-pages branch (needs repository admin rights; skipped when the token lacks them)
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api -X POST "repos/${{ github.repository }}/pages" -f "source[branch]=gh-pages" -f "source[path]=/" || echo "::notice title=Pages::Set Settings > Pages > Source to 'Deploy from a branch', gh-pages, / (root) once."
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
