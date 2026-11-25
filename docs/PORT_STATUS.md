@@ -74,7 +74,7 @@ Done and verified: web build, PWA (offline, install, COOP/COEP), OPFS + worker f
 Remaining ideas, most valuable first:
 1. Second-level crawl results (`/tmp/crawl2-*.log`; run `node web/scripts/crawl2.mjs <Tab>` for Home / Chats / Workspace / Language / Settings) and fix what it finds.
 2. Run the Windows workflow on GitHub (cannot be run from the build sandbox): confirm llama.cpp asset names in `desktop/scripts/fetch-llama.mjs`, the installer, and the Windows self-test.
-3. Offline maps (Mapsforge): needs a JS Mapsforge reader + a web `AtlasMapView`; or MapLibre with a different data source.
+3. (done) Offline maps: Mapsforge reader (`web/src/engines/mapsforge`) + canvas `AtlasMapView` (`web/src/map`), verified on a real map (`scripts/map-test.mjs`). Open: better styling, hillshade/contours, text on roads along the line.
 4. Image generation on the web (WebGPU Stable Diffusion) and on Windows (stable-diffusion.cpp as another bundled child process).
 5. MediaPipe GenAI (WebGPU) as a LiteRT engine for the Gemma .litertlm files.
 6. QR scan (BarcodeDetector) and nearby sync over WebRTC.

@@ -5,6 +5,7 @@
 import * as RNW from 'react-native-web';
 import { NativeModules, NativeEventEmitter, bus } from '../native/registry';
 import { showDialog, showToast } from './dialog';
+import { AtlasMapView } from '../map/MapView';
 
 export * from 'react-native-web';
 export { NativeModules, NativeEventEmitter };
@@ -130,11 +131,16 @@ export const PermissionsAndroid = {
   },
 };
 
-// Native view components do not exist on the web: callers get null, and the app's own
+// Native view components: the map view is implemented here (map/MapView.tsx); any other name gets null, and the app's own
 // `requireNativeComponent(...) : null` guards keep working.
-export function requireNativeComponent(_name: string): null {
-  return null;
+export function requireNativeComponent(name: string): any {
+  return name === 'AtlasMapView' ? AtlasMapView : null;
 }
+export const UIManager = {
+  ...(RNW.UIManager as any),
+  hasViewManagerConfig: (name: string) => name === 'AtlasMapView',
+  getViewManagerConfig: (name: string) => (name === 'AtlasMapView' ? { NativeProps: {} } : null),
+};
 
 // Clipboard: react-native-web keeps one; make setString/getString work against the async clipboard API.
 export const Clipboard = {

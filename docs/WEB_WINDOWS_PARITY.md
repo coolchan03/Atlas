@@ -24,7 +24,7 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
 | Hands-free voice mode, read aloud, podcasts (with Kokoro) | full | full | full |
 | Offline library (Atlas packs), search, RAG | full | full (SQLite + FTS5 in WebAssembly, saved to browser storage) | full |
 | Kiwix encyclopedias (ZIM) | native libkiwix, full-text search | **partial**: in-app ZIM reader (zstd / xz / stored clusters), search by article title, article text. No full-text (Xapian) search. Downloading from Kiwix mirrors from a browser can be blocked by the mirror's CORS rules: download the .zim and import it with the file picker | same reader, no CORS limit |
-| Offline maps (Mapsforge) | native map view | no (planned: MapLibre) | no (planned) |
+| Offline maps (Mapsforge) | native map view | **works**: in-app Mapsforge reader and canvas map (roads, buildings, water, labels, saved places, GPS dot, "what is near me" place search). Map servers do not allow downloads from web pages (no CORS): download the .map from download.mapsforge.org and add it with Maps > Maps on phone | **works**, and the map downloader works too |
 | GPS, compass, torch, sensors | yes | where the browser exposes them (phones: GPS, compass, light, motion; torch on some Android Chrome) | location by IP / Windows location service; no compass or torch on most PCs |
 | Camera / photo import | yes | yes (file picker, camera capture on phones) | file picker |
 | Documents (PDF, Word, ...) | yes | yes (PDF through pdf.js incl. page images for scans) | yes |

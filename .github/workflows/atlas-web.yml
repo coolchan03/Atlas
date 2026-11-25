@@ -68,6 +68,8 @@ jobs:
           node scripts/llm-e2e.mjs http://localhost:4173/
           node scripts/voice-e2e.mjs http://localhost:4173/
           node scripts/zim-test.mjs http://localhost:4173/
+          curl -fsSL -o /tmp/monaco.map https://download.mapsforge.org/maps/v5/europe/monaco.map
+          node scripts/map-test.mjs http://localhost:4173/ /tmp/monaco.map
       - name: WebGPU engine (software GPU; informational, does not block)
         continue-on-error: true
         working-directory: web

@@ -4,6 +4,7 @@ import { bus, registerNativeModule } from './registry';
 import * as crypto_ from './crypto';
 import { fs, norm, baseName } from '../host/fs';
 import { blobUrlFor, saveToUser } from '../host/files';
+import { mapInfo, mapPlaces } from '../map/places';
 
 const nav: any = typeof navigator !== 'undefined' ? navigator : {};
 const host = () => (globalThis as any).atlasHost;
@@ -115,7 +116,8 @@ registerNativeModule('AtlasDevice', {
   },
   async locationEnabled() { return !!nav.geolocation; },
   async startPressure() { return false; }, async stopPressure() { return true; },
-  async mapInfo() { return null; }, async mapPlaces() { return []; },
+  mapInfo: (path: string) => mapInfo(path),
+  mapPlaces: (path: string, lat: number, lon: number, radiusM: number, query: string, limit: number) => mapPlaces(path, lat, lon, radiusM, query, limit),
   async getBatteryTemperature() { return -999; },
   async getThermalStatus() { return -1; },
   async storageVolumes() {
