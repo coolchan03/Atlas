@@ -115,8 +115,21 @@ jobs:
         run: |
           touch site/.nojekyll
           cp site/index.html site/404.html   # a deep link or a refresh still opens the app
+      - name: Is GitHub Pages turned on?
+        id: pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=GitHub Pages is off::The site was built but not published. Turn it on once: Settings > Pages > Source: GitHub Actions, then re-run this workflow."
+          fi
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.enabled == 'true'
         with:
           path: site
       - id: deployment
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4
