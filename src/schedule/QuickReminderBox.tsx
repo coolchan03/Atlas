@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme';
-import { describeTiming } from './due';
 import { parseReminder } from './quickReminder';
-import { useSchedule } from './store';
+import { saveReminder } from './reminders';
 import { askForNotifications } from './alarms';
 import { SPACING, TYPOGRAPHY } from '../constants';
 
@@ -17,9 +16,8 @@ export const QuickReminderBox: React.FC = () => {
     const parsed = parseReminder(text, Date.now());
     if (!parsed.ok) { setFailed(true); setNote(parsed.error); return; }
     const r = parsed.reminder;
-    const timing = { repeat: r.repeat, hour: r.hour, minute: r.minute, ...(r.weekday !== undefined ? { weekday: r.weekday } : {}), ...(r.onceAt !== undefined ? { onceAt: r.onceAt } : {}) };
-    useSchedule.getState().add({ name: r.text.slice(0, 60), kind: 'prompt', prompt: `This is a reminder I set for myself: "${r.text}". Remind me in one short sentence.`, ...timing });
-    setFailed(false); setNote(`Reminder set: ${r.text}, ${describeTiming({ ...timing, createdAt: Date.now() }).toLowerCase()}.`); setText('');
+    const when = saveReminder(r);
+    setFailed(false); setNote(`Reminder set: ${r.text}, ${when}.`); setText('');
     void askForNotifications();
   };
   return (
