@@ -55,16 +55,16 @@ Rules for the port (so the mobile app is never touched or broken):
 - [x] offline check passes in headless Chromium (`web/scripts/pwa-check.mjs`)
 
 ### M5. Windows app (Electron)
-- [ ] `desktop/` main process, preload bridge (`window.atlasHost`), CSP, single instance, window state
-- [ ] file system on disk (Documents/Atlas), downloads with resume
-- [ ] llama.cpp via bundled `llama-server.exe` (CPU + Vulkan builds), llama.rn shim talks to it
+- [x] `desktop/` main process, preload bridge (`window.atlasHost`), CSP, single instance, window state (verified: `ATLAS_SELFTEST=1 electron .` under xvfb passes: isolation, SharedArrayBuffer, WebGPU, disk fs, FTS5)
+- [x] file system on disk (userData/data), downloads with resume, atlas-file:// streaming protocol
+- [~] llama.cpp via bundled `llama-server.exe`: manager (`desktop/lib/llama.cjs`) + renderer backend written, `scripts/fetch-llama.mjs` downloads CPU/Vulkan/CUDA builds in CI. NOT run against a real model yet (no llama.cpp binaries reachable from the build sandbox)
 - [ ] whisper / TTS on desktop
-- [ ] electron-builder NSIS installer + portable .exe, icon, file associations (.gguf)
-- [ ] auto-update (GitHub releases)
+- [x] electron-builder config: NSIS installer + portable + zip, icon, .gguf association. `--win --dir` verified on Linux (produces Atlas.exe); installers are built by CI on windows-latest
+- [x] auto-update wired (electron-updater, GitHub provider)
 
 ### M6. CI + docs
-- [ ] `.github/workflows/atlas-web.yml` (build + deploy to GitHub Pages / artifact)
-- [ ] `.github/workflows/atlas-windows.yml` (windows-latest, builds the installer + portable exe, uploads to a release)
+- [x] `.github/workflows/atlas-web.yml` (build + browser checks + deploy to GitHub Pages / artifact)
+- [x] `.github/workflows/atlas-windows.yml` (windows-latest, builds the installer + portable exe + zip, optional release)
 - [ ] README sections: Install on Windows, Use on the web
 - [ ] `docs/WEB_WINDOWS_PARITY.md`: what works, what degrades, what cannot work
 
@@ -79,4 +79,5 @@ Rules for the port (so the mobile app is never touched or broken):
 
 ## Log
 (newest first; one line per chunk of work)
+- 2026-11-25 03:1x: Electron shell verified headless; CI workflows for web + Windows written.
 - 2026-11-25 02:xx: PWA manifest/icons/SW/COI done and verified offline; sqlite-wasm; AtlasDevice crypto; engine layer.

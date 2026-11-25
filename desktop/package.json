@@ -1,0 +1,107 @@
+{
+  "name": "atlas-desktop",
+  "productName": "Atlas",
+  "version": "0.0.243",
+  "private": true,
+  "description": "Atlas for Windows: an offline AI, library and field guide.",
+  "author": "Atlas",
+  "license": "MIT",
+  "main": "main.cjs",
+  "scripts": {
+    "web": "cd ../web && ATLAS_TARGET=desktop npx vite build",
+    "start": "electron . --no-sandbox",
+    "llama": "node scripts/fetch-llama.mjs",
+    "pack": "electron-builder --win --dir",
+    "dist": "electron-builder --win nsis portable",
+    "test": "node scripts/selftest.cjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0",
+    "fflate": "^0.8.3"
+  },
+  "build": {
+    "appId": "ai.atlas.desktop",
+    "productName": "Atlas",
+    "copyright": "MIT",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "asar": true,
+    "asarUnpack": [],
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "lib/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist-desktop",
+        "to": "app-web",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/llama",
+        "to": "llama",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Atlas-${version}-Setup.${ext}",
+      "fileAssociations": [
+        {
+          "ext": "gguf",
+          "name": "GGUF model",
+          "description": "GGUF language model",
+          "icon": "build/icon.ico",
+          "role": "Viewer"
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Atlas-${version}-Portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Atlas",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "coolchan03",
+        "repo": "Atlas",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

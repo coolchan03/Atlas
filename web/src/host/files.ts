@@ -92,6 +92,8 @@ export async function saveToUser(path: string, fileName: string, mimeType?: stri
 const urlCache = new Map<string, string>();
 /** A URL the browser can load for a virtual file (images, audio, pdf). Cached per path. */
 export async function blobUrlFor(path: string): Promise<string> {
+  const direct = fs().fileUrl?.(path);
+  if (direct) return direct; // Windows app: streamed from disk by the atlas-file:// protocol
   const key = path;
   const hit = urlCache.get(key);
   if (hit) return hit;

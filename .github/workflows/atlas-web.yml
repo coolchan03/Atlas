@@ -1,0 +1,96 @@
+name: Build Atlas web (PWA)
+
+# Builds the installable web app (react-native-web + Vite) from the same source as the Android app, checks it in a real
+# browser (boots, installs a service worker, opens with the network off), and publishes it to GitHub Pages from the
+# default branch. Every run also keeps the built site as a workflow file (atlas-web.zip) to host anywhere.
+on:
+  push:
+    branches: [main, claude/wizardly-brown-yik8o4]
+    paths:
+      - 'web/**'
+      - 'src/**'
+      - 'App.tsx'
+      - 'assets/**'
+      - 'android/app/src/main/assets/models/**'
+      - '.github/workflows/atlas-web.yml'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Publish to GitHub Pages (needs Settings > Pages > Source: GitHub Actions)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: atlas-web-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      # The web build compiles the app's own source, which imports the React Native JavaScript packages from the root.
+      - name: Install app packages (JavaScript only, no native builds)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install web packages
+        run: npm ci --no-audit --no-fund
+        working-directory: web
+      - name: Type-check the web layer
+        run: npm run typecheck
+        working-directory: web
+      - name: Build (relative paths, so it works under any URL such as /Atlas/)
+        run: npm run build
+        working-directory: web
+        env:
+          ATLAS_BASE: ./
+      - name: Install a browser for the checks
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+      - name: Check the PWA in a browser (boots, service worker, offline, isolation)
+        working-directory: web
+        run: |
+          npx vite preview --port 4173 &
+          sleep 4
+          node scripts/pwa-check.mjs http://localhost:4173/
+          node scripts/smoke.mjs http://localhost:4173/ smoke.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-web
+          path: web/dist
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atlas-web-smoke
+          path: web/smoke.png
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main' || inputs.deploy == true
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' || inputs.deploy == true
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

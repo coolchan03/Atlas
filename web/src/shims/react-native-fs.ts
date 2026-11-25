@@ -150,6 +150,8 @@ export async function getFSInfo() {
 }
 export async function hash(path: string, algorithm: string) {
   await boot();
+  const nativeHash = fs().hash;
+  if (nativeHash) return nativeHash.call(fs(), path, algorithm);
   if (algorithm !== 'sha256') {
     const data = await (await fs().getFile(path)).arrayBuffer();
     const name = { sha1: 'SHA-1', sha384: 'SHA-384', sha512: 'SHA-512' }[algorithm as 'sha1'];

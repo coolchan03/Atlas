@@ -1,0 +1,111 @@
+name: Build Atlas for Windows
+
+# Builds the Windows app (Electron around the web build, with llama.cpp's llama-server bundled for full-speed CPU / Vulkan /
+# optional CUDA inference): an installer (Atlas-<version>-Setup.exe), a no-install portable exe, and a plain zip.
+# A test build keeps them as workflow files. Tick "publish" to attach them to a GitHub release (and feed in-app updates).
+on:
+  push:
+    branches: [main, claude/wizardly-brown-yik8o4]
+    paths:
+      - 'desktop/**'
+      - 'web/**'
+      - 'src/**'
+      - 'App.tsx'
+      - '.github/workflows/atlas-windows.yml'
+  workflow_dispatch:
+    inputs:
+      llama_tag:
+        description: 'llama.cpp release tag to bundle (blank = latest)'
+        type: string
+        default: ''
+      cuda:
+        description: 'Also bundle the NVIDIA CUDA build (adds about 400 MB; Vulkan already covers NVIDIA, AMD and Intel GPUs)'
+        type: boolean
+        default: false
+      publish:
+        description: 'Attach the installer, portable exe and zip to a GitHub release'
+        type: boolean
+        default: false
+
+concurrency:
+  group: atlas-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+            desktop/package-lock.json
+      - name: Install app packages (JavaScript only)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install and build the web app for the desktop shell
+        shell: bash
+        run: |
+          cd web
+          npm ci --no-audit --no-fund
+          ATLAS_TARGET=desktop npx vite build
+      - name: Install desktop packages
+        run: npm ci --no-audit --no-fund
+        working-directory: desktop
+      - name: Download llama.cpp (llama-server.exe)
+        working-directory: desktop
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLAMA_TAG: ${{ inputs.llama_tag }}
+          LLAMA_VARIANTS: ${{ inputs.cuda == true && 'cpu,vulkan,cuda' || 'cpu,vulkan' }}
+        run: |
+          [ -n "$LLAMA_TAG" ] || unset LLAMA_TAG
+          node scripts/fetch-llama.mjs
+      - name: Start-up check of the packaged shell (unpacked app, runs the page test)
+        working-directory: desktop
+        shell: bash
+        run: |
+          npx electron-builder --win --dir --publish never
+          ATLAS_SELFTEST=1 ATLAS_SELFTEST_SHOT=selftest.png ./dist/win-unpacked/Atlas.exe || true
+      - name: Build the installer, portable exe and zip
+        working-directory: desktop
+        shell: bash
+        run: |
+          npx electron-builder --win nsis portable zip --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: List the outputs
+        shell: bash
+        run: ls -la desktop/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: atlas-windows
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+            desktop/dist/latest.yml
+            desktop/dist/*.blockmap
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atlas-windows-selftest
+          path: desktop/selftest.png
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Attach to a release
+        if: inputs.publish == true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(node -p "require('./desktop/package.json').version")
+          TAG="atlas-windows-${VERSION}-${{ github.run_number }}"
+          gh release create "$TAG" --target "${{ github.sha }}" --title "Atlas for Windows ${VERSION} (build ${{ github.run_number }})" --notes "Windows installer, portable exe and zip. Install the Setup exe, or run the Portable exe with no install. The AI engine (llama.cpp) is bundled; download a model inside the app." desktop/dist/*.exe desktop/dist/*.zip desktop/dist/latest.yml desktop/dist/*.blockmap

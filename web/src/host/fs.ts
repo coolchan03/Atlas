@@ -12,6 +12,9 @@ export interface FsStat {
 
 export interface FsBackend {
   readonly kind: 'opfs' | 'memory' | 'disk';
+  /** Optional fast paths: a hash computed where the file lives, and a URL a browser element can load directly. */
+  hash?(path: string, algo: string): Promise<string>;
+  fileUrl?(path: string): string;
   readFile(path: string): Promise<Uint8Array>;
   /** Read a byte range (position, length) without loading the whole file. */
   readRange(path: string, position: number, length: number): Promise<Uint8Array>;
@@ -61,6 +64,8 @@ export const dirName = (p: string) => {
 const enc = new TextEncoder();
 export const toBytes = async (d: Uint8Array | Blob | string): Promise<Uint8Array> =>
   typeof d === 'string' ? enc.encode(d) : d instanceof Blob ? new Uint8Array(await d.arrayBuffer()) : d;
+
+import { DesktopFs } from './desktopFs';
 
 // ---------------------------------------------------------------------------------------------
 // OPFS implementation
@@ -330,8 +335,8 @@ export function setFsBackend(b: FsBackend) {
 }
 export function fs(): FsBackend {
   if (backend) return backend;
-  const hostFs = (globalThis as any).atlasHost?.fs as FsBackend | undefined;
-  if (hostFs) return (backend = hostFs);
+  const raw = (globalThis as any).atlasHost?.fsRaw;
+  if (raw) return (backend = new DesktopFs(raw));
   backend = typeof navigator !== 'undefined' && !!navigator.storage?.getDirectory ? new OpfsFs() : new MemoryFs();
   return backend;
 }
