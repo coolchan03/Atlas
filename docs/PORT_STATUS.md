@@ -23,7 +23,7 @@ Rules for the port (so the mobile app is never touched or broken):
 - [x] `web/` scaffold: Vite config, aliases for every native package, entry that registers `App`
 - [x] `vite build` succeeds
 - [x] App renders in headless Chromium, no uncaught errors on first screen (`web/scripts/smoke.mjs`)
-- [ ] Every top-level screen opens without a crash (smoke script)
+- [x] Every screen reachable from the five tabs opens without a crash (`web/scripts/crawl.mjs` first level on all tabs, `crawl2.mjs` second level on Home, Chats, Workspace, Language, Settings: no problems)
 
 ### M2. Web shims for native packages
 - [x] react-native-fs -> OPFS file system (read/write/stat/mkdir/unlink/readDir/copy/move, download with progress)
@@ -44,13 +44,13 @@ Rules for the port (so the mobile app is never touched or broken):
 - [x] AtlasTts (speechSynthesis incl. Windows voices; Kokoro natural voices via kokoro-js on WebGPU/WASM; stream speaking; synthesizeToFile with Kokoro)
 - [x] AtlasMediaControls (MediaSession API)
 - [x] AtlasSensor (Generic Sensor API where available)
-- [ ] DeviceMemoryModule, AtlasShare (Web Share API), AtlasQrScanner (BarcodeDetector), AtlasTaskAlarms (Notifications / timers), AtlasPresentationExporter, AtlasVideo, AtlasKiwix, AtlasNearbySync, AtlasSpeakers
-- [ ] Unavailable-on-web modules are absent, and the UI hides or explains them (QNN/Vulkan image gen, LiteRT, Kiwix native, nearby sync)
+- [x] DeviceMemoryModule, AtlasShare, AtlasTaskAlarms, AtlasPresentationExporter (PDF + PPTX), AtlasKiwix (own ZIM reader), AtlasSpeakers (file to WAV), PDFExtractorModule, map view + AtlasDevice.mapInfo/mapPlaces. Not implemented (absent, the app hides them): AtlasQrScanner, AtlasNearbySync, AtlasVideo (MP4 slide export)
+- [x] Unavailable modules are absent and the UI hides or explains them (LiteRT hidden in Models; image generation, nearby sync, video export show the app's own "not available" messages)
 
 ### M4. PWA
 - [x] manifest, icons (any + maskable), theme colors, shortcuts, share target, file handlers
 - [x] service worker: precache app shell, runtime cache, offline fallback, COOP/COEP injection
-- [ ] install prompt UI, update prompt
+- [x] install prompt UI, update prompt (`web/src/pwa/banner.ts`; the service worker waits for the Update button)
 - [x] storage persistence request, cross-origin isolation headers (COOP/COEP) for threaded WASM
 - [x] offline check passes in headless Chromium (`web/scripts/pwa-check.mjs`)
 
@@ -58,20 +58,20 @@ Rules for the port (so the mobile app is never touched or broken):
 - [x] `desktop/` main process, preload bridge (`window.atlasHost`), CSP, single instance, window state (verified: `ATLAS_SELFTEST=1 electron .` under xvfb passes: isolation, SharedArrayBuffer, WebGPU, disk fs, FTS5)
 - [x] file system on disk (userData/data), downloads with resume, atlas-file:// streaming protocol
 - [x] (verified on a Windows runner, run 27: the packaged Atlas.exe answered a real model through llama.cpp b12716's llama-server.exe, CPU build; GPU/Vulkan untested - no GPU on runners) llama.cpp via bundled `llama-server.exe`: manager (`desktop/lib/llama.cjs`) + renderer backend written, `scripts/fetch-llama.mjs` downloads CPU/Vulkan/CUDA builds in CI. NOT run against a real model yet (no llama.cpp binaries reachable from the build sandbox)
-- [ ] whisper / TTS on desktop
+- [x] whisper / TTS on desktop (same in-app engines as the web build: Whisper via transformers.js, Kokoro/Piper, Windows system voices)
 - [x] electron-builder config: NSIS installer + portable + zip, icon, .gguf association. `--win --dir` verified on Linux (produces Atlas.exe); installers are built by CI on windows-latest
 - [x] auto-update wired (electron-updater, GitHub provider)
 
 ### M6. CI + docs
 - [x] `.github/workflows/atlas-web.yml` (build + browser checks + deploy to GitHub Pages / artifact)
 - [x] `.github/workflows/atlas-windows.yml` (windows-latest, builds the installer + portable exe + zip, optional release)
-- [ ] README sections: Install on Windows, Use on the web
-- [ ] `docs/WEB_WINDOWS_PARITY.md`: what works, what degrades, what cannot work
+- [x] README sections: Use it on Windows or in a browser; web/README.md and desktop/README.md
+- [x] `docs/WEB_WINDOWS_PARITY.md`: what works, what degrades, what cannot work
 
 ## Next up (in order)
 Done and verified: web build, PWA (offline, install, COOP/COEP), OPFS + worker fallback, sqlite/FTS5, downloads, LLM (WASM), WebGPU catalog (written, GPU untested), Kokoro + Piper + system TTS, Whisper, mic recorder, PDF, ZIM reader, alarms, presentation PDF, Electron shell + stand-in engine, CI workflows, docs, UI crawl (first level clean).
 
-Remaining ideas, most valuable first:
+Remaining ideas (optional features, none blocks the web or Windows app), most valuable first:
 1. Second-level crawl results (`/tmp/crawl2-*.log`; run `node web/scripts/crawl2.mjs <Tab>` for Home / Chats / Workspace / Language / Settings) and fix what it finds.
 2. Run the Windows workflow on GitHub (cannot be run from the build sandbox): confirm llama.cpp asset names in `desktop/scripts/fetch-llama.mjs`, the installer, and the Windows self-test.
 3. (done) Offline maps: Mapsforge reader (`web/src/engines/mapsforge`) + canvas `AtlasMapView` (`web/src/map`), verified on a real map (`scripts/map-test.mjs`). Open: better styling, hillshade/contours, text on roads along the line.
