@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+const { MapFile, lonToX, latToY } = await import('/tmp/mapfile.mjs');
+const buf = fs.readFileSync('/tmp/monaco.map');
+const read = async (pos, len) => new Uint8Array(buf.subarray(pos, pos + len));
+console.error('opening');
+const m = await MapFile.open(read, buf.length);
+console.error(JSON.stringify(m.info));
+const iv = m.intervalFor(16); console.error('interval', iv);
+const x = lonToX(7.4246, iv.base), y = latToY(43.7384, iv.base);
+const t = await m.tile(x, y, 16, iv);
+console.error('tile', x, y, 'pois', t.pois.length, 'ways', t.ways.length, 'water', t.water);
+console.error(t.pois.slice(0, 5).map((p) => `${p.name || '-'} ${p.tags.join(',')} ${p.lat.toFixed(4)},${p.lon.toFixed(4)}`));
+console.error(t.ways.slice(0, 8).map((w) => `${w.name || '-'} [${w.tags.join(',')}] pts=${w.rings[0].length} closed=${w.closed}`));

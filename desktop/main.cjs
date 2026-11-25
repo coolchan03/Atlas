@@ -93,6 +93,14 @@ function setupSession() {
       h['Access-Control-Allow-Headers'] = ['*'];
       h['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS'];
     }
+    // Downloads (map files, encyclopedias, models) come from servers that were never meant for web pages and often send no CORS
+    // headers. This window only ever runs Atlas's own code, so a response without them is let through for GET / HEAD.
+    if (/^https?:/i.test(details.url) && !Object.keys(h).some((k) => /^access-control-allow-origin$/i.test(k))) {
+      h['Access-Control-Allow-Origin'] = ['*'];
+      h['Access-Control-Allow-Headers'] = ['*'];
+      h['Access-Control-Allow-Methods'] = ['GET, HEAD, OPTIONS'];
+      h['Access-Control-Expose-Headers'] = ['Content-Length, Content-Range, Accept-Ranges, Content-Type'];
+    }
     cb({ responseHeaders: h });
   });
 }
