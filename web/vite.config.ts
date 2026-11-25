@@ -9,6 +9,8 @@ import { androidAssets } from './vite-plugins/androidAssets';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
+// Vite module ids always use forward slashes, even on Windows: every path compared with an id goes through this.
+const slash = (p: string) => p.replace(/\\/g, '/');
 const shim = (name: string) => path.resolve(here, 'src/shims', name);
 const webModules = path.resolve(here, 'node_modules');
 
@@ -44,17 +46,17 @@ const SHIMS: Record<string, string> = {
 // `react-native` resolves to a shim for the app's own code (Alert, Platform, NativeModules ... need
 // web behavior) and to react-native-web for everything inside node_modules (react-navigation etc).
 function reactNativeResolver(): Plugin {
-  const srcDir = path.join(root, 'src') + path.sep;
-  const appFile = path.join(root, 'App.tsx');
-  const webSrc = path.join(here, 'src') + path.sep;
+  const srcDir = slash(path.join(root, 'src')) + '/';
+  const appFile = slash(path.join(root, 'App.tsx'));
+  const webSrc = slash(path.join(here, 'src')) + '/';
   return {
     name: 'atlas-react-native-resolver',
     enforce: 'pre',
     async resolveId(source, importer, options) {
       if (!importer) return null;
-      const from = importer.split('?')[0];
+      const from = slash(importer.split('?')[0]);
       if (source === 'react-native') {
-        if (from.startsWith(webSrc) && !from.includes(`${path.sep}shims${path.sep}react-native`)) {
+        if (from.startsWith(webSrc) && !from.includes('/shims/react-native')) {
           return shim('react-native.ts');
         }
         if (from.startsWith(srcDir) || from === appFile) return shim('react-native.ts');

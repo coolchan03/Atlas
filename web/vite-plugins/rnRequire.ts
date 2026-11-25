@@ -10,13 +10,14 @@ const ASSET = /\.(png|jpe?g|gif|webp|svg|ttf|otf|mp3|wav|ogg|m4a|bin|onnx|txt|md
 const REQ = /(?<![\w$.])require\(\s*(['"])([^'"\n]+)\1\s*\)/g;
 
 export function rnRequire(root: string): Plugin {
-  const srcDir = path.join(root, 'src') + path.sep;
-  const appFile = path.join(root, 'App.tsx');
+  const slash = (p: string) => p.replace(/\\/g, '/');
+  const srcDir = slash(path.join(root, 'src')) + '/';
+  const appFile = slash(path.join(root, 'App.tsx'));
   return {
     name: 'atlas-rn-require',
     enforce: 'pre',
     transform(code, id) {
-      const file = id.split('?')[0];
+      const file = slash(id.split('?')[0]);
       if (!(file.startsWith(srcDir) || file === appFile)) return null;
       if (!/\.(tsx?|jsx?)$/.test(file)) return null;
       if (!code.includes('require(')) return null;

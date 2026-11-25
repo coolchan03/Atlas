@@ -8,7 +8,7 @@
   "license": "MIT",
   "main": "main.cjs",
   "scripts": {
-    "web": "cd ../web && ATLAS_TARGET=desktop npx vite build",
+    "web": "cd ../web && npx --prefix ../desktop cross-env ATLAS_TARGET=desktop vite build",
     "start": "electron . --no-sandbox",
     "llama": "node scripts/fetch-llama.mjs",
     "pack": "electron-builder --win --dir",
@@ -19,6 +19,7 @@
     "electron-updater": "^6.6.2"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^39.0.0",
     "electron-builder": "^26.0.0",
     "fflate": "^0.8.3"
