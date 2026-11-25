@@ -16,7 +16,8 @@
  * (added to its instructions) and the judge-approved answers (saved into the project's knowledge base).
  * In session mode nothing changes until you tap "Keep what it learned".
  */
-import { TAX_RULES, supersededEditions, taxLabel, yearNotes } from '../standards/taxSources';
+import { supersededEditions } from '../standards/taxSources';
+import { profileFor, sourceContext } from '../standards/profiles';
 import { runBackgroundJob, fitPrompt } from '../services/llmJobQueue';
 import RNFS from 'react-native-fs';
 import { localUniqueId } from '../utils/uniqueId';
@@ -170,10 +171,16 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   let removed = 0;
   for (const f of found) { const safe = stripInjection(f.content); f.content = safe.text; removed += safe.removed; }
   if (removed) logger.log(`[Learning] removed ${removed} instruction-like sentence(s) from retrieved sources`);
+  // The subject's source profile (tax, accounting, markets, law, or the person's own) sets the order of authority the learner is told,
+  // labels each source with what it is, and leaves out an older edition when a newer one of the same work was found.
+  const titles = found.map((f) => f.title);
+  const ctx = sourceContext(profileFor(cfg.profileId, cfg.customProfile, titles), { custom: cfg.sourceRules, names: titles, query, chunkNames: titles, now: new Date() });
+  const kept = found.filter((f) => !ctx.retired.has(f.title));
+  const heading = ctx.rules ? `${[ctx.rules, ctx.notes].filter(Boolean).join(' ')}\n\n` : '';
   return {
     retrieval,
-    text: (found.some((f) => taxLabel(f.title)) ? `${TAX_RULES} ${yearNotes(query, found.map((f) => f.title))}\n\n`.replace(' \n\n', '\n\n') : '') + found.map((f, i) => `[${i + 1}] (${f.title}${taxLabel(f.title) ? `; ${taxLabel(f.title)}` : ''}) ${f.content}`).join('\n\n'),
-    list: found.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
+    text: heading + kept.map((f, i) => `[${i + 1}] (${f.title}${ctx.label?.(f.title) ? `; ${ctx.label(f.title)}` : ''}) ${f.content}`).join('\n\n'),
+    list: kept.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
   };
 }
 
@@ -491,7 +498,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
           const stored = ingestClaims(learningKnowledgeDb, {
             topic: cfg.topic, question: rep.q, reportId: original?.id ?? rep.itemId, reportText: full,
             sources: original?.sourceList ?? [], reportStatus: assessment.status === 'disputed' ? 'disputed' : 'candidate', reportNote: reason,
-            settling: item.kind === 'resolve',
+            settling: item.kind === 'resolve', profile: profileFor(cfg.profileId, cfg.customProfile, (original?.sourceList ?? []).map((x) => x.title)),
           });
           L().log({
             agentId: agent.id, kind: 'judge', title: `Knowledge: ${stored.added} new, ${stored.duplicates} already known`,

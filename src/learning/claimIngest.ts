@@ -1,7 +1,7 @@
 import { citedNumbers, type EvidenceSource } from './evidenceGate';
 import { checkSupport, claimSentences, closestPassage, compareClaim } from './claimText';
 import type { LearningKnowledgeDb } from './knowledgeDb';
-import { overrules } from '../standards/authority';
+import { overrulesBy, type SourceProfile } from '../standards/profiles';
 
 export interface IngestInput {
   topic: string;
@@ -14,6 +14,8 @@ export interface IngestInput {
   reportNote: string;
   /** The report answers a question made to settle a conflict: its claims are compared and stored, but never become new conflicts (that would be a loop). */
   settling?: boolean;
+  /** The subject's source profile: which kind of source outranks which. Without one the tax rules apply, as before. */
+  profile?: SourceProfile | 'federal-tax' | null;
 }
 
 export interface IngestSummary {
@@ -71,8 +73,8 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
       note = `The cited passage does not contain ${support.missingNumbers.length ? support.missingNumbers.join(', ') : 'enough of this claim'}. ${note}`.trim();
       summary.unsupported += 1;
     }
-    // A standard-setter's own page overrules an older claim that rests only on textbooks and notes: that is an update, not a disagreement.
-    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && overrules(citedSources, db.getClaimSources(match.matchId));
+    // A higher source (under the subject's profile; by default a standard-setter's own page over textbooks and notes) overrules an older claim: that is an update, not a disagreement.
+    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && overrulesBy(input.profile, citedSources, db.getClaimSources(match.matchId));
     if (match.relation === 'contradicts' && !updates) {
       status = 'disputed';
       note = `${match.reason}. ${note}`.trim();

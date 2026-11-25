@@ -25,6 +25,10 @@ export interface LearnConfig {
   useWeb: boolean;
   /** When useWeb is on: comma-separated domains to restrict results to (e.g. "scholar.google.com, arxiv.org"). Empty = no restriction. */
   webDomains?: string;
+  /** The kind of source this subject reads (a field's profile, 'auto', or 'custom') and the person's own rules for weighing sources that differ. See standards/profiles.ts. */
+  profileId?: string;
+  customProfile?: string;
+  sourceRules?: string;
   /** Keep making new question rounds after the bank is done (keep mode). */
   continuous: boolean;
   /** Keep the screen on while it learns (on unless turned off): when the screen sleeps Android pauses the app and the learning stops. */
