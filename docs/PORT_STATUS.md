@@ -44,8 +44,8 @@ Rules for the port (so the mobile app is never touched or broken):
 - [x] AtlasTts (speechSynthesis incl. Windows voices; Kokoro natural voices via kokoro-js on WebGPU/WASM; stream speaking; synthesizeToFile with Kokoro)
 - [x] AtlasMediaControls (MediaSession API)
 - [x] AtlasSensor (Generic Sensor API where available)
-- [x] DeviceMemoryModule, AtlasShare, AtlasTaskAlarms, AtlasPresentationExporter (PDF + PPTX), AtlasKiwix (own ZIM reader), AtlasSpeakers (file to WAV), PDFExtractorModule, map view + AtlasDevice.mapInfo/mapPlaces. Not implemented (absent, the app hides them): AtlasQrScanner, AtlasNearbySync, AtlasVideo (MP4 slide export)
-- [x] Unavailable modules are absent and the UI hides or explains them (LiteRT hidden in Models; image generation, nearby sync, video export show the app's own "not available" messages)
+- [x] DeviceMemoryModule, AtlasShare, AtlasTaskAlarms, AtlasPresentationExporter (PDF + PPTX), AtlasKiwix (own ZIM reader), AtlasSpeakers (file to WAV), PDFExtractorModule, map view + AtlasDevice.mapInfo/mapPlaces. AtlasVideo (narrated slides saved as MP4/WebM: canvas + MediaRecorder, real time; needs a natural voice such as Kokoro). Not implemented (absent, the app hides them): AtlasQrScanner and AtlasNearbySync (phone-to-phone pairing, Android only)
+- [x] Unavailable modules are absent and the UI hides or explains them (LiteRT hidden in Models; image generation and nearby sync show the app's own "not available" messages)
 
 ### M4. PWA
 - [x] manifest, icons (any + maskable), theme colors, shortcuts, share target, file handlers
