@@ -69,13 +69,16 @@ Rules for the port (so the mobile app is never touched or broken):
 - [ ] `docs/WEB_WINDOWS_PARITY.md`: what works, what degrades, what cannot work
 
 ## Next up (in order)
-1. Smoke-test every top-level screen for crashes (script all tabs / Settings screens)
-2. AtlasTts + atlasVoice (speechSynthesis; Kokoro / Piper via WebGPU ONNX), voice input (Web Speech API), whisper (transformers.js)
-3. react-native-audio-api shim (recorder, AudioContext player)
-4. WebGPU LLM engine (WebLLM): plan = pseudo `webllm://<id>` files, DownloadManager substitutes the fetch (like whisper) and writes a marker .gguf; catalog entries injected by an alias-override of src/services/huggingface.ts. Also consider MediaPipe GenAI for the LiteRT Gemma models.
-5. Electron app (desktop/) + llama-server bundling + CI workflows
-6. Maps (MapLibre, PMTiles), Kiwix (kiwix-js / zim reader), image generation (WebGPU stable diffusion), QR scanner
-7. Install / update banner UI, docs/WEB_WINDOWS_PARITY.md, README
+Done and verified: web build, PWA (offline, install, COOP/COEP), OPFS + worker fallback, sqlite/FTS5, downloads, LLM (WASM), WebGPU catalog (written, GPU untested), Kokoro + Piper + system TTS, Whisper, mic recorder, PDF, ZIM reader, alarms, presentation PDF, Electron shell + stand-in engine, CI workflows, docs, UI crawl (first level clean).
+
+Remaining ideas, most valuable first:
+1. Second-level crawl results (`/tmp/crawl2-*.log`; run `node web/scripts/crawl2.mjs <Tab>` for Home / Chats / Workspace / Language / Settings) and fix what it finds.
+2. Run the Windows workflow on GitHub (cannot be run from the build sandbox): confirm llama.cpp asset names in `desktop/scripts/fetch-llama.mjs`, the installer, and the Windows self-test.
+3. Offline maps (Mapsforge): needs a JS Mapsforge reader + a web `AtlasMapView`; or MapLibre with a different data source.
+4. Image generation on the web (WebGPU Stable Diffusion) and on Windows (stable-diffusion.cpp as another bundled child process).
+5. MediaPipe GenAI (WebGPU) as a LiteRT engine for the Gemma .litertlm files.
+6. QR scan (BarcodeDetector) and nearby sync over WebRTC.
+7. Windows: tray + close-to-tray, open `.gguf` with Atlas (the preload already forwards the path: `atlasHost.onOpenFile`), protocol handler `atlas://`.
 
 ## Log
 (newest first; one line per chunk of work)
