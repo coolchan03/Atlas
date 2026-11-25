@@ -97,3 +97,10 @@ docs/DEVICE_SESSION_COMMENTARY.md
 
 # Device wire-capture logs (raw, large, session-specific — kept locally, not versioned)
 docs/wire-captures/
+
+# Web / desktop ports
+web/dist/
+web/dist-desktop/
+desktop/dist/
+desktop/out/
+desktop/resources/llama/
