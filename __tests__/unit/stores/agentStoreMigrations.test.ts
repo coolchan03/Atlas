@@ -128,4 +128,11 @@ describe('specialists with built-in knowledge', () => {
     expect(r.hidden).toBe(true);
     expect(r.systemPrompt).toBe('My own repair prompt'); // a prompt the person changed is left alone
   });
+
+  it('removes the old Talk agent from a phone that still has it, and clears it as the active agent', () => {
+    const { merge, DEFAULT_AGENTS } = load();
+    const out = merge({ seenDefaults: DEFAULT_AGENTS.map((d: any) => d.id), activeAgentId: 'talk', agents: [agent({ id: 'talk', name: 'Talk', lessons: 'kept nothing' }), agent({ id: 'mine' })] });
+    expect(out.agents.map((a: any) => a.id)).toEqual(['mine']);
+    expect(out.activeAgentId).toBeNull();
+  });
 });

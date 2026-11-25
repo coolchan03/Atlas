@@ -21,7 +21,7 @@ export const AgentsScreen: React.FC<{ embedded?: boolean }> = ({ embedded = fals
   const byName = (a: Agent, b: Agent) => a.name.localeCompare(b.name);
   const sections = [
     { title: 'Agents', hint: 'Get work done', data: agents.filter((a) => !isPal(a) && !isHiddenAgent(a)).sort(byName) },
-    { title: 'Specialists', hint: 'Used by the multi-step helpers; their prompts hold built-in facts: food safety temperatures, repair safety, writing basics', data: agents.filter((a) => !isPal(a) && isHiddenAgent(a) && a.id !== 'talk' && a.id !== 'field-id').sort(byName) },
+    { title: 'Specialists', hint: 'Used by the multi-step helpers; their prompts hold built-in facts: food safety temperatures, repair safety, writing basics', data: agents.filter((a) => !isPal(a) && isHiddenAgent(a) && a.id !== 'field-id').sort(byName) },
     { title: 'Pals', hint: 'Characters to talk or role-play with', data: agents.filter(isPal).sort(byName) },
   ];
 

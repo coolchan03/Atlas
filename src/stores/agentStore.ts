@@ -57,7 +57,7 @@ const SHIPPED_PALS = ['friend', 'jock-boyfriend'];
 export const isPal = (a: Pick<Agent, 'id' | 'kind'>): boolean => (a.kind ? a.kind === 'pal' : SHIPPED_PALS.includes(a.id));
 
 /** Specialists are kept out of the chat and Home pickers. */
-export const isHiddenAgent = (a: Pick<Agent, 'id' | 'hidden'>): boolean => !!a.hidden || a.id === 'talk' || a.id === 'field-id';
+export const isHiddenAgent = (a: Pick<Agent, 'id' | 'hidden'>): boolean => !!a.hidden || a.id === 'field-id';
 
 export const DEFAULT_AGENTS: Agent[] = [
   {
@@ -341,7 +341,10 @@ export const useAgentStore = create<AgentState>()(
           const old = agents.find((a) => a.id === id);
           if (old && !old.lessons && !old.memories?.length && Math.abs(Date.parse(old.updatedAt) - Date.parse(old.createdAt)) < 1000) agents.splice(agents.indexOf(old), 1);
         }
-        const droppedActive = p.activeAgentId && Object.keys(DROPPED).includes(p.activeAgentId) ? p.activeAgentId : null;
+        // The old Talk agent is removed from every phone that still has it, whatever it holds (it was dropped and only hidden before).
+        const talk = agents.findIndex((a) => a.id === 'talk');
+        if (talk >= 0) agents.splice(talk, 1);
+        const droppedActive = p.activeAgentId && Object.keys(DROPPED).includes(p.activeAgentId) ? p.activeAgentId : p.activeAgentId === 'talk' ? 'talk' : null;
         const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
         // Built-in prompt updates (only if the user never edited that agent's prompt).
         const fid = DEFAULT_AGENTS.find((d) => d.id === 'field-id')!;
