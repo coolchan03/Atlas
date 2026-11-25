@@ -7,6 +7,7 @@ import { AppState, NativeModules, Platform } from 'react-native';
 import { useSchedule, type ScheduledTask } from './store';
 import { isDue } from './due';
 import { startAlarmSync, syncAlarms } from './alarms';
+import { saveBriefingAudio } from '../atlasTools/briefAudio';
 
 const RETRY_AFTER_MS = 15 * 60_000;
 let busy = false;
@@ -46,10 +47,14 @@ async function whileAwake<T>(label: string, job: () => Promise<T>): Promise<T> {
 async function doTask(task: ScheduledTask): Promise<{ chatId?: string }> {
   if (task.kind === 'briefing') {
     const { makeBriefing, todaysBrief } = require('../atlasTools/dailyBrief');
-    if (todaysBrief()) return {};
-    const { listVoices } = require('../atlasVoice/tts');
-    const voices: unknown[] = await listVoices('en').catch(() => []);
-    await makeBriefing(() => undefined, voices.length);
+    if (!todaysBrief()) {
+      const { listVoices } = require('../atlasVoice/tts');
+      const voices: unknown[] = await listVoices('en').catch(() => []);
+      await makeBriefing(() => undefined, voices.length);
+    }
+    const made = todaysBrief();
+    // Made inside the same awake window as the briefing, so the night's run does not stop with the audio half joined.
+    if (task.saveAudio && made) await saveBriefingAudio(made);
     return {};
   }
   const { askModel } = require('../study/engine');

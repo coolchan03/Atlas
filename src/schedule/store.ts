@@ -18,6 +18,8 @@ export interface ScheduledTask {
   weekday?: number;
   onceAt?: number;
   enabled: boolean;
+  /** A briefing task also makes the briefing as one audio file, so it is ready to play or share. */
+  saveAudio?: boolean;
   createdAt: number;
   /** The time it last finished for (a scheduled time, not "now"), so it runs once per scheduled time. */
   lastRunAt?: number;

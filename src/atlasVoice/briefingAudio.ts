@@ -9,6 +9,7 @@ import { nativeEpisodeQueue, renderEpisode, type CastLine, type NativeEpisodeQue
 import { fromBase64 } from './wavTrim';
 import { monoSamplesAt, samplesToBytes, wavHeader } from './wavJoin';
 import { toBase64 } from './jingles';
+import { useEpisodeAudio } from './episodeAudioStore';
 
 export interface EpisodeAudio { path: string; seconds: number }
 export interface EpisodeAudioOpts {
@@ -56,5 +57,7 @@ export async function exportEpisodeAudio(key: string, items: CastLine[], opts: E
     if (track?.length) await RNFS.appendFile(path, toBase64(samplesToBytes(track)), 'base64');
     onProgress?.('join', queue.paths.length + i + 1, queue.paths.length * 2);
   }
-  return { path, seconds: frames / rate };
+  const made = { path, seconds: frames / rate };
+  useEpisodeAudio.getState().record({ key, ...made });
+  return made;
 }
