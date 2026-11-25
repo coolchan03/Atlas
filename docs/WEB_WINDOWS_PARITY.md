@@ -12,7 +12,7 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
 | Storage | app folder | browser storage (OPFS), persistent when installed | real files in `%APPDATA%\Atlas\data` |
 | Text models (GGUF) | llama.cpp native, NPU / OpenCL / Vulkan | **partial**: llama.cpp in WebAssembly on the CPU (SIMD, multi-threaded). Files up to about 2 GB per model. 1-4B models are usable | **full speed**: bundled `llama-server` (CPU, Vulkan for NVIDIA / AMD / Intel GPUs, optional CUDA), any GGUF size, tools, thinking, vision (mmproj) |
 | Models on a computer on your network (Ollama, LM Studio) | full | full (the server must allow CORS) | full |
-| WebGPU models | no | planned (WebLLM) | planned |
+| WebGPU models | no | **yes**: WebLLM models run on the GPU in the browser (written and loaded, but only a software GPU was available to test with; see Known limits) | yes, same engine |
 | LiteRT models, Qualcomm NPU, Hexagon, QNN | yes | no (hidden) | no (hidden). Windows machines have no NPU path here |
 | Vision (pictures to a model) | full | no (text only in WASM) | full with a vision model + projector |
 | Image generation | full | no (needs a child process) | yes, CPU verified (stable-diffusion.cpp, Vulkan on a GPU; SD 1.5, SD-Turbo, SDXL; import your own .safetensors / .gguf) |
@@ -60,6 +60,8 @@ Legend: **full** = same as Android. **partial** = works with limits. **no** = no
 - Windows 10 or 11, 64-bit. Roughly 700 MB of disk for the app and more for models (stored in `%APPDATA%\Atlas\data`, open it from Help > Open the data folder).
 - **AI engine.** The installer bundles llama.cpp (`llama-server.exe`): a Vulkan build (NVIDIA, AMD and Intel GPUs, current graphics driver) and a CPU build. Atlas picks the GPU build when a GPU is found and falls back to the CPU build, then to the in-app WebAssembly engine.
   If the engine does not start, install the "Microsoft Visual C++ Redistributable (x64)" and update the graphics driver.
+- **Image generation.** The installer also bundles stable-diffusion.cpp (`sd-cli.exe`, Vulkan and CPU builds). Models > Image lists Stable Diffusion 1.5, SD-Turbo, SDXL-Turbo and SDXL files (about 1.5 to 7 GB each); you can also import your own `.safetensors` / `.gguf` checkpoint. A graphics card (Vulkan) is used when found; otherwise the CPU makes the picture (a 256 px SD-Turbo picture takes about 25 seconds on a 4-core CPU).
+- **Device sync.** Settings > Backup & sync > Offline device sync talks to your phone or another PC on the same network. Windows asks once whether Atlas may use the network: allow it on private networks (port 47839). Show the pairing QR code on the PC and scan it with the phone.
 - **Speech and natural voices** (Whisper, Kokoro, Piper) run inside the app on the GPU through WebGPU, or on the CPU. They download once, then work offline.
 - **Models on another computer** (Ollama, LM Studio) work as on the phone: Models > Add Remote Server.
 - **Unsigned installer.** Builds are not code signed, so Windows SmartScreen may say "unknown publisher": More info > Run anyway.
