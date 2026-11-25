@@ -16,7 +16,8 @@ export interface LibraryContext {
 export const MAX_READ_CHARS = 6000;
 const MAX_PASSAGE_CHARS = 1800;
 
-async function textOf(ctx: LibraryContext, doc: LibraryDocument, p: LibraryPassage, max = MAX_PASSAGE_CHARS): Promise<string> {
+async function textOf(ctx: LibraryContext, part: { doc: LibraryDocument; p: LibraryPassage; max?: number }): Promise<string> {
+  const { doc, p, max = MAX_PASSAGE_CHARS } = part;
   let text = p.text;
   if (text === undefined && doc.sourcePath && p.byteStart !== undefined && p.byteEnd !== undefined && p.byteEnd > p.byteStart) {
     // A passage can be long: read at most what will be shown (4 bytes per character covers any UTF-8 text).
@@ -26,10 +27,11 @@ async function textOf(ctx: LibraryContext, doc: LibraryDocument, p: LibraryPassa
 }
 
 /** A passage with everything needed to cite it. `statusVerified` is true only when the library itself says so. */
-export async function toEvidence(ctx: LibraryContext, doc: LibraryDocument, p: LibraryPassage, period?: number, score?: number): Promise<Evidence> {
+export async function toEvidence(ctx: LibraryContext, hit: { doc: LibraryDocument; p: LibraryPassage; period?: number; score?: number }): Promise<Evidence> {
+  const { doc, p, period, score } = hit;
   const ap = ctx.profile.applicability(doc, period);
   return {
-    libraryId: ctx.id, documentId: doc.id, reference: doc.reference, title: doc.title, locator: p.locator, text: await textOf(ctx, doc, p),
+    libraryId: ctx.id, documentId: doc.id, reference: doc.reference, title: doc.title, locator: p.locator, text: await textOf(ctx, { doc, p }),
     kind: doc.kind, facets: doc.facets, published: doc.published, effectiveFrom: doc.effectiveFrom, effectiveTo: doc.effectiveTo, edition: doc.edition,
     sourcePath: doc.sourcePath, sourceUrl: doc.sourceUrl, checksum: doc.checksum, applies: ap.applies, appliesWhy: ap.why,
     statusVerified: /^verified\b/i.test(doc.status ?? ''), status: doc.status, quality: doc.quality, score,
@@ -49,7 +51,7 @@ export async function searchLibrary(ctx: LibraryContext, query: string, scope: S
     const key = `${h.document.id}|${h.passage.locator ?? h.passage.id}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const e = await toEvidence(ctx, h.document, h.passage, scope.period, h.score);
+    const e = await toEvidence(ctx, { doc: h.document, p: h.passage, period: scope.period, score: h.score });
     if (scope.period !== undefined && e.applies === 'no') continue;
     out.push(e);
     if (out.length >= limit) break;
@@ -68,7 +70,7 @@ export async function findReference(ctx: LibraryContext, reference: string, scop
   else if (keys.prefix) neighbours = (await ctx.queries.documentsByPrefix(keys.prefix, 10)).filter((d) => !documents.some((x) => x.id === d.id));
   const passages: Evidence[] = [];
   for (const d of documents.slice(0, 3)) {
-    for (const p of await ctx.queries.passagesOf(d.id, { locatorPrefix: keys.locator, limit: 6 })) passages.push(await toEvidence(ctx, d, p, scope.period));
+    for (const p of await ctx.queries.passagesOf(d.id, { locatorPrefix: keys.locator, limit: 6 })) passages.push(await toEvidence(ctx, { doc: d, p, period: scope.period }));
   }
   return { documents, locator: keys.locator, passages, neighbours };
 }
@@ -83,7 +85,7 @@ export async function readDocument(ctx: LibraryContext, documentId: string, opts
   const passages = await ctx.queries.passagesOf(doc.id, { locatorPrefix: opts.locator, after: opts.cursor, limit: 60 });
   let text = ''; let cursor: number | undefined; let truncated = false;
   for (const p of passages) {
-    const part = await textOf(ctx, doc, p, budget);
+    const part = await textOf(ctx, { doc, p, max: budget });
     const label = p.locator ? `${p.locator} ` : '';
     if (text.length + part.length + label.length > budget && text) { truncated = true; break; }
     text += `${label}${part}\n\n`;

@@ -417,6 +417,8 @@ export interface Project {
   profileId?: string;
   /** The person's own profile, written as lines (see standards/profiles.ts parseProfile), used when profileId is 'custom'. */
   customProfile?: string;
+  /** Research libraries (large read-only collections that arrive pre-indexed) this project searches; see services/researchLibrary. */
+  researchLibraryIds?: string[];
   isPinned?: boolean;
   /** Present only on explicitly protected projects; a salted PIN verifier. */
   pinVerifier?: string;

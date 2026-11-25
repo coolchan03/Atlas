@@ -2,7 +2,9 @@
  * The document excerpts the latest reply was written from, numbered as the model saw them ([1], [2]...), kept for the source
  * list under the reply. Set when the excerpts are put in the prompt and read when the reply is finished.
  */
-export interface TurnSource { title: string; quote: string; /** The project document it came from, so the source can be opened. */ file?: { path: string; name: string; size: number } }
+export interface TurnSource { title: string; quote: string; /** The project document it came from, so the source can be opened. */ file?: { path: string; name: string; size: number };
+  /** A passage of a research library, so the original can be opened from the citation (see researchLibrary/openSource). */
+  library?: { libraryId: string; documentId: string; locator?: string; checksum?: string } }
 
 let current: TurnSource[] = [];
 export const setTurnSources = (sources: TurnSource[]): void => { current = sources; };

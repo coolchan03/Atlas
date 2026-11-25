@@ -8,6 +8,8 @@ import { agentSkillNames, skillsFor } from '../../skills/agentSkills';
 import { relevantTools } from '../../services/tools/relevantTools';
 import { locationNote } from '../../atlasMaps/locationNote';
 import { expertKnowledgeNote } from '../../knowledge/chatHook';
+import { injectLibraryContext } from '../../services/researchLibrary/chatContext';
+import { LIBRARY_TOOL_IDS } from '../../services/researchLibrary/tools';
 import { chartNote } from '../../study/chart';
 import { skillsNote } from '../../skills/selectSkills';
 import { learnedNote } from '../../learning/learnedNote';
@@ -362,6 +364,12 @@ async function generateWithCompactionRetry(
 }
 /** Exported for tests: project knowledge reaches every chat in the project through this prompt. */
 export async function injectRagContext(projectId: string | undefined, query: string, prompt: string, enabledTools: string[] = []): Promise<string> {
+  const withDocuments = await injectDocumentContext(projectId, query, prompt, enabledTools);
+  // Research libraries (pre-indexed collections) are searched before every answer, for any model, within the model's real context.
+  const contextTokens = llmService.getPerformanceSettings().contextLength || 4096;
+  return injectLibraryContext({ projectId, query, prompt: withDocuments, contextTokens });
+}
+async function injectDocumentContext(projectId: string | undefined, query: string, prompt: string, enabledTools: string[] = []): Promise<string> {
   setTurnSources([]);
   if (!projectId) return prompt;
   try {
@@ -435,6 +443,9 @@ function resolveToolsAndPrompt(deps: GenerationDeps, conversation: any, messageT
     used: (conversation?.messages ?? []).slice(-10).flatMap((m: any) => (m.toolCalls ?? []).map((c: any) => c.name)),
     projectHasDocs: !!conversation?.projectId,
   });
+
+  // A project with research libraries always carries the library tools: attaching one is the explicit choice to research in it.
+  if (canUseTools && project?.researchLibraryIds?.length) for (const id of LIBRARY_TOOL_IDS) if (!enabledTools.includes(id)) enabledTools.push(id);
 
   const chatNote = (conversation as any)?.instructions?.trim();
   const rawPrompt = resolveAgentPrompt(project?.systemPrompt, deps.settings.systemPrompt || APP_CONFIG.defaultSystemPrompt)

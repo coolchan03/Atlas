@@ -163,6 +163,40 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'library_search', name: 'library_search', displayName: 'Search research library', icon: 'book-open',
+    description: "Search the research libraries attached to this project (large read-only collections of original documents) by topic. Returns original passages with their reference, part, edition and whether they apply to the period asked about. Use it before answering any question these libraries cover; search again with other words if the first results do not settle the question.",
+    parameters: {
+      query: { type: 'string', description: 'A few search words', required: true },
+      period: { type: 'string', description: 'The year or period the answer is about (for example a tax year), so documents that do not apply to it are left out' },
+      filters: { type: 'string', description: 'Optional exact filters, as key=value pairs separated by commas (for example kind=regulation)' },
+    },
+  },
+  {
+    id: 'library_find_reference', name: 'library_find_reference', displayName: 'Find a reference', icon: 'hash',
+    description: 'Look up a document and the part of it by its written reference (a section, rule, citation or identifier, for example "IRC 162(a)" or "Treas. Reg. 1.162-1"). Returns the document ids to read.',
+    parameters: { reference: { type: 'string', description: 'The reference as written', required: true }, period: { type: 'string', description: 'The year or period, to mark what applies' } },
+  },
+  {
+    id: 'library_read', name: 'library_read', displayName: 'Read a document', icon: 'file-text',
+    description: 'Read the original text of a library document in parts. Pass the id from a search; optionally a part (subsection) to start at. When the result ends with a cursor, call again with it to read on.',
+    parameters: { document_id: { type: 'string', description: 'The id shown by the search', required: true }, part: { type: 'string', description: 'A part such as (a) or (a)(1)' }, cursor: { type: 'string', description: 'The cursor from the previous call' } },
+  },
+  {
+    id: 'library_versions', name: 'library_versions', displayName: 'Compare editions', icon: 'layers',
+    description: 'List every edition of a library document and which applies to a period. Use for historical questions and when an older rule may still govern.',
+    parameters: { document_id: { type: 'string', description: 'The id shown by the search', required: true }, period: { type: 'string', description: 'The year or period' } },
+  },
+  {
+    id: 'library_related', name: 'library_related', displayName: 'Related documents', icon: 'share-2',
+    description: 'Documents the library links to this one: amendments, cross-references, decisions that cite it, rules that replace it.',
+    parameters: { document_id: { type: 'string', description: 'The id shown by the search', required: true }, kinds: { type: 'string', description: 'Optional link kinds, comma separated (for example supersedes,amends)' } },
+  },
+  {
+    id: 'library_status', name: 'library_status', displayName: 'Check status', icon: 'check-circle',
+    description: 'What the library records about whether a document still stands: its recorded status and later documents that changed or questioned it. Says plainly when the status was not verified. Never treat silence as confirmation.',
+    parameters: { document_id: { type: 'string', description: 'The id shown by the search', required: true } },
+  },
+  {
     id: 'update_project_document',
     name: 'update_project_document',
     displayName: 'Update project document',

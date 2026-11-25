@@ -23,10 +23,13 @@ import { getActiveEngineService, isRemoteTextModelActive } from './engines';
 import type { GenerationOptions, CompletionResult } from './providers/types';
 import logger from '../utils/logger';
 import { parseGemmaNativeToolCalls, parseToolCallsFromText } from './toolCallParsing';
+import { LIBRARY_TOOL_IDS } from './researchLibrary/tools';
 import { buildDateContext, buildExactTimeNote, nowParts } from './toolLoopTime';
 export { parseToolCallsFromText };
 const MAX_TOOL_ITERATIONS = 3;
 const MAX_TOTAL_TOOL_CALLS = 5;
+const RESEARCH_TOOL_ITERATIONS = 6;
+const RESEARCH_TOTAL_TOOL_CALLS = 12;
 // On-device: above this many tools, run a fast routing pass to pick the relevant ones
 // before generating (small models can't fit many schemas in context). Tunable.
 const TOOL_SELECTION_THRESHOLD = 5;
@@ -638,16 +641,20 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<ToolLoopOutcome
   const effectiveSchemas = await selectEffectiveSchemas(ctx, builtInSchemas, extSchemas);
   ctx.onToolsRouted?.(effectiveSchemas.map((s: any) => s?.function?.name).filter(Boolean));
 
+  // Researching in a library takes several searches and readings; the tool results are bounded, so the loop may run longer than an ordinary turn.
+  const researching = ctx.enabledToolIds.some((id) => (LIBRARY_TOOL_IDS as readonly string[]).includes(id));
+  const maxIterations = researching ? RESEARCH_TOOL_ITERATIONS : MAX_TOOL_ITERATIONS;
+  const maxToolCalls = researching ? RESEARCH_TOTAL_TOOL_CALLS : MAX_TOTAL_TOOL_CALLS;
   const loopMessages = [...ctx.messages];
   let totalToolCalls = 0;
   const state: ToolLoopState = { firstTokenFired: false, thinkingDoneFired: false, streamedContent: '', reasoningContent: '' };
-  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
     if (ctx.isAborted()) {
       break;
     }
 
     // Hit iteration or total-call cap — force one final text-only generation (no tools)
-    if (iteration === MAX_TOOL_ITERATIONS - 1 || totalToolCalls >= MAX_TOTAL_TOOL_CALLS) {
+    if (iteration === maxIterations - 1 || totalToolCalls >= maxToolCalls) {
       await forceFinalTextResponse(ctx, state, loopMessages);
       return { interrupted: false };
     }
@@ -673,7 +680,7 @@ export async function runToolLoop(ctx: ToolLoopContext): Promise<ToolLoopOutcome
     }
 
     const { effectiveToolCalls, displayResponse } = resolveToolCalls(fullResponse, toolCalls);
-    const cappedToolCalls = effectiveToolCalls.slice(0, MAX_TOTAL_TOOL_CALLS - totalToolCalls);
+    const cappedToolCalls = effectiveToolCalls.slice(0, maxToolCalls - totalToolCalls);
     totalToolCalls += cappedToolCalls.length;
 
     // No tool calls → model gave a final text response

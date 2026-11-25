@@ -69,6 +69,13 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: query');
       return handleSearchKnowledgeBase(q, call.context?.projectId);
     }
+    case 'library_search':
+    case 'library_find_reference':
+    case 'library_read':
+    case 'library_versions':
+    case 'library_related':
+    case 'library_status':
+      return (await import('../researchLibrary/tools')).runLibraryTool(call.name, call.arguments, call.context?.projectId);
     case 'update_project_document': {
       const name = requireString(call, 'name');
       const content = requireString(call, 'content');
