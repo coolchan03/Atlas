@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import { rnRequire } from './vite-plugins/rnRequire';
 import { jsxInJs } from './vite-plugins/jsxInJs';
 import { androidAssets } from './vite-plugins/androidAssets';
@@ -69,6 +70,35 @@ function reactNativeResolver(): Plugin {
   };
 }
 
+// Two source files that differ only by letter case (src/language/Board.tsx and board.ts) are fine on Linux and macOS-as-configured,
+// but on a case-insensitive disk (Windows) "./Board" and "./board" both match either. Imports of such files are resolved by exact case.
+function exactCase(): Plugin {
+  const groups = new Map<string, string[]>();
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.(tsx?|jsx?)$/.test(e.name)) {
+        const key = slash(full.replace(/\.(tsx?|jsx?)$/, '')).toLowerCase();
+        groups.set(key, [...(groups.get(key) ?? []), full]);
+      }
+    }
+  };
+  walk(path.join(root, 'src'));
+  const clashes = new Map([...groups].filter(([, v]) => new Set(v.map((f) => f.replace(/\.(tsx?|jsx?)$/, ''))).size > 1));
+  return {
+    name: 'atlas-exact-case',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (!importer || !source.startsWith('.') || clashes.size === 0) return null;
+      const want = path.resolve(path.dirname(importer.split('?')[0]), source);
+      const files = clashes.get(slash(want).toLowerCase());
+      if (!files) return null;
+      return files.find((f) => f.replace(/\.(tsx?|jsx?)$/, '') === want) ?? null;
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const dev = mode !== 'production';
   const desktop = process.env.ATLAS_TARGET === 'desktop';
@@ -77,6 +107,7 @@ export default defineConfig(({ mode }) => {
     base: process.env.ATLAS_BASE || './',
     publicDir: path.join(here, 'public'),
     plugins: [
+      exactCase(),
       reactNativeResolver(),
       rnRequire(root),
       jsxInJs(),
@@ -101,7 +132,8 @@ export default defineConfig(({ mode }) => {
           ]),
     ],
     resolve: {
-      extensions: ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', '.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'],
+      // .ts before .tsx like Metro: on a case-insensitive disk (Windows) "./board" would otherwise find Board.tsx
+      extensions: ['.web.ts', '.web.tsx', '.web.js', '.web.jsx', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.json'],
       alias: [
         ...Object.entries(SHIMS).map(([find, replacement]) => ({
           find: new RegExp(`^${find.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`),
