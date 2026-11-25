@@ -10,6 +10,7 @@ const inv = async (ch, ...a) => {
 };
 const listeners = new Map();
 ipcRenderer.on('image:progress', (_e, ev) => { for (const cb of listeners.get('image:progress') || []) cb(ev); });
+ipcRenderer.on('nearby:message', (_e, m) => { for (const cb of listeners.get('nearby:message') || []) cb(m); });
 ipcRenderer.on('llama:progress', (_e, id, pct) => { for (const cb of listeners.get('llama:progress') || []) cb(id, pct); });
 // Files opened before the page has registered a listener (a double click that launched the app) are kept and delivered later.
 const waitingOpen = [];
@@ -53,6 +54,13 @@ contextBridge.exposeInMainWorld('atlasHost', {
     available: ipcRenderer.sendSync('image:available'),
     probe: (api) => inv('image:probe', api), status: () => inv('image:status'), cancel: () => inv('image:cancel'),
     generate: (req) => inv('image:generate', req), onProgress: (cb) => on('image:progress', cb),
+  },
+  nearby: {
+    available: true,
+    start: () => inv('nearby:start'), stop: () => inv('nearby:stop'), invitation: () => inv('nearby:invitation'),
+    pair: (uri, payload) => inv('nearby:pair', uri, payload), sync: (id, payload) => inv('nearby:sync', id, payload),
+    respond: (requestId, payload) => inv('nearby:respond', requestId, payload), peers: () => inv('nearby:peers'), unpair: (id) => inv('nearby:unpair', id),
+    onMessage: (cb) => on('nearby:message', cb),
   },
   system: () => inv('system:info'),
   powerSaveBlocker: (on_) => inv('power:block', on_),

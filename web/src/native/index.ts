@@ -9,3 +9,4 @@ import './kiwix';
 import './speakers';
 import './video';
 import './localdream';
+import './nearby';

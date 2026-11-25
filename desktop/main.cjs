@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const diskfs = require('./lib/diskfs.cjs');
 const llama = require('./lib/llama.cjs');
 const sd = require('./lib/sd.cjs');
+const nearbyLib = require('./lib/nearby.cjs');
+let nearby = null; // created once the secrets store is ready
 const secrets = require('./lib/secrets.cjs');
 const windowState = require('./lib/windowState.cjs');
 const proto = require('./lib/protocol.cjs');
@@ -215,6 +217,12 @@ function registerIpc() {
   ipcMain.handle('image:status', () => sd.status());
   ipcMain.handle('image:generate', (_e, req) => sd.generate(req));
   ipcMain.handle('image:cancel', () => sd.cancel());
+  // Offline device sync with phones and other PCs on the same network (lib/nearby.cjs speaks the Android app's protocol).
+  for (const name of ['start', 'stop', 'invitation', 'pair', 'sync', 'respond', 'peers', 'unpair']) {
+    ipcMain.handle(`nearby:${name}`, async (_e, ...a) => {
+      try { return await nearby[name](...a); } catch (e) { return { __err: { message: String(e && e.message || e), code: 'NEARBY' } }; }
+    });
+  }
   let blocker = null;
   ipcMain.handle('power:block', (_e, on) => {
     if (on && blocker == null) blocker = powerSaveBlocker.start('prevent-display-sleep');
@@ -271,6 +279,7 @@ app.whenReady().then(async () => {
   const data = app.getPath('userData');
   diskfs.init(path.join(data, 'data'));
   secrets.init(data);
+  nearby = nearbyLib.create({ store: secrets, onMessage: (m) => win?.webContents.send('nearby:message', m) });
   llama.init(llamaDir(), (id, pct) => win?.webContents.send('llama:progress', id, pct));
   sd.init(sdDir(), { real: diskfs.real, virtual: diskfs.virtualFor, onProgress: (e) => win?.webContents.send('image:progress', e) });
   proto.registerHandlers(webDir());
@@ -281,5 +290,5 @@ app.whenReady().then(async () => {
   if (!isDev) setTimeout(() => void checkForUpdates(), 15000);
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
-app.on('window-all-closed', () => { llama.stopAll(); sd.stopAll(); if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { llama.stopAll(); sd.stopAll(); void nearby?.stop(); if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => { quitting = true; llama.stopAll(); sd.stopAll(); });

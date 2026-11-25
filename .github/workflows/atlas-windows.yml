@@ -64,11 +64,12 @@ jobs:
           ATLAS_LLAMA_DIR=$PWD/test/fake-llama ATLAS_SELFTEST=1 ATLAS_SELFTEST_LLM=1 ATLAS_NO_SANDBOX=1 xvfb-run -a ./node_modules/.bin/electron . --no-sandbox --disable-gpu | tee selftest2.log
           grep -q "SELFTEST PASSED" selftest2.log
           grep -q '"engine":"llama-server"' selftest2.log
-      - name: Image engine with the stand-in sd-cli (unit test, then import, load and generate through the page)
+      - name: Image engine with the stand-in sd-cli, and device sync (unit tests, then the page flows)
         working-directory: desktop
         run: |
           node test/sd-test.cjs
-          ATLAS_SD_DIR=$PWD/test/fake-sd ATLAS_SELFTEST=1 ATLAS_SELFTEST_IMAGE=1 ATLAS_NO_SANDBOX=1 xvfb-run -a ./node_modules/.bin/electron . --no-sandbox --disable-gpu | tee selftest3.log
+          node test/nearby-test.cjs
+          ATLAS_SD_DIR=$PWD/test/fake-sd ATLAS_SELFTEST=1 ATLAS_SELFTEST_IMAGE=1 ATLAS_SELFTEST_NEARBY=1 ATLAS_NO_SANDBOX=1 xvfb-run -a ./node_modules/.bin/electron . --no-sandbox --disable-gpu | tee selftest3.log
           grep -q "SELFTEST PASSED" selftest3.log
 
   windows:

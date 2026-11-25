@@ -59,6 +59,13 @@ exports.run = (win, app) => {
               await L.deleteGeneratedImage(img.id);
               await L.unloadModel();
             }
+            if (${process.env.ATLAS_SELFTEST_NEARBY ? 'true' : 'false'}) {
+              // Offline device sync: the app sees the module, the shell listens, and nothing is paired yet.
+              const N = a.NativeModules.AtlasNearbySync;
+              const info = await N.start();
+              out.nearby = { module: !!N, deviceId: String(info.deviceId || '').length, port: info.port, peers: (await N.peers()).length };
+              await N.stop();
+            }
             out.llama = await h.llama.capabilities();
             out.system = await h.system();
           } catch (e) { out.error = String(e && e.stack || e); }
@@ -75,7 +82,8 @@ exports.run = (win, app) => {
       console.log('SELFTEST ' + JSON.stringify(result));
       if (errors.length) console.log('CONSOLE ERRORS ' + JSON.stringify(errors.slice(0, 8)));
       const imageOk = !process.env.ATLAS_SELFTEST_IMAGE || (result.image && result.image.family === 'sd15' && result.image.width === 256 && result.image.size > 100 && result.image.steps.join() === '1,2,3,4' && result.image.listed === 1 && result.image.adopted === true);
-      const ok = imageOk && result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && (result.initialUrl || /Skip|YOURS|Atlas/i.test(result.text || ''));
+      const nearbyOk = !process.env.ATLAS_SELFTEST_NEARBY || (result.nearby && result.nearby.module && result.nearby.deviceId === 32 && result.nearby.port === 47839 && result.nearby.peers === 0);
+      const ok = nearbyOk && imageOk && result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && (result.initialUrl || /Skip|YOURS|Atlas/i.test(result.text || ''));
       console.log(ok ? 'SELFTEST PASSED' : 'SELFTEST FAILED');
       app.exit(ok ? 0 : 1);
     }, 6000);
