@@ -31,7 +31,7 @@ jobs:
         working-directory: desktop
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SD_VARIANTS: cpu
+          SD_VARIANTS: cpu,vulkan
         run: node scripts/fetch-sd.mjs
       - name: Command line help (the options the app uses)
         working-directory: desktop/resources/sd/cpu
@@ -51,28 +51,45 @@ jobs:
             echo "== $repo"
             curl -fsS "https://huggingface.co/api/models/$repo/tree/main" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const f of JSON.parse(s))console.log(f.path,Math.round((f.size||0)/1048576)+' MB')})"
           done
-      - name: Make a test image (smallest SD-Turbo GGUF)
-        working-directory: desktop/resources/sd/cpu
+      # The model is 1.9 GB and Hugging Face serves it slowly to runners (about 17 minutes), so it is cached between runs.
+      - name: Cache the test model
+        id: model
+        uses: actions/cache@v4
+        with:
+          path: desktop/model-cache
+          key: sd-turbo-gguf-v1
+      - name: Download the test model (smallest SD-Turbo GGUF)
+        if: steps.model.outputs.cache-hit != 'true'
+        working-directory: desktop
         run: |
           url="${{ inputs.model_url }}"
           if [ -z "$url" ]; then
             f=$(curl -fsS "https://huggingface.co/api/models/Green-Sky/SD-Turbo-GGUF/tree/main" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s).filter(f=>/\.gguf$/.test(f.path)).sort((a,b)=>a.size-b.size);console.log(l[0].path)})")
             url="https://huggingface.co/Green-Sky/SD-Turbo-GGUF/resolve/main/$f"
           fi
-          echo "model: $url"
-          curl -fL -o model.gguf "$url"
-          ls -la model.gguf
+          mkdir -p model-cache
+          curl -fL -o model-cache/model.gguf "$url"
+      - name: Generate through the app's own engine manager (lib/sd.cjs) with the real sd-cli.exe
+        working-directory: desktop
+        run: |
+          mkdir -p work/models/turbo
+          cp model-cache/model.gguf work/models/turbo/model.gguf
+          echo '{"family":"sd15","variant":"turbo","primary":"model.gguf","support":[]}' > work/models/turbo/atlas-image.json
+          node test/sd-real.cjs "$PWD/resources/sd" "$PWD/work"
+      - name: Raw sd-cli run (the arguments the Android module uses), for the log
+        working-directory: desktop/resources/sd/cpu
+        run: |
           exe=sd-cli.exe; [ -f "$exe" ] || exe=sd.exe
           mkdir -p prev
-          time ./$exe -m model.gguf -p "a small red house on a green hill, watercolor" -o out.png -W 256 -H 256 --steps 4 -s 7 --cfg-scale 1.0 --vae-tiling --clip-on-cpu --threads 4 --log-level verbose --backend cpu --preview proj --preview-interval 2 --preview-path "$PWD/prev/step_%04d.png" > gen.log 2>&1 || echo "exit $?"
-          tr '\r' '\n' < gen.log | tail -60
-          ls -la out.png prev
+          ./$exe -m ../../../model-cache/model.gguf -p "a small red house on a green hill, watercolor" -o out.png -W 256 -H 256 --steps 4 -s 7 --cfg-scale 1.0 --vae-tiling --clip-on-cpu --threads 4 --log-level verbose --backend cpu --preview proj --preview-interval 2 --preview-path "$PWD/prev/step_%04d.png" > gen.log 2>&1 || echo "exit $?"
+          tr '\r' '\n' < gen.log | tail -30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sd-probe
           path: |
             desktop/resources/sd/cpu/out.png
+            desktop/work/out/*.png
             desktop/resources/sd/cpu/help.txt
             desktop/resources/sd/cpu/gen.log
           if-no-files-found: ignore
