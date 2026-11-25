@@ -44,7 +44,7 @@ jobs:
       - name: Install app packages (JavaScript only, no native builds)
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install web packages
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: web
       - name: Type-check the web layer
         run: npm run typecheck
