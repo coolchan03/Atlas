@@ -59,6 +59,8 @@ class RagDatabase {
           enabled INTEGER NOT NULL DEFAULT 1
         )`
       );
+      // Added later: the hash of a document's converted text, to recognise the same content under another name.
+      try { this.db.executeSync('ALTER TABLE rag_documents ADD COLUMN content_hash TEXT'); } catch { /* already there */ }
       this.db.executeSync(
         `CREATE TABLE IF NOT EXISTS rag_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,15 +93,21 @@ class RagDatabase {
     return this.db;
   }
 
-  insertDocument(doc: { projectId: string; name: string; path: string; size: number }): number {
+  insertDocument(doc: { projectId: string; name: string; path: string; size: number; contentHash?: string }): number {
     this.bump();
     const db = this.getDb();
     const result = db.executeSync(
-      'INSERT INTO rag_documents (project_id, name, path, size, created_at) VALUES (?, ?, ?, ?, ?)',
-      [doc.projectId, doc.name, doc.path, doc.size, new Date().toISOString()]
+      'INSERT INTO rag_documents (project_id, name, path, size, created_at, content_hash) VALUES (?, ?, ?, ?, ?, ?)',
+      [doc.projectId, doc.name, doc.path, doc.size, new Date().toISOString(), doc.contentHash ?? null]
     );
     if (result.insertId == null) throw new Error('Failed to insert document: no insertId returned');
     return result.insertId;
+  }
+
+  /** The name of a document in this project with exactly this content (by hash), if any. */
+  findNameByHash(projectId: string, hash: string): string | null {
+    const rows = this.getDb().executeSync('SELECT name FROM rag_documents WHERE project_id = ? AND content_hash = ? LIMIT 1', [projectId, hash]).rows;
+    return rows.length ? String((rows[0] as { name: string }).name) : null;
   }
 
   insertChunks(docId: number, chunks: Chunk[]): number[] {

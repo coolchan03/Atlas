@@ -1,4 +1,4 @@
-import { convertForIndexing } from './convert';
+import { contentHash, convertForIndexing } from './convert';
 import { structureAwareChunks } from './structure';
 import { noteIfStandard, noteTaxSource } from '../../standards/officialDocs';
 import { ragDatabase } from './database';
@@ -157,10 +157,17 @@ class RagService {
       }
     }
 
+    // The same content under another name is not indexed twice (no second copy, no second set of embeddings).
+    const hash = contentHash(chunks.map((c) => c.content).join('\n'));
+    const twin = ragDatabase.findNameByHash(projectId, hash);
+    if (twin && !params.replaceExisting) {
+      if (source.uri && source.uri !== filePath) await removeOwnCopy(source.uri);
+      throw new Error(`Document "${fileName}" has the same content as "${twin}", which is already in the knowledge base`);
+    }
     onProgress?.({ stage: 'indexing', message: 'Indexing chunks...' });
     // The extractor saves a durable local copy. Index that path rather than a
     // picker/cache path that can disappear before the next backup.
-    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: source.uri || filePath, size: fileSize });
+    const docId = ragDatabase.insertDocument({ projectId, name: fileName, path: source.uri || filePath, size: fileSize, contentHash: hash });
     const rowIds = ragDatabase.insertChunks(docId, chunks);
 
     onProgress?.({ stage: 'embedding', message: 'Generating embeddings...' });
