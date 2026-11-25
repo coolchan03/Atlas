@@ -138,6 +138,9 @@ interface LearningState {
   config: Record<string, LearnConfig>;
   state: Record<string, PerAgent>;
   events: LearnEvent[];
+  /** When the person last looked at each subject's digest (milliseconds): the digest covers what came after. */
+  looked: Record<string, number>;
+  markLooked: (agentId: string) => void;
   getConfig: (agentId: string) => LearnConfig;
   setConfig: (agentId: string, c: Partial<LearnConfig>) => void;
   get: (agentId: string) => PerAgent;
@@ -169,6 +172,8 @@ export const useLearningStore = create<LearningState>()(
       config: {},
       state: {},
       events: [],
+      looked: {},
+      markLooked: (id) => set((s) => ({ looked: { ...(s.looked ?? {}), [id]: Date.now() } })),
       getConfig: (id) => ({ ...defaultLearnConfig(), ...(getS().config[id] || {}) }),
       setConfig: (id, c) => set((s) => ({ config: { ...s.config, [id]: { ...defaultLearnConfig(), ...(s.config[id] || {}), ...c } } })),
       get: (id) => ({ ...blankState(), ...(getS().state[id] || {}) }),

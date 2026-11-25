@@ -1,4 +1,5 @@
 import { SourceRulesFields } from '../components/SourceRulesBox';
+import { LearningDigestCard } from './LearningDigestCard';
 import React, { useEffect, useMemo, useState } from 'react';
 import { shareItem } from '../utils/shareItem';
 import { StyleSheet, Alert, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
@@ -520,6 +521,7 @@ export const LearningScreen: React.FC = () => {
 
   const feed = (
     <View>
+      <LearningDigestCard agentId={agentId} changed={(st?.totalReports ?? 0) + (running ? 0 : 1)} />
       {foldHead('activity', 'Activity')}
       {!folded.activity && events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
       {!folded.activity && events.map((e: LearnEvent) => (
