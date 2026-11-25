@@ -57,7 +57,7 @@ export async function writeLessonsFile(name: string, lessons: string): Promise<s
 }
 
 /** Saves the reports as Learning/<name>-reports.md. Never throws. */
-export async function writeReportsFile(name: string, reports: Parameters<typeof reportsMarkdown>[1]): Promise<string | null> {
+async function writeReportsFile(name: string, reports: Parameters<typeof reportsMarkdown>[1]): Promise<string | null> {
   try {
     const RNFS = require('react-native-fs');
     const { workspaceDir } = require('../atlasTools/deviceTools');
