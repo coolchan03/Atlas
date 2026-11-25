@@ -113,6 +113,16 @@ jobs:
         run: |
           npx electron-builder --win --dir --publish never
           ATLAS_SELFTEST=1 ATLAS_SELFTEST_SHOT=selftest.png ./dist/win-unpacked/Atlas.exe || true
+      # The real llama-server.exe on Windows: downloads a small model and answers through it (the CPU build; the runner has no GPU).
+      # Informational: it reports the engine that answered and never blocks the installer.
+      - name: Packaged app answers with the bundled llama-server.exe
+        continue-on-error: true
+        working-directory: desktop
+        shell: bash
+        run: |
+          ATLAS_SELFTEST=1 ATLAS_SELFTEST_LLM=1 ./dist/win-unpacked/Atlas.exe | tee selftest-llm.log
+          grep -q "SELFTEST PASSED" selftest-llm.log
+          grep -q '"engine":"llama-server"' selftest-llm.log || echo "::warning title=Engine::the reply did not come from llama-server"
       - name: Build the installer, portable exe and zip
         working-directory: desktop
         shell: bash

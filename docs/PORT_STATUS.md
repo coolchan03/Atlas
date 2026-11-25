@@ -82,6 +82,7 @@ Remaining ideas, most valuable first:
 
 ## Log
 (newest first; one line per chunk of work)
+- 2026-11-25 05:30: **GitHub Actions now builds everything.** "Build Atlas for Windows" run 26 is green on windows-latest: web build, llama.cpp b12716 (CPU + Vulkan) bundled, packaged Atlas.exe passes its self-test on Windows, installer + portable exe + zip produced (artifact `atlas-windows`, 591 MB). "Build Atlas web (PWA)" passes install, type-check, build, PWA/offline, LLM, voice, ZIM checks. Fixes it took: onnxruntime-node install script (web/.npmrc), Windows path separators and case-insensitive resolution in the Vite plugins (Board.tsx vs board.ts), llama.cpp release lookup, ignored desktop/build icons.
 - 2026-11-25 05:00: Offline maps done (Mapsforge reader verified on Monaco, canvas map view, place search for the AI). ZIM reader fixed on a real Wikipedia ZIM (found by testing on real data). crawl2 Settings clean. Windows: CORS pass-through for downloads, open .gguf with Atlas verified.
 - 2026-11-25: UI crawl (web/scripts/crawl.mjs, ~87 controls over all tabs) found no crashes. ZIM reader tested on a generated ZIM (zim-test.mjs), Piper voices verified, Electron shell downloads and runs a real model through the WASM engine.
 - 2026-11-25: VERIFIED through the real UI in headless Chromium: Models search -> download GGUF -> select -> chat reply -> reload keeps model and chat. Desktop widths use the app's tablet rail layout. PDF (pdf.js) and task-alarm modules added.
