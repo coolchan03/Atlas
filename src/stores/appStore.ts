@@ -271,7 +271,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   imageUseOpenCL: true,
   imageBackendMode: 'auto',
   imageAccelerationAutoMigrated: true,
-  imageAllowCpuFallback: false,
+  // The Windows app sets this: a PC's CPU makes a small Stable Diffusion picture in under a minute, unlike a phone's.
+  imageAllowCpuFallback: (globalThis as any).__ATLAS_IMAGE_CPU_FALLBACK__ === true,
   enhanceImagePrompts: false,
   enableGpu: Platform.OS === 'ios',
   inferenceBackend: Platform.OS === 'ios' ? INFERENCE_BACKENDS.METAL : INFERENCE_BACKENDS.AUTO,

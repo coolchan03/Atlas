@@ -19,6 +19,7 @@ async function start() {
     const cat = await import('./native/imageCatalog');
     (globalThis as any).__ATLAS_IMAGE_CATALOG__ = cat.imageCatalog;
     (globalThis as any).__ATLAS_IMAGE_RECOMMENDATION__ = cat.imageRecommendation;
+    (globalThis as any).__ATLAS_IMAGE_CPU_FALLBACK__ = true; // see appStore.ts: a PC with no usable GPU still makes pictures, on the CPU
   }
   const { default: App } = await import('../../App');
   AppRegistry.registerComponent('Atlas', () => App);
