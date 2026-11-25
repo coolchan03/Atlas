@@ -101,3 +101,31 @@ describe('using agents', () => {
     expect(typeof activeAgentOverrides().maxTokens).toBe('number');
   });
 });
+
+describe('specialists with built-in knowledge', () => {
+  it('ships Writer and Repair Helper as specialists, hides saved ones, and upgrades only their untouched prompts', () => {
+    const { merge, DEFAULT_AGENTS, isHiddenAgent } = load();
+    const writer = DEFAULT_AGENTS.find((d: any) => d.id === 'writer');
+    const repair = DEFAULT_AGENTS.find((d: any) => d.id === 'repair-helper');
+    expect(isHiddenAgent(writer)).toBe(true);
+    expect(isHiddenAgent(repair)).toBe(true);
+    expect(writer.systemPrompt).toContain('BUILT-IN WRITING BASICS');
+    expect(writer.systemPrompt).toMatch(/A story needs: a character who wants something/);
+    expect(repair.systemPrompt).toContain('BUILT-IN REPAIR BASICS');
+    expect(repair.systemPrompt).toMatch(/Set a water heater to 120 F \(49 C\)/);
+    expect(DEFAULT_AGENTS.find((d: any) => d.id === 'home-chef').systemPrompt).toContain('165 F (74 C)');
+
+    const OLD_WRITER = writer.systemPrompt.slice(0, writer.systemPrompt.indexOf('\n\nBUILT-IN WRITING BASICS'));
+    const OLD_REPAIR = repair.systemPrompt.slice(0, repair.systemPrompt.indexOf('\n\nBUILT-IN REPAIR BASICS'));
+    const out = merge({
+      seenDefaults: DEFAULT_AGENTS.map((d: any) => d.id),
+      agents: [agent({ id: 'writer', systemPrompt: OLD_WRITER }), agent({ id: 'repair-helper', systemPrompt: 'My own repair prompt' })],
+    });
+    const w = out.agents.find((a: any) => a.id === 'writer');
+    const r = out.agents.find((a: any) => a.id === 'repair-helper');
+    expect(w.hidden).toBe(true);
+    expect(w.systemPrompt).toContain('BUILT-IN WRITING BASICS'); // the untouched older prompt gets the knowledge
+    expect(r.hidden).toBe(true);
+    expect(r.systemPrompt).toBe('My own repair prompt'); // a prompt the person changed is left alone
+  });
+});
