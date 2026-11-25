@@ -69,6 +69,17 @@ export const LearningScreen: React.FC = () => {
   const projects = useProjectStore((s) => s.projects);
   const rawCfg = useLearningStore((s) => s.config[agentId]);
   const cfg = Object.assign(defaultLearnConfig(), rawCfg || {});
+  // The subject's document names, so the guide on how to use each one can show which document each sentence was matched to.
+  const [docStatus, setDocStatus] = useState('');
+  const [docNames, setDocNames] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    if (!cfg.projectId) { setDocNames([]); return undefined; }
+    require('../services/rag').ragService.getDocumentsByProject(cfg.projectId)
+      .then((docs: Array<{ name: string }>) => { if (live) setDocNames(docs.map((d) => d.name)); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [cfg.projectId, docStatus]); // eslint-disable-line react-hooks/exhaustive-deps
   const setConfig = useLearningStore((s) => s.setConfig);
   const st = useLearningStore((s) => s.state[agentId]);
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
@@ -113,7 +124,6 @@ export const LearningScreen: React.FC = () => {
     setOpenQ(null);
   };
   // Documents the learner reads from: picked files, or the Atlas folder. They go into a project named after the subject.
-  const [docStatus, setDocStatus] = useState('');
   const addDocuments = async (from: 'files' | 'folder' | 'pick-folder') => {
     const projectId = cfg.projectId || projectForSubject(expertName(agentId));
     if (!cfg.projectId) setConfig(agentId, { projectId });
@@ -302,7 +312,7 @@ export const LearningScreen: React.FC = () => {
       </View>
       <Text style={styles.counts}>{STRICTNESS_OPTIONS.find((o) => o.id === (cfg.judgeStrictness ?? DEFAULT_STRICTNESS))?.hint}</Text>
       <Text style={styles.note}>Sources that differ: say what field this is and which source wins (the law over a guide, a newer edition over an older one, a filing over news). A source that outranks another replaces its claim instead of starting a dispute.</Text>
-      <SourceRulesFields value={cfg} disabled={running} onChange={(patch) => setConfig(agentId, patch)} />
+      <SourceRulesFields value={cfg} names={docNames} disabled={running} onChange={(patch) => setConfig(agentId, patch)} />
       <TouchableOpacity style={styles.row} accessibilityRole="switch" accessibilityState={{ checked: cfg.keepAwake !== false }} testID="learning-keep-awake"
         onPress={() => setConfig(agentId, { keepAwake: cfg.keepAwake === false })}>
         <Icon name={cfg.keepAwake !== false ? 'check-square' : 'square'} size={18} color={colors.primary} />

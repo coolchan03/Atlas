@@ -4,6 +4,7 @@
  * standard) and which are only true as of their date (a price, a news item), which official sites to look on for updates, and the rules the AI
  * is given. The ranking and the dates are applied here, in code; the AI is only told the result. Pure: no storage, no network.
  */
+import { guideLabel, guideSkips, guideText, readGuide } from './guide';
 import { hostOf, overrules, type AuthoritySource } from './authority';
 import { classifyTaxSource, supersededEditions as taxSuperseded, TAX_RULES, taxLabel, yearNotes } from './taxSources';
 
@@ -190,11 +191,17 @@ export interface SourceContext {
 }
 
 /** Everything a project chat's prompt needs from a profile. With no profile, only the person's own rules (if any). */
-export function sourceContext(profile: SourceProfile | 'federal-tax' | null, o: { custom?: string; names: string[]; query: string; chunkNames: string[]; now: Date }): SourceContext {
-  if (!profile) return { rules: o.custom?.trim() ? `Rules for reading these sources, set by the user (follow them over any default): ${o.custom.trim()}` : '', notes: '', retired: new Set() };
-  const retired = supersededIn(profile, o.names);
+export function sourceContext(profile: SourceProfile | 'federal-tax' | null, o: { custom?: string; guide?: string; names: string[]; query: string; chunkNames: string[]; now: Date }): SourceContext {
+  const entries = readGuide(o.guide, o.names);
+  const how = guideText(o.guide, entries);
+  const skipped = guideSkips(entries);
+  if (!profile) {
+    const own = o.custom?.trim() ? `Rules for reading these sources, set by the user (follow them over any default): ${o.custom.trim()}` : '';
+    return { rules: [own, how].filter(Boolean).join('\n'), notes: '', label: entries.length ? (n) => guideLabel(entries, n) : undefined, retired: skipped };
+  }
+  const retired = new Set([...supersededIn(profile, o.names), ...skipped]);
   const notes = profile === 'federal-tax' ? yearNotes(o.query, o.chunkNames.filter((n) => !retired.has(n))) : staleNotes(profile, o.names.filter((n) => !retired.has(n)), o.now);
-  return { rules: rulesIn(profile, o.custom), notes, label: (n) => labelIn(profile, n), retired };
+  return { rules: [rulesIn(profile, o.custom), how].filter(Boolean).join('\n'), notes, label: (n) => [labelIn(profile, n), guideLabel(entries, n)].filter(Boolean).join('; '), retired };
 }
 
 /** How high a cited source ranks in a profile (1 is the highest) and the year it shows: from its title or address, and from the official sites the profile lists. */

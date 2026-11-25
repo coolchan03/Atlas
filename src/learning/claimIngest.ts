@@ -2,6 +2,8 @@ import { citedNumbers, type EvidenceSource } from './evidenceGate';
 import { checkSupport, claimSentences, closestPassage, compareClaim } from './claimText';
 import type { LearningKnowledgeDb } from './knowledgeDb';
 import { overrulesBy, type SourceProfile } from '../standards/profiles';
+import type { AuthoritySource } from '../standards/authority';
+import { guideOverrules, readGuide } from '../standards/guide';
 
 export interface IngestInput {
   topic: string;
@@ -16,6 +18,8 @@ export interface IngestInput {
   settling?: boolean;
   /** The subject's source profile: which kind of source outranks which. Without one the tax rules apply, as before. */
   profile?: SourceProfile | 'federal-tax' | null;
+  /** The person's words on how to use each document (standards/guide.ts): a document they call the newest wins over the others. */
+  guide?: string;
 }
 
 export interface IngestSummary {
@@ -39,6 +43,12 @@ const withoutMarkers = (text: string) => text.replace(/\[\d+\]/g, '').replace(/\
  */
 type Match = { relation: string; matchId?: string; reason?: string };
 /** What a new claim does to the ledger beside it: it replaces an older claim (an update), or it disputes it (a contradiction). */
+/** Does the claim from `newer` sources replace the one from `older`? The person's guide (a document they call the newest) decides first, then the profile's ranking. */
+function winsOver(input: IngestInput, newer: AuthoritySource[], older: AuthoritySource[]): boolean {
+  const named = guideOverrules(readGuide(input.guide, [...newer, ...older].map((s) => s.title ?? '').filter(Boolean)), newer, older);
+  return named ?? overrulesBy(input.profile, newer, older);
+}
+
 function recordOutcome(db: LearningKnowledgeDb, summary: IngestSummary, { id, match, updates }: { id: string; match: Match; updates: boolean }): void {
   if (updates && match.matchId) {
     db.supersedeClaim(match.matchId, id, match.reason ?? 'A newer official source says otherwise');
@@ -76,7 +86,7 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
       summary.unsupported += 1;
     }
     // A higher source (under the subject's profile; by default a standard-setter's own page over textbooks and notes) overrules an older claim: that is an update, not a disagreement.
-    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && overrulesBy(input.profile, citedSources, db.getClaimSources(match.matchId));
+    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && winsOver(input, citedSources, db.getClaimSources(match.matchId));
     if (match.relation === 'contradicts' && !updates) {
       status = 'disputed';
       note = `${match.reason}. ${note}`.trim();

@@ -174,7 +174,7 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   // The subject's source profile (tax, accounting, markets, law, or the person's own) sets the order of authority the learner is told,
   // labels each source with what it is, and leaves out an older edition when a newer one of the same work was found.
   const titles = found.map((f) => f.title);
-  const ctx = sourceContext(profileFor(cfg.profileId, cfg.customProfile, titles), { custom: cfg.sourceRules, names: titles, query, chunkNames: titles, now: new Date() });
+  const ctx = sourceContext(profileFor(cfg.profileId, cfg.customProfile, titles), { custom: cfg.sourceRules, guide: cfg.sourceGuide, names: titles, query, chunkNames: titles, now: new Date() });
   const kept = found.filter((f) => !ctx.retired.has(f.title));
   const heading = ctx.rules ? `${[ctx.rules, ctx.notes].filter(Boolean).join(' ')}\n\n` : '';
   return {
@@ -506,7 +506,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
           const stored = ingestClaims(learningKnowledgeDb, {
             topic: cfg.topic, question: rep.q, reportId: original?.id ?? rep.itemId, reportText: full,
             sources: original?.sourceList ?? [], reportStatus: assessment.status === 'disputed' ? 'disputed' : 'candidate', reportNote: reason,
-            settling: item.kind === 'resolve', profile: profileFor(cfg.profileId, cfg.customProfile, (original?.sourceList ?? []).map((x) => x.title)),
+            settling: item.kind === 'resolve', profile: profileFor(cfg.profileId, cfg.customProfile, (original?.sourceList ?? []).map((x) => x.title)), guide: cfg.sourceGuide,
           });
           L().log({
             agentId: agent.id, kind: 'judge', title: `Knowledge: ${stored.added} new, ${stored.duplicates} already known`,

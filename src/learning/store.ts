@@ -29,6 +29,8 @@ export interface LearnConfig {
   profileId?: string;
   customProfile?: string;
   sourceRules?: string;
+  /** How to use each document the subject reads, in the person's own words. See standards/guide.ts. */
+  sourceGuide?: string;
   /** Keep making new question rounds after the bank is done (keep mode). */
   continuous: boolean;
   /** Keep the screen on while it learns (on unless turned off): when the screen sleeps Android pauses the app and the learning stops. */
