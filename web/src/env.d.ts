@@ -19,3 +19,11 @@ declare module '@mlc-ai/web-llm' {
   export const CreateMLCEngine: (id: string, cfg?: any, chat?: any) => Promise<any>;
   export const prebuiltAppConfig: any;
 }
+declare module 'pdfjs-dist/build/pdf.worker.min.mjs?url' {
+  const url: string;
+  export default url;
+}
+declare module 'pdfjs-dist/build/pdf.mjs' {
+  const m: any;
+  export = m;
+}

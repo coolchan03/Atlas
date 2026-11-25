@@ -2,3 +2,5 @@
 import './downloadManager';
 import './device';
 import './tts';
+import './pdf';
+import './alarms';
