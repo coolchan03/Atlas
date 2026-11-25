@@ -42,7 +42,7 @@ export function readGuide(guide: string | undefined, names: string[]): GuideEntr
   if (!guide?.trim()) return [];
   const order: GuideUse[] = ['skip', 'newest', 'general', 'all'];
   const found = new Map<string, GuideUse>();
-  for (const sentence of guide.split(/[\n.;]+/).map((s) => s.trim()).filter(Boolean)) {
+  for (const sentence of guide.split(/[\n;]+|\.(?=\s|$)/).map((s) => s.trim()).filter(Boolean)) {
     const use = USES.find(([, re]) => re.test(sentence))?.[0];
     if (!use) continue;
     for (const name of names.filter((n) => mentions(sentence, n))) {

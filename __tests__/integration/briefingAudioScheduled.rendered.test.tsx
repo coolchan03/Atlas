@@ -53,3 +53,26 @@ it('makes the audio file after a scheduled briefing when the task asks for it, a
   expect(await audioFor(last.key)).toMatchObject({ path: last.path });
   expect(await audioFor('something-else')).toBeNull();
 }, 30000);
+
+it('keeps the briefing and reports it on the task when a spoken line cannot be joined, instead of failing the task and retrying all day', async () => {
+  jest.resetModules();
+  installNativeBoundary({ fs: true });
+  const { NativeModules, Platform } = require('react-native');
+  Platform.OS = 'android';
+  // A voice that leaves something other than plain 16-bit sound in the file.
+  NativeModules.AtlasTts = {
+    stop: jest.fn(async () => true), setVoice: jest.fn(async () => true), setPitch: jest.fn(async () => true), setRate: jest.fn(async () => true),
+    synthesizeToFile: jest.fn(async (_t: string, out: string) => { await require('react-native-fs').writeFile(out, Buffer.from('not a wave file at all, just some bytes that are long enough').toString('base64'), 'base64'); return out; }),
+    addListener: jest.fn(), removeListeners: jest.fn(),
+  };
+  const { useStudyStore } = require('../../src/study/engine');
+  const { BRIEF_PROJECT } = require('../../src/atlasTools/dailyBrief');
+  const { useSchedule } = require('../../src/schedule/store');
+  const { runTask } = require('../../src/schedule/runner');
+  useStudyStore.getState().add(BRIEF_PROJECT, { kind: 'podcast', createdAt: Date.now(), topic: 'News', title: 'Morning news', sources: [], hosts: 2, minutes: 1, podcast: [{ host: 'A', text: 'Good morning.' }, { host: 'B', text: 'First story.' }] });
+  const id = useSchedule.getState().add({ name: 'Briefing', kind: 'briefing', prompt: '', repeat: 'daily', hour: 7, minute: 0, saveAudio: true });
+  expect(await runTask(id)).toBeNull();
+  const task = useSchedule.getState().tasks.find((t: { id: string }) => t.id === id);
+  expect(task.lastRunAt).toBeTruthy(); // done: no retry loop
+  expect(task.lastError).toMatch(/audio file could not be made: One of the saved lines is in a format that cannot be joined/);
+}, 30000);

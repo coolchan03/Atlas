@@ -11,7 +11,7 @@ const DROP_MS = 80;
  * Hold a tile down, then slide it over another to put it in that place. Touch handling only: `onOver(dragged, target)` says what to
  * reorder. The list stops scrolling while a tile is held (`dragging` is the held tile's key, or null).
  */
-export function useTileDrag(onOver: (dragged: string, target: string) => void) {
+export function useTileDrag(onOver: (dragged: string, target: string) => void, visible: readonly string[]) {
   const listRef = useRef<View>(null);
   const rects = useRef(new Map<string, Rect>());
   const origin = useRef({ x: 0, y: 0 });
@@ -28,7 +28,7 @@ export function useTileDrag(onOver: (dragged: string, target: string) => void) {
   const tileUnder = (pageX: number, pageY: number): string | null => {
     const x = pageX - origin.current.x;
     const y = pageY - origin.current.y;
-    for (const [key, r] of rects.current) if (x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height) return key;
+    for (const [key, r] of rects.current) if (visible.includes(key) && x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height) return key;
     return null;
   };
 

@@ -313,7 +313,7 @@ export const LearningScreen: React.FC = () => {
       </View>
       <Text style={styles.counts}>{STRICTNESS_OPTIONS.find((o) => o.id === (cfg.judgeStrictness ?? DEFAULT_STRICTNESS))?.hint}</Text>
       <Text style={styles.note}>Sources that differ: say what field this is and which source wins (the law over a guide, a newer edition over an older one, a filing over news). A source that outranks another replaces its claim instead of starting a dispute.</Text>
-      <SourceRulesFields value={cfg} names={docNames} disabled={running} onChange={(patch) => setConfig(agentId, patch)} />
+      <SourceRulesFields key={agentId} value={cfg} names={docNames} disabled={running} onChange={(patch) => setConfig(agentId, patch)} />
       <TouchableOpacity style={styles.row} accessibilityRole="switch" accessibilityState={{ checked: cfg.keepAwake !== false }} testID="learning-keep-awake"
         onPress={() => setConfig(agentId, { keepAwake: cfg.keepAwake === false })}>
         <Icon name={cfg.keepAwake !== false ? 'check-square' : 'square'} size={18} color={colors.primary} />

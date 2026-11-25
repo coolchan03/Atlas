@@ -20,7 +20,7 @@ const CUES: Array<[Kind, RegExp, RegExp]> = [
   ['marked', /\b(action item|to-?do|follow up|follow-up|deadline|don'?t forget|do not forget|remember to|make sure)\b/i, /^$/],
 ];
 // A sentence that only wonders, hedges or refuses is not a task.
-const NOT_A_TASK = /\b(i'?ll think|i will think|maybe|i guess|not sure|if i have time|i don'?t know|we'?ll see)\b/i;
+const NOT_A_TASK = /\b(i'?ll think|i will think|maybe|i guess|not sure|if i have time|i don'?t know|we'?ll see)\b|\b(?:can|could|would|will) you (?:please )?(?:hear|see|repeat|say that|speak up|tell me|explain|hold on|wait|share your screen|confirm that you)\b|^(?:please )?(?:hold on|bear with me|go ahead)\b/i;
 
 /** Sentences of a turn. */
 const sentences = (text: string): string[] => text.split(/(?<=[.?!])\s+/).map((s) => s.trim()).filter(Boolean);

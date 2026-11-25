@@ -23,7 +23,7 @@ it('finds who promised or was asked what, and sets reminders for the dated ones'
       utterances: [
         u(0, 0, 'Thanks for joining. I will send the revised budget by Friday.'),
         u(1, 10, 'Great. Can you book the meeting room for next week? Also the weather was nice.'),
-        u(0, 20, 'Sure. We need to pick a vendor. Maybe I will think about it.'),
+        u(0, 20, 'Sure. We need to pick a vendor. Maybe I will think about it. Can you hear me okay?'),
       ],
     }],
   });

@@ -7,7 +7,7 @@ import { readPcm16 } from './wavTrim';
 /** The first channel of a plain PCM 16-bit WAV as samples at `rate` (resampled in a straight line when it was made at another rate), or null. */
 export function monoSamplesAt(bytes: Uint8Array, rate: number): Int16Array | null {
   const pcm = readPcm16(bytes);
-  if (!pcm) return null;
+  if (!pcm || rate < 8000 || rate > 96000) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const frames = pcm.dataLength / (2 * pcm.channels);
   const at = (frame: number): number => view.getInt16(pcm.dataStart + frame * pcm.channels * 2, true);

@@ -29,3 +29,9 @@ it('lets the document called the newest win a disagreement, and says nothing whe
   expect(guideOverrules(entries, [{ title: 'Code 2024.pdf' } as never], [{ title: 'Tax Handbook 2023.pdf' } as never])).toBeNull();
   expect(guideOverrules([], [{ title: 'Memo 2025.pdf' } as never], [])).toBeNull();
 });
+
+it('reads a document named with its file extension, and a version number with a dot', () => {
+  const names = ['Memo 2025.pdf', 'Guide v2.1.pdf'];
+  const read = Object.fromEntries(readGuide('Memo 2025.pdf is the most up to date. Ignore Guide v2.1.pdf.', names).map((e) => [e.name, e.use]));
+  expect(read).toEqual({ 'Memo 2025.pdf': 'newest', 'Guide v2.1.pdf': 'skip' });
+});

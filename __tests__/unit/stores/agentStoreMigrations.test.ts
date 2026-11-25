@@ -116,7 +116,6 @@ describe('specialists with built-in knowledge', () => {
     expect(DEFAULT_AGENTS.find((d: any) => d.id === 'home-chef').systemPrompt).toContain('165 F (74 C)');
 
     const OLD_WRITER = writer.systemPrompt.slice(0, writer.systemPrompt.indexOf('\n\nBUILT-IN WRITING BASICS'));
-    const OLD_REPAIR = repair.systemPrompt.slice(0, repair.systemPrompt.indexOf('\n\nBUILT-IN REPAIR BASICS'));
     const out = merge({
       seenDefaults: DEFAULT_AGENTS.map((d: any) => d.id),
       agents: [agent({ id: 'writer', systemPrompt: OLD_WRITER }), agent({ id: 'repair-helper', systemPrompt: 'My own repair prompt' })],
