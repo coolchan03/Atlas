@@ -73,7 +73,9 @@ function buildArgs(o, port, variant) {
   if (o.n_threads) a.push('-t', String(o.n_threads));
   if (o.n_batch) a.push('-b', String(o.n_batch));
   a.push('-ngl', gpu ? String(o.n_gpu_layers && o.n_gpu_layers > 0 ? o.n_gpu_layers : 999) : '0');
-  if (o.flash_attn) a.push('-fa', 'on');
+  // llama.cpp refuses a quantized V cache without flash attention, so turn it on whenever one is asked for.
+  const quantV = !!o.cache_type_v && o.cache_type_v !== 'f16';
+  if (o.flash_attn || quantV) a.push('-fa', 'on');
   if (o.cache_type_k && o.cache_type_k !== 'f16') a.push('--cache-type-k', String(o.cache_type_k));
   if (o.cache_type_v && o.cache_type_v !== 'f16') a.push('--cache-type-v', String(o.cache_type_v));
   if (o.use_mmap === false) a.push('--no-mmap');
