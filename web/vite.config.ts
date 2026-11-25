@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rnRequire } from './vite-plugins/rnRequire';
 import { jsxInJs } from './vite-plugins/jsxInJs';
+import { androidAssets } from './vite-plugins/androidAssets';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -71,12 +72,13 @@ export default defineConfig(({ mode }) => {
   const desktop = process.env.ATLAS_TARGET === 'desktop';
   return {
     root: here,
-    base: desktop ? './' : process.env.ATLAS_BASE || '/',
+    base: process.env.ATLAS_BASE || './',
     publicDir: path.join(here, 'public'),
     plugins: [
       reactNativeResolver(),
       rnRequire(root),
       jsxInJs(),
+      androidAssets(root),
       react({ jsxRuntime: 'automatic' }),
       ...(desktop
         ? []

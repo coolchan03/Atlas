@@ -134,12 +134,12 @@ export async function copyFile(from: string, to: string) {
   await fs().copy(from, to);
 }
 export async function copyFileAssets(assetPath: string, dest: string) {
-  const res = await fetch(`/android-assets/${assetPath.replace(/^\/+/, '')}`);
+  const res = await fetch(`${import.meta.env.BASE_URL}android-assets/${assetPath.replace(/^\/+/, '')}`);
   if (!res.ok) throw new Error(`Bundled asset not found: ${assetPath}`);
   await fs().mkdir(dirName(dest));
   await fs().writeFile(dest, new Uint8Array(await res.arrayBuffer()));
 }
-export const existsAssets = async (assetPath: string) => (await fetch(`/android-assets/${assetPath}`, { method: 'HEAD' })).ok;
+export const existsAssets = async (assetPath: string) => (await fetch(`${import.meta.env.BASE_URL}android-assets/${assetPath}`, { method: 'HEAD' })).ok;
 export async function touch(path: string) {
   if (!(await fs().exists(path))) await fs().writeFile(path, '');
 }
@@ -217,7 +217,7 @@ export const getAllExternalFilesDirs = async () => [ExternalDirectoryPath];
 export const uploadFiles = () => ({ jobId: 0, promise: Promise.reject(new Error('Upload is not available on the web build')) });
 export const stopUpload = () => undefined;
 export const readFileAssets = async (p: string, enc?: string) => {
-  const r = await fetch(`/android-assets/${p}`);
+  const r = await fetch(`${import.meta.env.BASE_URL}android-assets/${p}`);
   return decode(new Uint8Array(await r.arrayBuffer()), enc);
 };
 

@@ -1,0 +1,33 @@
+// Verifies the PWA: manifest, service worker, cross-origin isolation, and that the app opens offline.
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+let chromium;
+try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require('/opt/node22/lib/node_modules/playwright')); }
+const url = process.argv[2] || 'http://localhost:4173/';
+const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const ctx = await browser.newContext({ viewport: { width: 412, height: 860 } });
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
+const out = {};
+await page.goto(url, { waitUntil: 'load' });
+await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 30000 }).catch(() => {});
+await page.waitForTimeout(2500);
+out.controlled = await page.evaluate(() => !!navigator.serviceWorker.controller);
+out.isolatedAfterFirstLoad = await page.evaluate(() => crossOriginIsolated);
+const manifest = await page.evaluate(async () => { const r = await fetch(document.querySelector('link[rel=manifest]').href); return r.json(); });
+out.manifest = { name: manifest.name, icons: manifest.icons.length, display: manifest.display };
+await page.reload({ waitUntil: 'load' });
+await page.waitForTimeout(2500);
+out.sharedArrayBuffer = await page.evaluate(() => typeof SharedArrayBuffer !== 'undefined' && crossOriginIsolated);
+await ctx.setOffline(true);
+await page.reload({ waitUntil: 'load' });
+await page.waitForTimeout(3500);
+out.offlineText = (await page.evaluate(() => document.body.innerText)).slice(0, 60).replace(/\n+/g, ' | ');
+out.offlineIsolated = await page.evaluate(() => crossOriginIsolated);
+console.log(JSON.stringify(out, null, 1));
+console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'no page errors');
+const ok = out.controlled && out.sharedArrayBuffer && /Skip|Yours|Atlas|Set Up/i.test(out.offlineText);
+console.log(ok ? 'PWA CHECK PASSED' : 'PWA CHECK FAILED');
+await browser.close();
+process.exit(ok ? 0 : 1);

@@ -14,6 +14,7 @@
   "dependencies": {
     "@huggingface/transformers": "^4.3.2",
     "@mlc-ai/web-llm": "^0.2.89",
+    "@sqlite.org/sqlite-wasm": "^3.54.1-build1",
     "@wllama/wllama": "^2.3.5",
     "fflate": "^0.8.2",
     "react-native-web": "^0.21.0",
