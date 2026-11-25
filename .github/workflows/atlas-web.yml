@@ -72,6 +72,7 @@ jobs:
           node scripts/zim-test.mjs http://localhost:4173/
           curl -fsSL -o /tmp/monaco.map https://download.mapsforge.org/maps/v5/europe/monaco.map
           node scripts/map-test.mjs http://localhost:4173/ /tmp/monaco.map
+          node scripts/video-test.mjs http://localhost:4173/
       - name: WebGPU engine (software GPU; informational, does not block)
         continue-on-error: true
         working-directory: web
