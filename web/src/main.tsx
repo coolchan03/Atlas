@@ -3,6 +3,7 @@ import './native';
 import { boot } from './boot';
 import { registerServiceWorker } from './pwa/register';
 import { startBanner } from './pwa/banner';
+import { listenForOpenedFiles } from './host/openFile';
 
 async function start() {
   await boot();
@@ -18,5 +19,6 @@ async function start() {
   document.getElementById('boot')?.remove();
   void registerServiceWorker();
   startBanner();
+  listenForOpenedFiles();
 }
 void start();

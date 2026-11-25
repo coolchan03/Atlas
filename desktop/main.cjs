@@ -34,6 +34,11 @@ function llamaDir() {
   return path.join(__dirname, 'resources', 'llama');
 }
 
+/** A file Windows opened with Atlas (double click on a .gguf): made reachable, then handed to the app as a virtual path. */
+function sendOpenFile(p) {
+  try { diskfs.allow(p); win?.webContents.send('app:open-file', diskfs.virtualFor(p)); } catch { /* ignore */ }
+}
+
 function createWindow() {
   const ws = windowState(app.getPath('userData'));
   win = new BrowserWindow({
@@ -56,7 +61,7 @@ function createWindow() {
   win.loadURL('app://atlas/index.html');
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/i.test(url)) void shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('app://')) { e.preventDefault(); if (/^https?:/i.test(url)) void shell.openExternal(url); } });
-  win.webContents.on('did-finish-load', () => { for (const p of pendingOpen.splice(0)) win.webContents.send('app:open-file', p); });
+  win.webContents.on('did-finish-load', () => { for (const p of pendingOpen.splice(0)) sendOpenFile(p); });
   win.on('closed', () => { win = null; });
   if (process.env.ATLAS_SELFTEST) require('./lib/selftest.cjs').run(win, app);
 }
@@ -181,9 +186,9 @@ function buildMenu() {
 
 app.on('second-instance', (_e, argv) => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
-  for (const a of argv.slice(1)) if (/\.(gguf|txt|md|pdf|json)$/i.test(a) && fs.existsSync(a)) win?.webContents.send('app:open-file', a);
+  for (const a of argv.slice(1)) if (/\.(gguf|txt|md|pdf|json)$/i.test(a) && fs.existsSync(a)) sendOpenFile(a);
 });
-app.on('open-file', (e, p) => { e.preventDefault(); if (win) win.webContents.send('app:open-file', p); else pendingOpen.push(p); });
+app.on('open-file', (e, p) => { e.preventDefault(); if (win) sendOpenFile(p); else pendingOpen.push(p); });
 
 app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark';
