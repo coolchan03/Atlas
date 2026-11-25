@@ -31,6 +31,29 @@ exports.run = (win, app) => {
               out.llm = { engine: c.androidLib, reply: r.content, gpu: c.gpu, devices: c.devices };
               await c.release();
             }
+            if (${process.env.ATLAS_SELFTEST_IMAGE ? 'true' : 'false'}) {
+              // Image generation through the app's own LocalDreamModule: import a tiny checkpoint, load it, make a picture.
+              const L = a.NativeModules.LocalDreamModule;
+              const enc = new TextEncoder();
+              const header = enc.encode(JSON.stringify({ 'model.diffusion_model.w': { dtype: 'F16', shape: [1], data_offsets: [0, 2] } }));
+              const bytes = new Uint8Array(8 + header.length + 2);
+              new DataView(bytes.buffer).setBigUint64(0, BigInt(header.length), true);
+              bytes.set(header, 8);
+              await a.fs().mkdir('/atlas/files/tmp');
+              await a.fs().writeFile('/atlas/files/tmp/tiny-turbo.safetensors', bytes);
+              const info = await L.inspectAtlasImageFile({ uri: '/atlas/files/tmp/tiny-turbo.safetensors', fileName: 'tiny-turbo.safetensors' });
+              const imp = await L.importAtlasImageFile({ uri: '/atlas/files/tmp/tiny-turbo.safetensors', modelDir: '/atlas/files/image_models/selftest', fileName: 'tiny-turbo.safetensors' });
+              await L.loadModel({ modelPath: imp.modelDir, backend: 'sdcpp', threads: 2 });
+              const gpu = await L.getAtlasImageGpuDiagnostics();
+              const steps = [];
+              const sub = a.bus.addListener('LocalDreamProgress', (e) => steps.push(e.step));
+              const img = await L.generateImage({ prompt: 'a red house', steps: 4, width: 256, height: 256, seed: 3, computeBackend: gpu.enumerated ? 'vulkan' : 'cpu' });
+              sub.remove();
+              const list = await L.getGeneratedImages();
+              out.image = { family: info.family, variant: imp.variant, gpu: gpu.enumerated, steps, width: img.width, height: img.height, size: (await a.fs().stat(img.imagePath)).size, listed: list.length, loaded: await L.getLoadedBackend() };
+              await L.deleteGeneratedImage(img.id);
+              await L.unloadModel();
+            }
             out.llama = await h.llama.capabilities();
             out.system = await h.system();
           } catch (e) { out.error = String(e && e.stack || e); }
@@ -46,7 +69,8 @@ exports.run = (win, app) => {
       } catch { /* optional */ }
       console.log('SELFTEST ' + JSON.stringify(result));
       if (errors.length) console.log('CONSOLE ERRORS ' + JSON.stringify(errors.slice(0, 8)));
-      const ok = result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && (result.initialUrl || /Skip|YOURS|Atlas/i.test(result.text || ''));
+      const imageOk = !process.env.ATLAS_SELFTEST_IMAGE || (result.image && result.image.family === 'sd15' && result.image.width === 256 && result.image.size > 100 && result.image.steps.join() === '1,2,3,4' && result.image.listed === 1);
+      const ok = imageOk && result.host && result.read === 'héllo disk' && result.fts === 1 && !result.error && (result.initialUrl || /Skip|YOURS|Atlas/i.test(result.text || ''));
       console.log(ok ? 'SELFTEST PASSED' : 'SELFTEST FAILED');
       app.exit(ok ? 0 : 1);
     }, 6000);
