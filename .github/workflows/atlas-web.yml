@@ -67,6 +67,14 @@ jobs:
           node scripts/server-backend-test.mjs http://localhost:4173/
           node scripts/llm-e2e.mjs http://localhost:4173/
           node scripts/voice-e2e.mjs http://localhost:4173/
+          node scripts/zim-test.mjs http://localhost:4173/
+      - name: WebGPU engine (software GPU; informational, does not block)
+        continue-on-error: true
+        working-directory: web
+        run: |
+          npx vite preview --port 4174 --strictPort &
+          sleep 3
+          timeout 900 node scripts/webgpu-e2e.mjs http://localhost:4174/
       - uses: actions/upload-artifact@v4
         with:
           name: atlas-web
