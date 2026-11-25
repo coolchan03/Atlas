@@ -70,3 +70,19 @@ export async function writeReportsFile(name: string, reports: Parameters<typeof 
     return null;
   }
 }
+
+/** The most characters of reports sent as plain text when no file can be shared. The phone's share sheet passes text through a size-limited channel, and a very long text makes it hang. */
+const MAX_SHARED_TEXT = 100_000;
+
+/**
+ * Shares the reports. They are written to a file once and the file is shared (a file has no size limit that matters); only when that
+ * is not possible is the text shared, cut to a size the share sheet can carry, with a line saying so. Returns how it went.
+ */
+export async function shareReports(name: string, reports: Parameters<typeof reportsMarkdown>[1], share: (item: { title: string; text?: string; file?: string }) => Promise<boolean>): Promise<{ how: 'file' | 'text' | 'failed'; path: string | null }> {
+  const title = `Reports on ${name}`;
+  const path = await writeReportsFile(name, reports);
+  if (path && (await share({ title, file: path }))) return { how: 'file', path };
+  const md = reportsMarkdown(name, reports);
+  const text = md.length > MAX_SHARED_TEXT ? `${md.slice(0, MAX_SHARED_TEXT)}\n\n[Cut: ${md.length.toLocaleString('en-US')} characters in all. The full text is in the saved file.]` : md;
+  return { how: (await share({ title, text })) ? 'text' : 'failed', path };
+}

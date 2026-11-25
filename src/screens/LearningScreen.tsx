@@ -10,7 +10,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore } from '../stores/agentStore';
 import { NO_AGENT, isNoAgent, setLessons, expertName } from '../learning/agents';
-import { reportsMarkdown, writeReportsFile } from '../learning/lessonsFile';
+import { shareReports as shareReportsOf } from '../learning/lessonsFile';
 import { markSources, superscript } from '../study/replySources';
 import { useProjectStore, useAppStore } from '../stores';
 import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
@@ -138,12 +138,16 @@ export const LearningScreen: React.FC = () => {
     return () => { onLearningStatus(null); clearInterval(t); };
   }, []);
 
+  const [sharing, setSharing] = useState(false);
   const shareReports = async () => {
-    const reports = st?.reportLog ?? [];
-    const name = expertName(agentId);
-    const path = await writeReportsFile(name, reports);
-    await shareItem({ title: `Reports on ${name}`, text: reportsMarkdown(name, reports) });
-    if (path) Alert.alert('Saved as a file too', path);
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0)); // let the button show it is working before the file is built
+      const done = await shareReportsOf(expertName(agentId), st?.reportLog ?? [], shareItem);
+      if (done.how === 'failed') Alert.alert('Could not share the reports', done.path ? `They are saved as a file instead: ${done.path}` : 'The phone could not open the share sheet.');
+      else if (done.how === 'text' && done.path) Alert.alert('Shared as text', `The reports are saved as a file too: ${done.path}`);
+    } finally { setSharing(false); }
   };
   const [refining, setRefining] = useState(false);
   const [suggestion, setSuggestion] = useState('');
@@ -320,8 +324,8 @@ export const LearningScreen: React.FC = () => {
       <View style={styles.reportsHead}>
         <View style={styles.grow}>{foldHead('reports', 'Reports it wrote')}</View>
         {!folded.reports && (st?.reportLog ?? []).length > 0 && (
-          <TouchableOpacity onPress={shareReports} style={styles.smallBtn} testID="share-reports" accessibilityRole="button">
-            <Text style={styles.smallBtnText}>Share reports</Text>
+          <TouchableOpacity onPress={shareReports} disabled={sharing} style={styles.smallBtn} testID="share-reports" accessibilityRole="button">
+            <Text style={styles.smallBtnText}>{sharing ? 'Sharing...' : 'Share reports'}</Text>
           </TouchableOpacity>
         )}
       </View>
