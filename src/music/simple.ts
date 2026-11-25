@@ -7,12 +7,15 @@ import { STYLES, specFor, type StyleMood } from './styles';
 
 /** Words people use for each style. The first style whose word appears in the description wins, so the specific ones come first. */
 const WORDS: Array<[StyleMood, RegExp]> = [
+  ['metal', /\b(metal|thrash|heavy rock)\b/i], ['ska', /\bska\b/i], ['techno', /\btechno\b/i], ['house', /\bhouse music\b|\bdeep house\b/i], ['trap', /\btrap\b/i], ['soul', /\b(soul|r&b|rnb|motown)\b/i],
+  ['gospel', /\b(gospel|choir)\b/i], ['flamenco', /\bflamenco\b/i], ['tango', /\btango\b/i], ['waltz', /\bwaltz\b/i], ['bluegrass', /\b(bluegrass|banjo)\b/i], ['afrobeat', /\bafrobeat\b/i],
+  ['dreampop', /\b(dream ?pop|shoegaze)\b/i], ['cyberpunk', /\b(cyberpunk|blade runner|dystopi)/i], ['sunrise', /\b(sunrise|morning|dawn)\b/i], ['fantasy', /\b(fantasy|quest|dragon|elf|wizard)\b/i], ['ocean', /\b(underwater|ocean|under the sea|coral)\b/i],
   ['jazz', /\b(jazz|swing|bebop|sax|saxophone|speakeasy)\b/i], ['bossa', /\b(bossa|samba)\b/i], ['blues', /\bblues\b/i], ['lofi', /\b(lo-?fi|chill ?hop|study beats)\b/i],
   ['noir', /\b(noir|detective|mystery)\b/i], ['classical', /\b(classical|baroque|orchestra|mozart|sonata)\b/i], ['lullaby', /\b(lullaby|sleep|bedtime|baby)\b/i],
-  ['rock', /\b(rock|guitar solo|metal)\b/i], ['funk', /\bfunk/i], ['disco', /\bdisco\b/i], ['reggae', /\breggae\b/i], ['country', /\bcountry\b/i], ['hiphop', /\b(hip ?hop|boom bap|rap beat)\b/i],
-  ['edm', /\b(edm|dance|club|house music|techno)\b/i], ['electro', /\b(electronic|synth|electro)\b/i], ['retro80s', /\b(80s|eighties|synthwave)\b/i], ['chiptune', /\b(8-?bit|chiptune|video ?game|arcade)\b/i],
+  ['rock', /\b(rock|guitar solo)\b/i], ['funk', /\bfunk/i], ['disco', /\bdisco\b/i], ['reggae', /\breggae\b/i], ['country', /\bcountry\b/i], ['hiphop', /\b(hip ?hop|boom bap|rap beat)\b/i],
+  ['edm', /\b(edm|dance|club)\b/i], ['electro', /\b(electronic|synth|electro)\b/i], ['retro80s', /\b(80s|eighties|synthwave)\b/i], ['chiptune', /\b(8-?bit|chiptune|video ?game|arcade)\b/i],
   ['christmas', /\b(christmas|xmas|holiday season)\b/i], ['halloween', /\b(halloween|spooky|haunted)\b/i], ['italian', /\b(italian|pizzeria|trattoria)\b/i], ['frenchcafe', /\b(french|paris|cafe|café)\b/i],
-  ['tavern', /\b(tavern|medieval|renaissance|fantasy)\b/i], ['shanty', /\b(pirate|shanty|sailor)\b/i], ['western', /\b(western|cowboy|saloon)\b/i], ['campfire', /\b(campfire|folk|acoustic)\b/i],
+  ['tavern', /\b(tavern|medieval|renaissance)\b/i], ['shanty', /\b(pirate|shanty|sailor)\b/i], ['western', /\b(western|cowboy|saloon)\b/i], ['campfire', /\b(campfire|folk|acoustic)\b/i],
   ['rain', /\b(rain|rainy|storm)\b/i], ['spa', /\b(spa|relax|calm|meditat|yoga|massage)\b/i], ['space', /\b(space|galaxy|cosmic|sci-?fi)\b/i], ['film', /\b(cinematic|epic|film|trailer|movie)\b/i],
   ['focus', /\b(focus|study|reading|work|concentrat|background)\b/i], ['pop', /\bpop\b/i], ['vaporwave', /\bvaporwave\b/i], ['eerie', /\b(eerie|fog|creepy)\b/i],
 ];

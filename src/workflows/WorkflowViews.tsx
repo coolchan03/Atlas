@@ -95,7 +95,7 @@ export const InputView: React.FC<InputProps> = (p) => {
       {(input.fields ?? []).map((f) => <FieldRow key={f.id} field={f} value={p.fields[f.id] ?? ''} onChange={(v) => p.setField(f.id, v)} />)}
       <TextInput style={[styles.input, styles.big, { color: colors.text, borderColor: colors.border }]} value={p.text} onChangeText={p.setText} multiline textAlignVertical="top"
         placeholder={input.placeholder ?? 'Paste text here'} placeholderTextColor={colors.textMuted} testID="workflow-text" />
-      {input.fromPhoto && <PhotoFill label={input.fromPhoto.label} read={input.fromPhoto.read} onText={(t) => p.setText(p.text.trim() ? `${p.text.trim()}, ${t}` : t)} />}
+      {input.fromPhoto && <PhotoFill label={input.fromPhoto.label} read={input.fromPhoto.read} onText={(t) => { const target = input.fromPhoto?.field; const before = (target ? p.fields[target] : p.text)?.trim(); const next = before ? `${before}, ${t}` : t; if (target) p.setField(target, next); else p.setText(next); }} />}
       {input.fromRecording && p.recordings.map((r) => (
         <TouchableOpacity key={r.id} onPress={() => { p.setText(recorderService.transcript(r.id)); p.setField('title', r.title); }} style={styles.row} testID={`workflow-rec-${r.id}`}>
           <Text style={{ color: colors.primary }}>Use recording: {r.title}</Text>

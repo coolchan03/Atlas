@@ -25,6 +25,22 @@ describe('meal week', () => {
     expect(run.error).toMatch(/peanut/i);
   });
 });
+describe('meal week with food on hand', () => {
+  it('plans from what is on hand and keeps it off the shopping list, whatever the AI listed', async () => {
+    const asked: string[] = [];
+    const ask = async (system: string) => {
+      asked.push(system);
+      return JSON.stringify({ dinners: [{ meal: 'Egg fried rice', items: ['eggs', 'rice', 'soy sauce'] }, { meal: 'Spinach omelette', items: ['Eggs', 'spinach', 'cheese'] }, { meal: 'Bean chili', items: ['beans', 'tomatoes', 'rice'] }] });
+    };
+    const ctx = mealWeek.input.make('simple food', { pantry: 'eggs, rice\nspinach', diners: '2' });
+    expect(ctx.pantry).toEqual(['eggs', 'rice', 'spinach']);
+    const run = await advance(mealWeek, newRun(mealWeek, 'm', ctx), { ask });
+    expect(asked[0]).toMatch(/already has: eggs, rice, spinach/);
+    expect(run.status).toBe('waiting');
+    expect(run.ctx.shopping).toEqual(['soy sauce', 'cheese', 'beans', 'tomatoes']);
+    expect(run.waiting?.summary).toMatch(/Already on hand: eggs, rice, spinach/);
+  });
+});
 describe('decision', () => {
   it('ranks by the sum of weights, computed in code', () => {
     const ranked = scoreOptions([

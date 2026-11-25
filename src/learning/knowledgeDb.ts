@@ -78,10 +78,22 @@ export interface ReliabilityClaim {
   id: string; question: string; claim: string; topic: string; status: ClaimStatus;
   agentId: string | null; citations: number; sourcePassages: number; updatedAt: string;
 }
+/** What a subject gained since the person last looked. */
+export interface SubjectDigest {
+  reports: { pass: number; fail: number; waiting: number };
+  facts: Record<string, number>;
+  replaced: number;
+  open: number;
+  newest: string[];
+  sources: string[];
+}
+
 export interface ReliabilitySnapshot {
   counts: Record<ClaimStatus, number>;
   recent: ReliabilityClaim[];
 }
+
+const safeJson = (text: unknown): EvidenceSource[] => { try { const v = JSON.parse(String(text)); return Array.isArray(v) ? v : []; } catch { return []; } };
 
 export interface StoredReport {
   id: string; q: string; text: string; sources: string; at: number;
@@ -151,6 +163,43 @@ export class LearningKnowledgeDb {
       r.id, subjectId, r.q, r.text, r.sources, JSON.stringify(r.sourceList ?? []),
       r.at, r.status, r.score ?? null, r.why ?? null, isoNow(),
     ]);
+  }
+
+  /** Records the judge's ruling on an archived report (the report's own words are never changed). */
+  setArchivedVerdict(id: string, v: { status: string; score?: number; why?: string }): void {
+    this.sql('UPDATE atlas_report_archive SET judge_status = ?, judge_score = ?, judge_reason = ? WHERE id = ?', [v.status, v.score ?? null, v.why ?? null, id]);
+  }
+
+  /** How many reports a subject has written (all of them, not only the ones the screen keeps). */
+  reportCount(subjectId: string): number {
+    return Number(((this.sql('SELECT COUNT(*) AS n FROM atlas_report_archive WHERE subject_id = ?', [subjectId]).rows ?? [])[0] as { n?: number } | undefined)?.n) || 0;
+  }
+
+  /** What a subject gained since a moment (milliseconds): reports and how they were judged, new facts by status, facts an official source replaced, the newest facts, the sources used most, and the disagreements still open. */
+  digestSince(subjectId: string, since: number): SubjectDigest {
+    const iso = new Date(since).toISOString();
+    const rows = (q: string, params: Array<string | number>): Array<Record<string, any>> => (this.sql(q, params).rows ?? []) as Array<Record<string, any>>;
+    const reports = { pass: 0, fail: 0, waiting: 0 };
+    for (const r of rows('SELECT judge_status AS s, COUNT(*) AS n FROM atlas_report_archive WHERE subject_id = ? AND original_timestamp > ? GROUP BY judge_status', [subjectId, since])) {
+      reports[(['pass', 'fail'].includes(String(r.s)) ? String(r.s) : 'waiting') as keyof typeof reports] += Number(r.n) || 0;
+    }
+    const facts: Record<string, number> = {};
+    for (const r of rows('SELECT c.status AS s, COUNT(*) AS n FROM atlas_claims c JOIN atlas_report_archive a ON a.id = c.report_id WHERE a.subject_id = ? AND c.created_at > ? GROUP BY c.status', [subjectId, iso])) facts[String(r.s)] = Number(r.n) || 0;
+    const num = (q: string, params: Array<string | number>): number => Number(rows(q, params)[0]?.n) || 0;
+    const replaced = num("SELECT COUNT(*) AS n FROM atlas_claim_history h JOIN atlas_claims c ON c.id = h.claim_id JOIN atlas_report_archive a ON a.id = c.report_id WHERE a.subject_id = ? AND h.new_status = 'superseded' AND h.at > ?", [subjectId, iso]);
+    const open = num("SELECT COUNT(*) AS n FROM atlas_claims c JOIN atlas_report_archive a ON a.id = c.report_id WHERE a.subject_id = ? AND c.status = 'disputed'", [subjectId]);
+    const newest = rows("SELECT c.claim_text AS t FROM atlas_claims c JOIN atlas_report_archive a ON a.id = c.report_id WHERE a.subject_id = ? AND c.created_at > ? AND c.status IN ('verified','candidate') ORDER BY c.created_at DESC LIMIT 5", [subjectId, iso]).map((r) => String(r.t));
+    const sources = rows('SELECT s.title AS t, COUNT(*) AS n FROM atlas_evidence e JOIN atlas_sources s ON s.id = e.source_id JOIN atlas_claims c ON c.id = e.claim_id JOIN atlas_report_archive a ON a.id = c.report_id WHERE a.subject_id = ? AND c.created_at > ? GROUP BY s.title ORDER BY n DESC LIMIT 5', [subjectId, iso]).map((r) => String(r.t));
+    return { reports, facts, replaced, open, newest, sources };
+  }
+
+  /** One page of a subject's reports, newest first, for exporting thousands of them without holding them all at once. */
+  reportPage(subjectId: string, limit: number, offset: number): StoredReport[] {
+    return (this.sql(`SELECT id, question, report_text, source_text, source_list_json, original_timestamp, judge_status, judge_score, judge_reason
+      FROM atlas_report_archive WHERE subject_id = ? ORDER BY original_timestamp DESC, id LIMIT ? OFFSET ?`, [subjectId, limit, offset]).rows ?? []).map((r: any) => ({
+      id: String(r.id), q: String(r.question), text: String(r.report_text), sources: String(r.source_text), sourceList: safeJson(r.source_list_json),
+      at: Number(r.original_timestamp), status: (['pass', 'fail'].includes(String(r.judge_status)) ? String(r.judge_status) : 'waiting') as StoredReport['status'], score: r.judge_score ?? undefined, why: r.judge_reason ?? undefined,
+    }));
   }
 
   saveCandidate(c: CandidateClaim): void {

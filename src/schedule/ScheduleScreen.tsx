@@ -26,7 +26,7 @@ const IDEAS: { name: string; kind: TaskKind; prompt: string; repeat: Repeat; hou
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-type Draft = { id?: string; name: string; kind: TaskKind; prompt: string; repeat: Repeat; hour: number; minute: number; weekday: number };
+type Draft = { id?: string; name: string; kind: TaskKind; prompt: string; repeat: Repeat; hour: number; minute: number; weekday: number; saveAudio?: boolean };
 const blank = (): Draft => ({ name: '', kind: 'prompt', prompt: '', repeat: 'daily', hour: 8, minute: 0, weekday: 1 });
 
 function Chip({ label, on, onPress, testID }: { label: string; on: boolean; onPress: () => void; testID?: string }) {
@@ -65,6 +65,7 @@ export const ScheduleScreen: React.FC = () => {
       kind: draft.kind, prompt: draft.kind === 'briefing' ? '' : draft.prompt.trim(),
       repeat: draft.repeat, hour: draft.hour, minute: draft.minute,
       weekday: draft.repeat === 'weekly' ? draft.weekday : undefined,
+      saveAudio: draft.kind === 'briefing' ? !!draft.saveAudio : undefined,
       onceAt: draft.repeat === 'once' ? nextTimeOfDay(draft.hour, draft.minute, Date.now()) : undefined,
     };
     if (draft.id) update(draft.id, { ...fields, enabled: true, lastError: undefined });
@@ -88,7 +89,7 @@ export const ScheduleScreen: React.FC = () => {
   const confirmDelete = (t: ScheduledTask) => Alert.alert('Delete this task?', t.name, [
     { text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => remove(t.id) },
   ]);
-  const edit = (t: ScheduledTask) => setDraft({ id: t.id, name: t.name, kind: t.kind, prompt: t.prompt, repeat: t.repeat, hour: t.hour, minute: t.minute, weekday: t.weekday ?? 1 });
+  const edit = (t: ScheduledTask) => setDraft({ id: t.id, name: t.name, kind: t.kind, prompt: t.prompt, repeat: t.repeat, hour: t.hour, minute: t.minute, weekday: t.weekday ?? 1, saveAudio: t.saveAudio });
   const bump = (field: 'hour' | 'minute', by: number) => setDraft((d) => {
     if (!d) return d;
     return field === 'hour' ? { ...d, hour: (d.hour + by + 24) % 24 } : { ...d, minute: (d.minute + by * 5 + 60) % 60 };
@@ -152,6 +153,11 @@ export const ScheduleScreen: React.FC = () => {
               <Chip label="Ask the AI" on={draft.kind === 'prompt'} onPress={() => setDraft({ ...draft, kind: 'prompt' })} testID="task-kind-prompt" />
               <Chip label="Daily briefing" on={draft.kind === 'briefing'} onPress={() => setDraft({ ...draft, kind: 'briefing' })} testID="task-kind-briefing" />
             </View>
+            {draft.kind === 'briefing' && (
+              <View style={styles.chips}>
+                <Chip label="Also save it as an audio file" on={!!draft.saveAudio} onPress={() => setDraft({ ...draft, saveAudio: !draft.saveAudio })} testID="task-save-audio" />
+              </View>
+            )}
             {draft.kind === 'prompt' && (
               <TextInput value={draft.prompt} onChangeText={(prompt) => setDraft({ ...draft, prompt })} multiline testID="task-prompt"
                 placeholder={'What should the AI do? Start with /skill-name to use a skill, e.g. "/summarize the top tech news"'} placeholderTextColor={colors.textMuted}

@@ -5,7 +5,7 @@
  * style and band, so the music is always valid. If the model gives nothing usable, the dice's own genre is used.
  */
 import { INSTRUMENTS, instrumentById } from '../music/catalog';
-import { composeFromSpec, seedFor } from '../music/arrange';
+import { composeLong, seedFor } from '../music/arrange';
 import { STYLES, isStyleMood, specFor, type Energy, type StyleMood } from '../music/styles';
 import type { Extra } from '../music/styleTypes';
 import type { MusicScore, Voice } from '../music/types';
@@ -82,12 +82,12 @@ function bandFor(style: StyleMood, instruments: Voice[]): { band: ReturnType<typ
   return { band, extras: extras.length ? extras : base.extras ?? [] };
 }
 
-/** The tune for a show: one pass of 16 bars that the player loops. The same show always makes the same tune. */
+/** The tune for a show: 32 bars (two different 16-bar passes in one key) that the player loops. The same show always makes the same tune. */
 export function tuneFor(show: Show, sound: Sound, title: string): MusicScore {
   const base = specFor(sound.style);
   const { band, extras } = bandFor(sound.style, sound.instruments);
   const tempo: Record<Energy, number> = { calm: 0.86, medium: 1, lively: 1.14 };
   const bump: Record<Energy, number> = { calm: -1, medium: 0, lively: 1 };
   const spec = { ...base, band, extras, bpm: Math.max(60, Math.min(165, Math.round(base.bpm * tempo[show.energy]))), density: Math.max(1, base.density + bump[show.energy]) };
-  return { title, bpm: spec.bpm, notes: composeFromSpec(spec, seedFor(`${title}#${show.seed}`, sound.style)), band };
+  return { title, bpm: spec.bpm, notes: composeLong(spec, seedFor(`${title}#${show.seed}`, sound.style)), band };
 }

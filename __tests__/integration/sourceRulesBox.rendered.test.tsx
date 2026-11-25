@@ -23,4 +23,8 @@ it('saves the person\'s rules on the project and shows the built-in rules on req
   expect(useProjectStore.getState().getProject(project.id).customProfile).toContain('Statutes | code');
   rtl.fireEvent.changeText(view.getByTestId('source-rules-input'), 'The Code wins over everything else.');
   expect(useProjectStore.getState().getProject(project.id).sourceRules).toBe('The Code wins over everything else.');
+  // The second set of instructions: how to use each document. What Atlas understood is shown file by file.
+  rtl.fireEvent.changeText(view.getByTestId('source-guide-input'), 'The Title 26 - Internal Revenue Code is the most up to date.');
+  expect(useProjectStore.getState().getProject(project.id).sourceGuide).toMatch(/most up to date/);
+  expect(view.getByText(/Revenue Code.pdf: the most up to date/)).toBeTruthy();
 });

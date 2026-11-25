@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Text, TouchableOpacity, View, ScrollView, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useAgentStore } from '../stores/agentStore';
+import { isHiddenAgent, useAgentStore } from '../stores/agentStore';
 const BACKGROUNDCOLOR_RGBA_0_0_0_0_45 = 'rgba(0,0,0,0.45)';
 const literalStyles = StyleSheet.create({
   s1: { fontSize: 15 },
@@ -12,7 +12,9 @@ const literalStyles = StyleSheet.create({
 /** Chat header: shows the active agent; tap to switch agents (or none). */
 export function AgentChip({ styles, colors, onSelect }: { styles: any; colors: any; onSelect?: (agentId: string | null) => void }) {
   const [open, setOpen] = useState(false);
-  const agents = useAgentStore((s) => s.agents);
+  // Specialists (Writer, Repair Helper, Home Chef...) are used by the helpers, not picked for a chat; the one already chosen stays listed.
+  const activeAgentId = useAgentStore((s) => s.activeAgentId);
+  const agents = useAgentStore((s) => s.agents).filter((a) => !isHiddenAgent(a) || a.id === activeAgentId);
   const activeId = useAgentStore((s) => s.activeAgentId);
   const setActive = useAgentStore((s) => s.setActiveAgent);
   const active = agents.find((a) => a.id === activeId);

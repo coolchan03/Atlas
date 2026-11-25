@@ -7,7 +7,8 @@ import { useTheme } from '../../theme';
 import type { LayoutMode } from '../../theme/appearance';
 import { useAppStore } from '../../stores/appStore';
 import { LoadModelSheet } from '../../components/LoadModelSheet';
-import { arrangeTiles, moveTile, toggleTile } from './homeTiles';
+import { arrangeTiles, moveTile, moveTileTo, toggleTile } from './homeTiles';
+import { useTileDrag } from './useTileDrag';
 import { ScreenBackground } from '../../components/ScreenBackground';
 import { HomeShortcutsCard, useShortcutLauncher } from './HomeShortcutsCard';
 import { useCallLaunch } from './callLaunch';
@@ -85,16 +86,18 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
   const launchStatus = useCallLaunch((st) => st.status);
   const showStudy = useNudges((st) => st.homeStudy);
   const setNudge = useNudges((st) => st.setNudge);
-  const keys = destinations.map((d) => d.key);
+  // Widgets the person made are tiles too: they can be moved among the built-in ones (they are changed and removed under "My home widgets").
+  const widgetItems = focus ? [] : widgets.map(widgetTile);
+  const everything = [...destinations, ...widgetItems];
+  const keys = everything.map((d) => d.key);
   // Tiles marked optional (the emergency tools) are off until the person turns them on under Customize.
   const prefs = { ...savedPrefs, hidden: savedPrefs?.hidden ?? destinations.filter((d) => d.optional).map((d) => d.key) };
-  const byKey = (k: string) => destinations.find((d) => d.key === k)!;
+  const byKey = (k: string) => everything.find((d) => d.key === k)!;
   const shownKeys = arrangeTiles(keys, prefs, editing);
-  // Widgets the person made come after the built-in tiles, in the order they were added (they are changed and removed under "My home widgets").
-  const widgetItems = focus ? [] : widgets.map(widgetTile);
-  const items = [...(focus ? shownKeys.filter((k) => FOCUS.includes(k)) : shownKeys).map(byKey), ...widgetItems];
+  const items = (focus ? shownKeys.filter((k) => FOCUS.includes(k)) : shownKeys).map(byKey);
   const hiddenSet = new Set(prefs?.hidden ?? []);
   const save = (next: { order?: string[]; hidden?: string[] }) => updateSettings({ homeTiles: next });
+  const drag = useTileDrag((key, onto) => save(moveTileTo(keys, prefs, { key, onto })), items.map((i) => i.key));
   const fontSize = simple ? 21 : compact ? 16 : 18;
   const padding = compact ? 10 : simple ? 22 : grid ? 16 : 17;
   // Sizes for the chosen layout mode, worked out once so the styles below only read them.
@@ -116,7 +119,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
   return (
     <SafeAreaView style={[staticStyles.h1, { backgroundColor: colors.background }]} edges={['top']}>
       <ScreenBackground screenKey="Home" />
-      <ScrollView testID={'home-' + mode} contentContainerStyle={[staticStyles.h14, { padding: look.screenPad }]}>
+      <ScrollView testID={'home-' + mode} scrollEnabled={!drag.dragging} contentContainerStyle={[staticStyles.h14, { padding: look.screenPad }]}>
         <Text style={[staticStyles.h2, { color: colors.text, fontSize: look.title }]}>Atlas</Text>
         <Text style={[staticStyles.h3, { color: colors.textSecondary, fontSize: look.sub, marginBottom: look.subGap }]}>
           {focus ? 'What do you want to do?' : simple ? 'What would you like to do?' : compact ? 'Quick access' : 'Choose something to explore'}
@@ -131,14 +134,14 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
             <Text style={{ color: colors.primary }}>{showStudy ? 'Hide the study and reminders card' : 'Show the study and reminders card'}</Text>
           </TouchableOpacity>
         )}
-        <View style={[staticStyles.h4, { flexDirection: look.listDir, gap: look.listGap }]}>
+        <View testID="home-tile-list" {...drag.listProps} style={[staticStyles.h4, { flexDirection: look.listDir, gap: look.listGap }]}>
           {items.map(item => {
             const accent = item.color[isDark ? 1 : 0];
             const colored = colorful || grid;
             return (
-              <TouchableOpacity key={item.label} testID={'quick-home-' + item.key}
+              <TouchableOpacity key={item.key} testID={'quick-home-' + item.key} {...drag.tileProps(item.key, !focus)}
                 accessibilityRole="button" accessibilityLabel={item.label + '. ' + item.hint}
-                onPress={() => (editing ? undefined : go(item))} style={[staticStyles.h5, { opacity: pick(editing && hiddenSet.has(item.key), 0.45, 1), flexDirection: look.tileDir, flexBasis: look.tileBasis, flexGrow: look.tileGrow, backgroundColor: colored ? (isDark ? item.tintDark : item.tint) : colors.surface, borderColor: colored ? accent : colors.border, borderRadius: look.tileRadius, padding, minHeight: look.tileHeight, gap: look.tileGap, justifyContent: look.tileJustify }]}>
+                onPress={() => (editing ? undefined : go(item))} style={[staticStyles.h5, drag.dragging === item.key && staticStyles.lifted, { opacity: pick(editing && hiddenSet.has(item.key), 0.45, 1), flexDirection: look.tileDir, flexBasis: look.tileBasis, flexGrow: look.tileGrow, backgroundColor: colored ? (isDark ? item.tintDark : item.tint) : colors.surface, borderColor: colored ? accent : colors.border, borderRadius: look.tileRadius, padding, minHeight: look.tileHeight, gap: look.tileGap, justifyContent: look.tileJustify }]}>
                 <View style={[staticStyles.h6, { width: look.badge, height: look.badge, backgroundColor: colored ? (isDark ? colors.surfaceLight : '#FFFFFF') : colors.surfaceLight }]}>
                   <Icon name={item.icon} size={simple ? 26 : grid ? 30 : 21} color={colored ? accent : colors.primary} />
                 </View>
@@ -147,7 +150,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
                   {(!tiles || (item.widget && launchingId === item.widget.id)) && <Text style={[staticStyles.h8, { color: colors.textSecondary, fontSize: look.hint }]} testID={item.widget && launchingId === item.widget.id ? 'widget-launch-status' : undefined}>{item.widget && launchingId === item.widget.id ? (launchStatus ?? 'Starting...') : item.hint}</Text>}
                 </View>
                 {!tiles && !editing && <Icon name="chevron-right" size={simple ? 23 : 19} color={colors.textMuted} />}
-                {editing && !item.widget && (
+                {editing && (
                   <View style={staticStyles.h9}>
                     <TouchableOpacity testID={'tile-up-' + item.key} accessibilityLabel={'Move ' + item.label + ' up'} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => save(moveTile(keys, prefs, { key: item.key, by: -1 }))}>
                       <Icon name="arrow-up" size={20} color={colors.textSecondary} />
@@ -155,7 +158,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
                     <TouchableOpacity testID={'tile-down-' + item.key} accessibilityLabel={'Move ' + item.label + ' down'} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => save(moveTile(keys, prefs, { key: item.key, by: 1 }))}>
                       <Icon name="arrow-down" size={20} color={colors.textSecondary} />
                     </TouchableOpacity>
-                    {item.key !== 'settings' && (
+                    {item.key !== 'settings' && !item.widget && (
                       <TouchableOpacity testID={'tile-toggle-' + item.key} accessibilityLabel={(hiddenSet.has(item.key) ? 'Show ' : 'Hide ') + item.label} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} onPress={() => save(toggleTile(prefs, item.key))}>
                         <Icon name={hiddenSet.has(item.key) ? 'eye-off' : 'eye'} size={20} color={hiddenSet.has(item.key) ? colors.textMuted : colors.primary} />
                       </TouchableOpacity>
@@ -171,7 +174,7 @@ export const QuickHomeScreen: React.FC<Props> = ({ navigation, mode }) => {
             <Text style={[staticStyles.h11, { color: colors.primary }]}>{editing ? 'Done' : 'Customize this screen'}</Text>
           </TouchableOpacity>
         )}
-        {editing && <Text style={[staticStyles.h12, { color: colors.textMuted }]}>Use the arrows to move a tile and the eye to hide or show it.</Text>}
+        {editing && <Text style={[staticStyles.h12, { color: colors.textMuted }]}>Hold a tile and slide it over another to move it, or use the arrows. The eye hides or shows a tile.</Text>}
         {/* Adding, editing and removing widgets is part of customizing; the widgets themselves are the tiles above. */}
         {editing && <HomeShortcutsCard navigation={navigation} />}
         {(colorful || focus) && <Text style={[staticStyles.h13, { color: colors.textMuted }]}>
@@ -200,5 +203,6 @@ const staticStyles = StyleSheet.create({
   h12: { textAlign: 'center', marginTop: 4 },
   h13: { marginTop: 20, textAlign: 'center' },
   h14: { paddingBottom: 44 },
+  lifted: { transform: [{ scale: 1.03 }], opacity: 0.8 },
   h15: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
 });

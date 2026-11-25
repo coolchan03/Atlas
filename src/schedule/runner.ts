@@ -7,6 +7,7 @@ import { AppState, NativeModules, Platform } from 'react-native';
 import { useSchedule, type ScheduledTask } from './store';
 import { isDue } from './due';
 import { startAlarmSync, syncAlarms } from './alarms';
+import { saveBriefingAudio } from '../atlasTools/briefAudio';
 
 const RETRY_AFTER_MS = 15 * 60_000;
 let busy = false;
@@ -43,13 +44,20 @@ async function whileAwake<T>(label: string, job: () => Promise<T>): Promise<T> {
   try { return await job(); } finally { try { await device?.setAiWorkActive?.(false, null); } catch { /* already stopped */ } }
 }
 
-async function doTask(task: ScheduledTask): Promise<{ chatId?: string }> {
+async function doTask(task: ScheduledTask): Promise<{ chatId?: string; warning?: string }> {
   if (task.kind === 'briefing') {
     const { makeBriefing, todaysBrief } = require('../atlasTools/dailyBrief');
-    if (todaysBrief()) return {};
-    const { listVoices } = require('../atlasVoice/tts');
-    const voices: unknown[] = await listVoices('en').catch(() => []);
-    await makeBriefing(() => undefined, voices.length);
+    if (!todaysBrief()) {
+      const { listVoices } = require('../atlasVoice/tts');
+      const voices: unknown[] = await listVoices('en').catch(() => []);
+      await makeBriefing(() => undefined, voices.length);
+    }
+    const made = todaysBrief();
+    // Made inside the same awake window as the briefing, so the night's run does not stop with the audio half joined.
+    // The briefing is done either way: an audio file that could not be made is reported on the task, not retried every quarter hour all day.
+    if (task.saveAudio && made) {
+      try { await saveBriefingAudio(made); } catch (e: any) { return { warning: `The briefing is ready, but its audio file could not be made: ${String(e?.message || e)}` }; }
+    }
     return {};
   }
   const { askModel } = require('../study/engine');
@@ -67,9 +75,9 @@ export async function runTask(id: string, scheduledFor = Date.now()): Promise<st
   busy = true;
   update(id, { lastTriedAt: scheduledFor });
   try {
-    const { chatId } = await whileAwake(`Running: ${task.name}`, () => doTask(task));
+    const { chatId, warning } = await whileAwake(`Running: ${task.name}`, () => doTask(task));
     update(id, {
-      lastRunAt: scheduledFor, lastError: undefined,
+      lastRunAt: scheduledFor, lastError: warning,
       ...(chatId ? { lastChatId: chatId, resultSeen: false } : {}),
       ...(task.repeat === 'once' ? { enabled: false } : {}),
     });

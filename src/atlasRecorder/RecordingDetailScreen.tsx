@@ -1,3 +1,5 @@
+import { ActionItemsCard } from './ActionItemsCard';
+import { FlashcardsCard } from './FlashcardsCard';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -141,6 +143,8 @@ export const RecordingDetailScreen: React.FC = () => {
             </View>
           </Card>
         )}
+        <ActionItemsCard rec={rec} />
+        <FlashcardsCard rec={rec} />
         {rec.status === 'done' && !rec.utterances?.length && <Text style={styles.desc}>No speech was found in this recording.</Text>}
         <Button title="Download the audio" variant="ghost" size="small" testID="recording-download-audio"
           onPress={() => { recorderService.saveAudio(id).then(saved).catch(fail('Could not save the audio')); }} />

@@ -44,7 +44,7 @@ function rhymes(a: string, b: string): boolean {
 const PAIRS: Record<Form['scheme'], Array<[number, number]>> = { AABB: [[0, 1], [2, 3]], ABAB: [[0, 2], [1, 3]], ABCB: [[1, 3]], AA: [[0, 1]] };
 
 /** Checks a reply against the form it was asked to take. */
-export function checkPoem(raw: string, form: Form): PoemCheck {
+function checkPoem(raw: string, form: Form): PoemCheck {
   const lines = readPoemLines(raw);
   const need = form.stanzas * form.lines;
   const problems: string[] = [];
@@ -68,9 +68,29 @@ export function checkPoem(raw: string, form: Form): PoemCheck {
   return { ok: problems.length === 0, lines: lines.slice(0, need), problems };
 }
 
-/** Text for the voice: one line per breath, a pause between stanzas, so a flat voice reads it at a steady pace. */
-export function poemForVoice(lines: string[], form: Form): string {
-  const out: string[] = [];
+/** A poem's title in capitals the way a title is written: "the night train home" is "The Night Train Home". */
+const titleCase = (t: string): string => t.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+export interface TitledPoem extends PoemCheck { title: string }
+
+/** Checks a reply made of a title line and then the poem: the title is 1 to 7 plain words with nothing unsuitable, and the rest is checked as a poem. */
+export function checkTitledPoem(raw: string, form: Form): TitledPoem {
+  const text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```[a-z]*/gi, '');
+  const rows = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const title = (rows[0] ?? '').replace(/^title\s*[:\-]\s*/i, '').replace(/["“”*_#]/g, '').replace(/[.,;:!?]+$/, '').trim();
+  const check = checkPoem(rows.slice(1).join('\n'), form);
+  const problems = [...check.problems];
+  const words = title ? title.split(/\s+/).length : 0;
+  if (words < 1 || words > 7 || title.length > 48) problems.push(`a title of ${words} words`);
+  if (isUnsuitable(title)) problems.push('unsuitable word in the title');
+  if (/[^A-Za-z' -]/.test(title)) problems.push('a symbol in the title');
+  if (check.lines.some((l) => l.toLowerCase().replace(/[^a-z ]/g, '') === title.toLowerCase().replace(/[^a-z ]/g, ''))) problems.push('the title is a line of the poem');
+  return { ok: problems.length === 0, lines: check.lines, problems, title: titleCase(title) };
+}
+
+/** Text for the voice: the title, then one line per breath with a pause between stanzas, so a flat voice reads it at a steady pace. */
+export function poemForVoice(lines: string[], form: Form, title?: string): string {
+  const out: string[] = title ? [`A poem called ${title}.`, '...'] : [];
   lines.forEach((line, i) => { out.push(/[.!?,;:]$/.test(line) ? line : `${line},`); if ((i + 1) % form.lines === 0 && i + 1 < lines.length) out.push('...'); });
   return out.join(' ');
 }
@@ -89,5 +109,5 @@ export function poemGrammar(groups: string[][]): string {
 function grammarFor(endings: string[]): string {
   const names = endings.map((_, i) => `line${i}`);
   const rules = endings.map((end, i) => `${names[i]} ::= word (" " word){3,8} " " ${end} [,.!?]? "\\n"`);
-  return [`root ::= ${names.join(' ')}`, ...rules, 'word ::= [A-Za-z\']{1,14} ","?'].join('\n');
+  return [`root ::= title ${names.join(' ')}`, 'title ::= tword (" " tword){0,5} "\\n"', "tword ::= [A-Za-z']{2,12}", ...rules, 'word ::= [A-Za-z\']{1,14} ","?'].join('\n');
 }

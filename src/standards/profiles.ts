@@ -4,6 +4,8 @@
  * standard) and which are only true as of their date (a price, a news item), which official sites to look on for updates, and the rules the AI
  * is given. The ranking and the dates are applied here, in code; the AI is only told the result. Pure: no storage, no network.
  */
+import { guideLabel, guideSkips, guideText, readGuide } from './guide';
+import { hostOf, overrules, type AuthoritySource } from './authority';
 import { classifyTaxSource, supersededEditions as taxSuperseded, TAX_RULES, taxLabel, yearNotes } from './taxSources';
 
 interface SourceType {
@@ -189,9 +191,42 @@ export interface SourceContext {
 }
 
 /** Everything a project chat's prompt needs from a profile. With no profile, only the person's own rules (if any). */
-export function sourceContext(profile: SourceProfile | 'federal-tax' | null, o: { custom?: string; names: string[]; query: string; chunkNames: string[]; now: Date }): SourceContext {
-  if (!profile) return { rules: o.custom?.trim() ? `Rules for reading these sources, set by the user (follow them over any default): ${o.custom.trim()}` : '', notes: '', retired: new Set() };
-  const retired = supersededIn(profile, o.names);
+export function sourceContext(profile: SourceProfile | 'federal-tax' | null, o: { custom?: string; guide?: string; names: string[]; query: string; chunkNames: string[]; now: Date }): SourceContext {
+  const entries = readGuide(o.guide, o.names);
+  const how = guideText(o.guide, entries);
+  const skipped = guideSkips(entries);
+  if (!profile) {
+    const own = o.custom?.trim() ? `Rules for reading these sources, set by the user (follow them over any default): ${o.custom.trim()}` : '';
+    return { rules: [own, how].filter(Boolean).join('\n'), notes: '', label: entries.length ? (n) => guideLabel(entries, n) : undefined, retired: skipped };
+  }
+  const retired = new Set([...supersededIn(profile, o.names), ...skipped]);
   const notes = profile === 'federal-tax' ? yearNotes(o.query, o.chunkNames.filter((n) => !retired.has(n))) : staleNotes(profile, o.names.filter((n) => !retired.has(n)), o.now);
-  return { rules: rulesIn(profile, o.custom), notes, label: (n) => labelIn(profile, n), retired };
+  return { rules: [rulesIn(profile, o.custom), how].filter(Boolean).join('\n'), notes, label: (n) => [labelIn(profile, n), guideLabel(entries, n)].filter(Boolean).join('; '), retired };
+}
+
+/** How high a cited source ranks in a profile (1 is the highest) and the year it shows: from its title or address, and from the official sites the profile lists. */
+function standingIn(profile: SourceProfile, s: AuthoritySource): { rank: number; year?: number; edition: boolean } {
+  const file = decodeURIComponent((s.url ?? '').split(/[?#]/)[0].split('/').pop() ?? '');
+  const c = classifyIn(profile, s.title ?? '') ?? (file ? classifyIn(profile, file) : null);
+  const dated = (s.effectiveFrom || s.publicationDate || '').slice(0, 4);
+  const year = /^\d{4}$/.test(dated) ? Number(dated) : c?.year;
+  if (c) return { rank: c.type.rank, year, edition: c.type.edition };
+  const host = s.url ? hostOf(s.url) : '';
+  const official = !!host && profile.sites.some((site) => host === site || host.endsWith(`.${site}`));
+  return { rank: official ? 1 : profile.types.length + 1, year, edition: false };
+}
+
+/**
+ * Does a claim resting on `newer` sources replace one resting on `older` ones, under the profile? Yes when its best source ranks higher, or
+ * ranks the same, is a kind that gets editions, and is from a later year. Not when the higher source is a stale copy (two or more years
+ * older than the one it would overrule). With no profile, or federal tax, the tax rules decide as before. This is what turns "two sources
+ * disagree" into "the higher source replaced the lower one" instead of an open dispute.
+ */
+export function overrulesBy(profile: SourceProfile | 'federal-tax' | null | undefined, newer: AuthoritySource[], older: AuthoritySource[]): boolean {
+  if (!profile || profile === 'federal-tax') return overrules(newer, older);
+  if (!newer.length || !older.length) return false;
+  const best = (list: AuthoritySource[]) => list.map((s) => standingIn(profile, s)).reduce((a, b) => (b.rank < a.rank ? b : a));
+  const n = best(newer); const o = best(older);
+  if (n.rank < o.rank) return !(n.year && o.year && o.year - n.year >= 2);
+  return n.rank === o.rank && n.edition && !!n.year && !!o.year && n.year > o.year;
 }

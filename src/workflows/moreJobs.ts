@@ -4,7 +4,8 @@
  * merged shopping list, and a decision helper (code adds up the weights). The person approves before a note is made.
  */
 import { extractJson, type Ask, type Workflow } from './engine';
-import { list, section, text } from './helpers';
+import { list, missingItems, section, text } from './helpers';
+import { readFoodFromPhoto } from './photoList';
 
 const json = (reply: string): Record<string, any> => {
   const parsed = extractJson(reply);
@@ -78,7 +79,7 @@ export const studyPlan: Workflow<StudyPlanCtx> = {
 
 // ------------------------------------------------------------------ week of dinners and one shopping list
 interface Dinner { day: string; meal: string; items: string[] }
-export interface MealWeekCtx { likes: string; diners: number; avoid: string; dinners?: Dinner[]; shopping?: string[]; note?: string }
+export interface MealWeekCtx { likes: string; diners: number; avoid: string; pantry: string[]; dinners?: Dinner[]; shopping?: string[]; note?: string }
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 /** All ingredients of the week as one list: the same item (any case, plural or not) once, in the order first needed. Pure. */
@@ -94,21 +95,27 @@ export function mergeShopping(dinners: Dinner[]): string[] {
 export const mealWeek: Workflow<MealWeekCtx> = {
   id: 'mealweek',
   title: 'A week of dinners',
-  summary: 'Say what your group likes and cannot eat. It plans seven dinners that reuse ingredients, checks them against your avoid list, and makes one shopping list.',
+  summary: 'Say what your group likes and cannot eat, and list or photograph what you already have. It plans seven dinners that use what you have first and reuse ingredients, checks them against your avoid list, and makes one shopping list of only what is missing.',
   input: { help: 'What you like, or what is on hand (optional detail is fine).', minChars: 4,
-    fields: [{ id: 'diners', label: 'How many people', options: ['1', '2', '4', '6'] }, { id: 'avoid', label: 'Cannot or will not eat (optional)', placeholder: 'for example: peanuts, shellfish' }],
-    make: (t, f) => ({ likes: t, diners: Number(f.diners) || 2, avoid: f.avoid ?? '' }) },
+    fromPhoto: { label: 'Or take a photo of your fridge or shelf. The AI names what it sees and puts it in "What you already have" to check and edit. The week uses it first, and the shopping list leaves it out.', read: readFoodFromPhoto, field: 'pantry' },
+    fields: [
+      { id: 'diners', label: 'How many people', options: ['1', '2', '4', '6'] },
+      { id: 'pantry', label: 'What you already have (optional)', placeholder: 'for example: eggs, rice, spinach' },
+      { id: 'avoid', label: 'Cannot or will not eat (optional)', placeholder: 'for example: peanuts, shellfish' },
+    ],
+    make: (t, f) => ({ likes: t, diners: Number(f.diners) || 2, avoid: f.avoid ?? '', pantry: (f.pantry ?? '').split(/[,\n;]+/).map((x) => x.trim()).filter(Boolean).slice(0, 40) }) },
   steps: [
     { kind: 'model', id: 'plan', title: 'Plan seven dinners', run: async (ctx, ask) => {
-      const j = await askJson(ask, `You plan simple home dinners for ${ctx.diners} people. Reply with JSON only: {"dinners":[{"meal":"","items":["each ingredient to buy or use"]}]} with exactly 7 dinners that reuse ingredients across the week. Never include: ${ctx.avoid || 'nothing in particular'}. Cook meat to a safe temperature.`, ctx.likes);
+      const j = await askJson(ask, `You plan simple home dinners for ${ctx.diners} people. Reply with JSON only: {"dinners":[{"meal":"","items":["each ingredient to buy or use"]}]} with exactly 7 dinners that reuse ingredients across the week. Never include: ${ctx.avoid || 'nothing in particular'}. Cook meat to a safe temperature.${ctx.pantry.length ? ` The person already has: ${ctx.pantry.join(', ')}. Use those first, and list as items only what they would still need to buy besides those.` : ''}`, ctx.likes);
       const dinners = list(j.dinners, (d): Dinner | null => (text(d?.meal, 80) ? { day: '', meal: text(d.meal, 80), items: list(d?.items, (x) => text(x, 60) || null, 15) } : null), 7).map((d, i) => ({ ...d, day: DAYS[i % 7] }));
       if (dinners.length < 3) throw new Error('Too few dinners came back. Try again.');
       const avoid = ctx.avoid.toLowerCase().split(/[,;\n]+/).map((x) => x.trim()).filter((x) => x.length > 2);
       const bad = dinners.filter((d) => avoid.some((a) => `${d.meal} ${d.items.join(' ')}`.toLowerCase().includes(a)));
       if (bad.length) throw new Error(`${bad.map((d) => d.meal).join(', ')} includes something you said to avoid. Nothing was used. Try again.`);
-      return { dinners, shopping: mergeShopping(dinners) };
+      // What is already on hand never goes on the shopping list, whatever the AI listed.
+      return { dinners, shopping: ctx.pantry.length ? missingItems(ctx.pantry, mergeShopping(dinners)) : mergeShopping(dinners) };
     } },
-    { kind: 'confirm', id: 'review', title: 'Review', summary: (ctx) => `${(ctx.dinners ?? []).map((d) => `${d.day}: ${d.meal}`).join('\n')}\n\nShopping list (${ctx.shopping?.length ?? 0} items):\n${(ctx.shopping ?? []).map((s) => `- ${s}`).join('\n')}` },
+    { kind: 'confirm', id: 'review', title: 'Review', summary: (ctx) => `${(ctx.dinners ?? []).map((d) => `${d.day}: ${d.meal}`).join('\n')}\n\n${ctx.pantry.length ? `Already on hand: ${ctx.pantry.join(', ')}\n\n` : ''}Shopping list (${ctx.shopping?.length ?? 0} items):\n${(ctx.shopping ?? []).map((s) => `- ${s}`).join('\n')}` },
     { kind: 'code', id: 'note', title: 'Make the list', run: (ctx) => ({ note: `# Dinners for the week (${ctx.diners} people)\n\n${section('Dinners', (ctx.dinners ?? []).map((d) => `- ${d.day}: ${d.meal}`))}${section('Shopping list', (ctx.shopping ?? []).map((s) => `- [ ] ${s}`))}` }) },
   ],
 };

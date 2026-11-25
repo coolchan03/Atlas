@@ -15,7 +15,8 @@ export type StyleMood =
   | 'spring' | 'summer' | 'fall' | 'winter'
   | 'thanksgiving' | 'halloween' | 'christmas' | 'newyear' | 'valentines' | 'easter' | 'july4' | 'stpatricks' | 'lunarnewyear' | 'cincodemayo'
   | 'italian' | 'frenchcafe' | 'tiki' | 'tavern' | 'shanty' | 'carnival'
-  | 'twenties' | 'fifties' | 'surf' | 'disco' | 'retro80s' | 'pop' | 'rock' | 'funk' | 'reggae' | 'country' | 'blues' | 'classical' | 'lullaby' | 'march' | 'edm' | 'hiphop';
+  | 'twenties' | 'fifties' | 'surf' | 'disco' | 'retro80s' | 'pop' | 'rock' | 'funk' | 'reggae' | 'country' | 'blues' | 'classical' | 'lullaby' | 'march' | 'edm' | 'hiphop'
+  | 'metal' | 'ska' | 'techno' | 'house' | 'trap' | 'soul' | 'gospel' | 'flamenco' | 'tango' | 'waltz' | 'bluegrass' | 'cyberpunk' | 'fantasy' | 'afrobeat' | 'dreampop' | 'ocean' | 'sunrise';
 
 
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
@@ -84,6 +85,23 @@ export const STYLES: Record<StyleMood, StyleSpec> = {
   lullaby: { label: 'Lullaby', group: 'Eras and genres', sound: 'bell', bpm: 66, beatsPerBar: 3, scale: PENTATONIC, progression: [0, 3, 0, 4, 0, 3, 4, 0], chord: TRIAD, tune: 'sparse', density: 3, swing: 0, bass: 'root', perc: 'none', padGain: 0.12 },
   march: { label: 'March', group: 'Eras and genres', sound: 'organ', bpm: 116, beatsPerBar: 4, scale: MAJOR, progression: [0, 0, 3, 3, 4, 4, 0, 0], chord: TRIAD, tune: 'walk', density: 4, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.18 },
   edm: { label: 'Dance and EDM', group: 'Eras and genres', sound: 'synth', bpm: 128, beatsPerBar: 4, scale: MINOR, progression: [0, 5, 2, 6, 0, 5, 2, 6], chord: TRIAD, tune: 'arp', density: 16, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.16 },
+  metal: { label: 'Heavy metal', group: 'Eras and genres', sound: 'overdrive', bpm: 156, beatsPerBar: 4, scale: PHRYGIAN, progression: [0, 0, 1, 0, 0, 5, 1, 0], chord: [0, 4], tune: 'walk', density: 8, swing: 0, bass: 'pulse', perc: 'backbeat', padGain: 0.2 },
+  ska: { label: 'Ska', group: 'Eras and genres', sound: 'organ', bpm: 160, beatsPerBar: 4, scale: MAJOR, progression: [0, 3, 4, 0, 0, 3, 4, 0], chord: TRIAD, tune: 'walk', density: 8, swing: 0, bass: 'walk', perc: 'offbeat', padGain: 0.14 },
+  techno: { label: 'Techno', group: 'Eras and genres', sound: 'synth', bpm: 132, beatsPerBar: 4, scale: MINOR, progression: [0, 0, 5, 0, 0, 0, 6, 5], chord: TRIAD, tune: 'arp', density: 16, swing: 0, bass: 'pulse', perc: 'four', padGain: 0.12 },
+  house: { label: 'House', group: 'Eras and genres', sound: 'synth', bpm: 124, beatsPerBar: 4, scale: DORIAN, progression: [0, 3, 5, 4, 0, 3, 5, 4], chord: SEVENTH, tune: 'arp', density: 8, swing: 0.05, bass: 'pulse', perc: 'four', padGain: 0.15 },
+  trap: { label: 'Trap beat', group: 'Eras and genres', sound: 'bell', bpm: 140, beatsPerBar: 4, scale: MINOR, progression: [0, 0, 5, 5, 3, 3, 4, 4], chord: TRIAD, tune: 'sparse', density: 3, swing: 0, bass: 'root', perc: 'backbeat', padGain: 0.14 },
+  soul: { label: 'Soul and R&B', group: 'Eras and genres', sound: 'epiano', bpm: 84, beatsPerBar: 4, scale: DORIAN, progression: [0, 3, 4, 0, 5, 3, 1, 4], chord: SEVENTH, tune: 'walk', density: 4, swing: 0.12, bass: 'walk', perc: 'backbeat', padGain: 0.16 },
+  gospel: { label: 'Gospel', group: 'Eras and genres', sound: 'organ', bpm: 78, beatsPerBar: 6, scale: MAJOR, progression: [0, 3, 0, 4, 0, 3, 4, 0], chord: TRIAD, tune: 'walk', density: 6, swing: 0, bass: 'root', perc: 'soft', padGain: 0.2 },
+  flamenco: { label: 'Flamenco', group: 'Eras and genres', sound: 'guitar', bpm: 126, beatsPerBar: 6, scale: PHRYGIAN_DOMINANT, progression: [0, 6, 5, 4, 0, 6, 5, 4], chord: TRIAD, tune: 'arp', density: 12, swing: 0, bass: 'pulse', perc: 'soft', padGain: 0.12 },
+  tango: { label: 'Tango', group: 'Eras and genres', sound: 'keys', bpm: 66, beatsPerBar: 4, scale: HARMONIC_MINOR, progression: [0, 4, 0, 3, 5, 4, 0, 0], chord: TRIAD, tune: 'walk', density: 4, swing: 0, bass: 'pulse', perc: 'soft', padGain: 0.16 },
+  waltz: { label: 'Waltz', group: 'Eras and genres', sound: 'keys', bpm: 96, beatsPerBar: 3, scale: MAJOR, progression: [0, 3, 4, 0, 5, 3, 4, 0], chord: TRIAD, tune: 'walk', density: 3, swing: 0, bass: 'root', perc: 'none', padGain: 0.15 },
+  bluegrass: { label: 'Bluegrass', group: 'Eras and genres', sound: 'guitar', bpm: 148, beatsPerBar: 4, scale: MAJOR, progression: [0, 3, 0, 4, 0, 3, 4, 0], chord: TRIAD, tune: 'arp', density: 12, swing: 0, bass: 'pulse', perc: 'soft', padGain: 0.12 },
+  afrobeat: { label: 'Afrobeat', group: 'Eras and genres', sound: 'epiano', bpm: 112, beatsPerBar: 4, scale: DORIAN, progression: [0, 0, 3, 3, 0, 0, 4, 3], chord: SEVENTH, tune: 'walk', density: 8, swing: 0.1, bass: 'pulse', perc: 'offbeat', padGain: 0.13 },
+  dreampop: { label: 'Dream pop', group: 'Eras and genres', sound: 'ambient', bpm: 100, beatsPerBar: 4, scale: LYDIAN, progression: [0, 4, 5, 3, 0, 4, 5, 3], chord: SEVENTH, tune: 'arp', density: 8, swing: 0, bass: 'root', perc: 'soft', padGain: 0.2 },
+  cyberpunk: { label: 'Cyberpunk', group: 'Moods and genres', sound: 'synth', bpm: 98, beatsPerBar: 4, scale: MINOR, progression: [0, 5, 3, 6, 0, 5, 3, 4], chord: SEVENTH, tune: 'sparse', density: 3, swing: 0, bass: 'pulse', perc: 'industrial', padGain: 0.16 },
+  sunrise: { label: 'Sunrise', group: 'Moods and genres', sound: 'keys', bpm: 80, beatsPerBar: 4, scale: PENTATONIC, progression: [0, 3, 4, 0, 0, 3, 4, 0], chord: TRIAD, tune: 'arp', density: 6, swing: 0, bass: 'root', perc: 'none', padGain: 0.16 },
+  fantasy: { label: 'Fantasy quest', group: 'Places and settings', sound: 'bell', bpm: 92, beatsPerBar: 6, scale: DORIAN, progression: [0, 6, 0, 3, 0, 6, 3, 0], chord: TRIAD, tune: 'arp', density: 6, swing: 0, bass: 'root', perc: 'soft', padGain: 0.16 },
+  ocean: { label: 'Under the sea', group: 'Places and settings', sound: 'ambient', bpm: 58, beatsPerBar: 4, scale: LYDIAN, progression: [0, 4, 0, 5, 0, 4, 1, 4], chord: NINTH, tune: 'sparse', density: 2, swing: 0, bass: 'drone', perc: 'none', padGain: 0.2 },
   hiphop: { label: 'Boom bap beat', group: 'Eras and genres', sound: 'epiano', bpm: 90, beatsPerBar: 4, scale: DORIAN, progression: [0, 0, 3, 3, 0, 0, 4, 3], chord: SEVENTH, tune: 'sparse', density: 4, swing: 0.2, bass: 'pulse', perc: 'backbeat', padGain: 0.14 },
 };
 
@@ -95,6 +113,7 @@ const COMP: Partial<Record<StyleMood, StyleSpec['comp']>> = {
   focus: 'sustain', film: 'sustain', electro: 'stabs', jazz: 'swingcomp', lofi: 'swingcomp', noir: 'swingcomp', blues: 'swingcomp', bossa: 'bossa', funk: 'stabs', disco: 'stabs', edm: 'stabs', reggae: 'offbeat',
   rock: 'eighths', surf: 'eighths', summer: 'eighths', pop: 'arp', retro80s: 'arp', chiptune: 'arp', spring: 'arp', newyear: 'arp', classical: 'alberti',
   country: 'strum', campfire: 'strum', western: 'strum', thanksgiving: 'strum', frenchcafe: 'oompah', march: 'oompah', fifties: 'strum', tiki: 'offbeat', cincodemayo: 'jig',
+  metal: 'eighths', ska: 'offbeat', techno: 'stabs', house: 'stabs', trap: 'sustain', soul: 'swingcomp', gospel: 'sustain', flamenco: 'strum', tango: 'stabs', bluegrass: 'strum', afrobeat: 'stabs', dreampop: 'arp', cyberpunk: 'stabs', sunrise: 'arp', fantasy: 'arp', ocean: 'sustain',
 };
 
 /** The instrument for each part where the style is not simply one instrument for everything. */
@@ -109,7 +128,12 @@ const BAND: Partial<Record<StyleMood, StyleSpec['band']>> = {
   twenties: { melody: 'piano', pad: 'piano', bass: 'bass' }, fifties: { melody: 'epiano', pad: 'piano', bass: 'bass' }, italian: { melody: 'pluck', pad: 'pluck', bass: 'bass' },
   cincodemayo: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, christmas: { melody: 'bell', pad: 'pad', bass: 'bass' }, winter: { melody: 'bell', pad: 'pad', bass: 'bass' },
   halloween: { melody: 'bell', pad: 'pad', bass: 'bass' }, chiptune: { melody: 'saw', pad: 'saw', bass: 'bass' }, summer: { melody: 'saw', pad: 'epiano', bass: 'bass' },
-  march: { melody: 'organ', pad: 'organ', bass: 'bass' }, carnival: { melody: 'bell', pad: 'organ', bass: 'bass' }, tavern: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, shanty: { melody: 'pluck', pad: 'organ', bass: 'bass' },
+  march: { melody: 'organ', pad: 'organ', bass: 'bass' }, carnival: { melody: 'bell', pad: 'organ', bass: 'bass' },
+  metal: { melody: 'driven', pad: 'driven', bass: 'bass' }, ska: { melody: 'pluck', pad: 'organ', bass: 'bass' }, techno: { melody: 'saw', pad: 'saw', bass: 'bass' }, house: { melody: 'saw', pad: 'epiano', bass: 'bass' },
+  trap: { melody: 'bell', pad: 'pad', bass: 'bass' }, soul: { melody: 'epiano', pad: 'organ', bass: 'bass' }, gospel: { melody: 'organ', pad: 'organ', bass: 'bass' }, flamenco: { melody: 'pluck', pad: 'pluck', bass: 'bass' },
+  tango: { melody: 'accordion', pad: 'piano', bass: 'bass' }, waltz: { melody: 'violin', pad: 'piano', bass: 'bass' }, bluegrass: { melody: 'banjo', pad: 'pluck', bass: 'bass' }, afrobeat: { melody: 'pluck', pad: 'organ', bass: 'bass' },
+  dreampop: { melody: 'epiano', pad: 'warmpad', bass: 'bass' }, cyberpunk: { melody: 'saw', pad: 'pad', bass: 'bass' }, sunrise: { melody: 'piano', pad: 'pad', bass: 'bass' }, fantasy: { melody: 'harp', pad: 'pad', bass: 'bass' }, ocean: { melody: 'glasspad', pad: 'pad', bass: 'bass' },
+  tavern: { melody: 'pluck', pad: 'pluck', bass: 'bass' }, shanty: { melody: 'pluck', pad: 'organ', bass: 'bass' },
 };
 
 /** Extra players for each style: the jazz band, for one, has a saxophone answering the piano, a vibraphone and a muted trumpet, not just piano, bass and drums. */
@@ -143,6 +167,23 @@ const EXTRAS: Partial<Record<StyleMood, Extra[]>> = {
   lullaby: [x('musicbox', 'sparkle'), x('harp', 'swell')],
   vaporwave: [x('sax', 'answer'), x('glasspad', 'swell')],
   eerie: [x('choir', 'swell'), x('glock', 'sparkle')],
+  metal: [x('driven', 'answer'), x('organ', 'swell')],
+  ska: [x('trumpet', 'answer'), x('sax', 'swell')],
+  techno: [x('synthpluck', 'sparkle'), x('glasspad', 'swell')],
+  house: [x('vibes', 'sparkle'), x('glasspad', 'swell')],
+  trap: [x('synthpluck', 'sparkle'), x('glasspad', 'swell')],
+  soul: [x('sax', 'answer'), x('choir', 'swell')],
+  gospel: [x('choir', 'swell'), x('piano', 'answer')],
+  flamenco: [x('violin', 'answer'), x('cello', 'swell')],
+  tango: [x('violin', 'answer'), x('cello', 'swell')],
+  waltz: [x('flute', 'sparkle'), x('cello', 'swell')],
+  bluegrass: [x('harmonica', 'answer'), x('violin', 'sparkle')],
+  afrobeat: [x('trumpet', 'answer'), x('marimba', 'sparkle'), x('sax', 'swell')],
+  dreampop: [x('glasspad', 'swell'), x('glock', 'sparkle')],
+  cyberpunk: [x('glasspad', 'swell'), x('synthpluck', 'sparkle')],
+  sunrise: [x('flute', 'answer'), x('harp', 'sparkle')],
+  fantasy: [x('flute', 'answer'), x('horn', 'swell'), x('glock', 'sparkle')],
+  ocean: [x('glasspad', 'swell'), x('bell', 'sparkle')],
 };
 
 /** The style with its chord pattern, band and extra players filled in. */

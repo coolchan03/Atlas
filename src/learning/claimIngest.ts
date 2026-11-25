@@ -1,7 +1,9 @@
 import { citedNumbers, type EvidenceSource } from './evidenceGate';
 import { checkSupport, claimSentences, closestPassage, compareClaim } from './claimText';
 import type { LearningKnowledgeDb } from './knowledgeDb';
-import { overrules } from '../standards/authority';
+import { overrulesBy, type SourceProfile } from '../standards/profiles';
+import type { AuthoritySource } from '../standards/authority';
+import { guideOverrules, readGuide } from '../standards/guide';
 
 export interface IngestInput {
   topic: string;
@@ -14,6 +16,10 @@ export interface IngestInput {
   reportNote: string;
   /** The report answers a question made to settle a conflict: its claims are compared and stored, but never become new conflicts (that would be a loop). */
   settling?: boolean;
+  /** The subject's source profile: which kind of source outranks which. Without one the tax rules apply, as before. */
+  profile?: SourceProfile | 'federal-tax' | null;
+  /** The person's words on how to use each document (standards/guide.ts): a document they call the newest wins over the others. */
+  guide?: string;
 }
 
 export interface IngestSummary {
@@ -37,6 +43,12 @@ const withoutMarkers = (text: string) => text.replace(/\[\d+\]/g, '').replace(/\
  */
 type Match = { relation: string; matchId?: string; reason?: string };
 /** What a new claim does to the ledger beside it: it replaces an older claim (an update), or it disputes it (a contradiction). */
+/** Does the claim from `newer` sources replace the one from `older`? The person's guide (a document they call the newest) decides first, then the profile's ranking. */
+function winsOver(input: IngestInput, newer: AuthoritySource[], older: AuthoritySource[]): boolean {
+  const named = guideOverrules(readGuide(input.guide, [...newer, ...older].map((s) => s.title ?? '').filter(Boolean)), newer, older);
+  return named ?? overrulesBy(input.profile, newer, older);
+}
+
 function recordOutcome(db: LearningKnowledgeDb, summary: IngestSummary, { id, match, updates }: { id: string; match: Match; updates: boolean }): void {
   if (updates && match.matchId) {
     db.supersedeClaim(match.matchId, id, match.reason ?? 'A newer official source says otherwise');
@@ -50,13 +62,15 @@ function recordOutcome(db: LearningKnowledgeDb, summary: IngestSummary, { id, ma
 
 export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): IngestSummary {
   const summary: IngestSummary = { added: 0, duplicates: 0, contradictions: 0, unsupported: 0, updates: 0 };
+  // The known claims are read once for the whole report (and kept up to date below), not once per sentence: with thousands of claims that read and its comparison were the slow part.
+  let known = db.knownClaims(input.topic);
   claimSentences(input.reportText).forEach((sentence, index) => {
     const id = `${input.reportId}:claim:${index + 1}`;
     const claim = withoutMarkers(sentence);
     const cited = citedNumbers(sentence);
     const citedSources = input.sources.filter((s) => cited.includes(s.n));
     const support = checkSupport(claim, citedSources.map((s) => s.passage ?? ''));
-    const found = compareClaim(claim, db.knownClaims(input.topic));
+    const found = compareClaim(claim, known);
     const match = input.settling && found.relation === 'contradicts' ? { relation: 'new' as const } : found;
 
     if (match.relation === 'duplicate' && match.matchId) {
@@ -71,8 +85,8 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
       note = `The cited passage does not contain ${support.missingNumbers.length ? support.missingNumbers.join(', ') : 'enough of this claim'}. ${note}`.trim();
       summary.unsupported += 1;
     }
-    // A standard-setter's own page overrules an older claim that rests only on textbooks and notes: that is an update, not a disagreement.
-    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && overrules(citedSources, db.getClaimSources(match.matchId));
+    // A higher source (under the subject's profile; by default a standard-setter's own page over textbooks and notes) overrules an older claim: that is an update, not a disagreement.
+    const updates = match.relation === 'contradicts' && !!match.matchId && support.supported !== false && winsOver(input, citedSources, db.getClaimSources(match.matchId));
     if (match.relation === 'contradicts' && !updates) {
       status = 'disputed';
       note = `${match.reason}. ${note}`.trim();
@@ -85,6 +99,8 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
     });
     summary.added += 1;
     recordOutcome(db, summary, { id, match, updates });
+    if (updates && match.matchId) known = known.filter((k) => k.id !== match.matchId); // an overruled claim is no longer compared against
+    known = [...known, { id, text: claim } as (typeof known)[number]];
   });
   return summary;
 }

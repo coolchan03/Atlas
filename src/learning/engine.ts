@@ -16,7 +16,8 @@
  * (added to its instructions) and the judge-approved answers (saved into the project's knowledge base).
  * In session mode nothing changes until you tap "Keep what it learned".
  */
-import { TAX_RULES, supersededEditions, taxLabel, yearNotes } from '../standards/taxSources';
+import { supersededEditions } from '../standards/taxSources';
+import { profileFor, sourceContext } from '../standards/profiles';
 import { runBackgroundJob, fitPrompt } from '../services/llmJobQueue';
 import RNFS from 'react-native-fs';
 import { localUniqueId } from '../utils/uniqueId';
@@ -170,10 +171,16 @@ async function research(cfg: LearnConfig, query: string): Promise<Research> {
   let removed = 0;
   for (const f of found) { const safe = stripInjection(f.content); f.content = safe.text; removed += safe.removed; }
   if (removed) logger.log(`[Learning] removed ${removed} instruction-like sentence(s) from retrieved sources`);
+  // The subject's source profile (tax, accounting, markets, law, or the person's own) sets the order of authority the learner is told,
+  // labels each source with what it is, and leaves out an older edition when a newer one of the same work was found.
+  const titles = found.map((f) => f.title);
+  const ctx = sourceContext(profileFor(cfg.profileId, cfg.customProfile, titles), { custom: cfg.sourceRules, guide: cfg.sourceGuide, names: titles, query, chunkNames: titles, now: new Date() });
+  const kept = found.filter((f) => !ctx.retired.has(f.title));
+  const heading = ctx.rules ? `${[ctx.rules, ctx.notes].filter(Boolean).join(' ')}\n\n` : '';
   return {
     retrieval,
-    text: (found.some((f) => taxLabel(f.title)) ? `${TAX_RULES} ${yearNotes(query, found.map((f) => f.title))}\n\n`.replace(' \n\n', '\n\n') : '') + found.map((f, i) => `[${i + 1}] (${f.title}${taxLabel(f.title) ? `; ${taxLabel(f.title)}` : ''}) ${f.content}`).join('\n\n'),
-    list: found.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
+    text: heading + kept.map((f, i) => `[${i + 1}] (${f.title}${ctx.label?.(f.title) ? `; ${ctx.label(f.title)}` : ''}) ${f.content}`).join('\n\n'),
+    list: kept.map((f, i) => ({ n: i + 1, title: f.title, kind: f.kind, url: f.url, sourceId: f.sourceId, locator: f.locator, passage: f.content, retrievedAt: new Date().toISOString() })),
   };
 }
 
@@ -341,14 +348,16 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   L().log({ agentId: agent.id, kind: 'report', title: `Report: ${item.q.slice(0, 70)}`, body: report.slice(0, 2500) });
   const entry: LearnReport = { id: `${item.id}:${item.tries + 1}`, itemId: item.id, q: item.q, text: report.slice(0, 8000), sources: src.slice(0, 3000), sourceList, at: Date.now(), status: 'waiting' };
   // Archive original bytes before trimming the UI cache. If archival fails, keep the full local log.
+  // Only reports not yet archived are written (the rest of the screen's list was archived when it was new): at thousands of reports, writing the last hundred again each time was most of the work.
   let archived = false;
   try {
-    for (const old of st.reportLog ?? []) learningKnowledgeDb.archiveReport(agent.id, old);
+    for (const old of st.reportLog ?? []) if (!ARCHIVED.has(old.id)) { learningKnowledgeDb.archiveReport(agent.id, old); ARCHIVED.add(old.id); }
     learningKnowledgeDb.archiveReport(agent.id, entry);
+    ARCHIVED.add(entry.id);
     archived = true;
   } catch (e) { logger.log(`[Learning] report archival unavailable: ${String(e)}`); }
   L().patch(agent.id, {
-    reportLog: archived ? [entry, ...(st.reportLog ?? [])].slice(0, 100) : [entry, ...(st.reportLog ?? [])],
+    reportLog: archived ? [entry, ...(st.reportLog ?? [])].slice(0, REPORTS_ON_SCREEN) : [entry, ...(st.reportLog ?? [])],
     pendingReports: [...st.pendingReports, { itemId: item.id, q: item.q, report: report.slice(0, 1600), sources: src.slice(0, 1200) }],
     reportsSinceJudge: st.reportsSinceJudge + 1,
     totalReports: st.totalReports + 1,
@@ -371,11 +380,17 @@ async function saveNote(agent: Agent, cfg: LearnConfig, note: { q: string; answe
   } catch (e) { logger.log(`[Learning] could not save note: ${String(e)}`); }
 }
 
+/** Ids of reports already written to the archive in this run, so a new report does not rewrite the ones before it. */
+const ARCHIVED = new Set<string>();
+/** The reports kept in the screen's list (and saved with the learning state on every change): the rest are in the archive, and a share or export reads all of them from there. */
+const REPORTS_ON_SCREEN = 40;
+
 /** Records the judge's ruling on the newest report written for a question. */
 function markReport(agentId: string, itemId: string, patch: Partial<LearnReport>): void {
   const log = L().get(agentId).reportLog ?? [];
   const i = log.findIndex((r) => r.itemId === itemId);
   if (i < 0) return;
+  if (patch.status || patch.score !== undefined || patch.why) safely(() => learningKnowledgeDb.setArchivedVerdict(log[i].id, { status: patch.status ?? log[i].status, score: patch.score ?? log[i].score, why: patch.why ?? log[i].why }), undefined);
   L().patch(agentId, { reportLog: log.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
 }
 
@@ -491,7 +506,7 @@ async function judgeReports(agent: Agent, cfg: LearnConfig): Promise<void> {
           const stored = ingestClaims(learningKnowledgeDb, {
             topic: cfg.topic, question: rep.q, reportId: original?.id ?? rep.itemId, reportText: full,
             sources: original?.sourceList ?? [], reportStatus: assessment.status === 'disputed' ? 'disputed' : 'candidate', reportNote: reason,
-            settling: item.kind === 'resolve',
+            settling: item.kind === 'resolve', profile: profileFor(cfg.profileId, cfg.customProfile, (original?.sourceList ?? []).map((x) => x.title)), guide: cfg.sourceGuide,
           });
           L().log({
             agentId: agent.id, kind: 'judge', title: `Knowledge: ${stored.added} new, ${stored.duplicates} already known`,

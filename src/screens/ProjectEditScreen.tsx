@@ -22,7 +22,7 @@ import { useTheme, useThemedStyles } from '../theme';
 import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useProjectStore } from '../stores';
-import { useAgentStore } from '../stores/agentStore';
+import { isHiddenAgent, useAgentStore } from '../stores/agentStore';
 import { ChipPicker } from '../components/GenerationSettingsModal/ChatPickers';
 import { RootStackParamList } from '../navigation/types';
 import { ProjectPinGate } from '../components/ProjectPinGate';
@@ -245,7 +245,7 @@ export const ProjectEditScreen: React.FC = () => {
           <ChipPicker
             title="Agent for new chats in this project"
             active={formData.defaultAgentId}
-            options={[{ id: '', label: 'Ask each time' }, ...agents.map((a) => ({ id: a.id, label: a.name }))]}
+            options={[{ id: '', label: 'Ask each time' }, ...agents.filter((a) => !isHiddenAgent(a) || a.id === formData.defaultAgentId).map((a) => ({ id: a.id, label: a.name }))]}
             onChoose={(id) => setFormData((f) => ({ ...f, defaultAgentId: id }))}
           />
           <ChipPicker

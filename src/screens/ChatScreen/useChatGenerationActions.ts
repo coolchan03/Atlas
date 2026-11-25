@@ -389,7 +389,7 @@ export async function injectRagContext(projectId: string | undefined, query: str
     const proj = useProjectStore.getState().getProject(projectId);
     const profile = profileFor(proj?.profileId, proj?.customProfile, docNames);
     const r = await ragService.searchProject(projectId, query);
-    const src = sourceContext(profile, { custom: proj?.sourceRules, names: docNames, query, chunkNames: r.chunks.map((c: { name: string }) => c.name), now: new Date() });
+    const src = sourceContext(profile, { custom: proj?.sourceRules, guide: proj?.sourceGuide, names: docNames, query, chunkNames: r.chunks.map((c: { name: string }) => c.name), now: new Date() });
     if (src.rules) kbPrompt += `\n${src.rules}`;
     if (src.retired.size) r.chunks = r.chunks.filter((c: { name: string }) => !src.retired.has(c.name));
     if (src.notes) kbPrompt += `\n${src.notes}`;

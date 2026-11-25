@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { ScreenHeader } from '../components/ScreenHeader';
+import { RadioPanel } from '../radio/RadioPanel';
 import { useTheme } from '../theme';
 import { useMusicLibrary, deleteInstrumentalTrack, type InstrumentalTrack } from '../music/library';
 import { instrumentalPlayer, useMusicPlayback } from '../music/backgroundPlayer';
@@ -26,8 +27,23 @@ import { AMBIENT, type AmbientKind } from '../music/ambient';
 import { SPACING } from '../constants';
 
 
-/** Music Studio makes original instrumental music in a chosen style, played by a small band, entirely on the phone. */
-export function MusicStudioScreen() {
+/** The two halves of Music Studio: making a track, and the AI radio. */
+function ModeTabs({ mode, onChange }: { mode: 'make' | 'radio'; onChange: (m: 'make' | 'radio') => void }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.modes}>
+      {([['make', 'Make music'], ['radio', 'AI radio']] as const).map(([id, label]) => (
+        <TouchableOpacity key={id} onPress={() => onChange(id)} accessibilityRole="radio" accessibilityState={{ selected: mode === id }} testID={`studio-mode-${id}`}
+          style={[styles.option, { borderColor: mode === id ? colors.primary : colors.border }]}>
+          <Text style={{ color: mode === id ? colors.primary : colors.textSecondary }}>{label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+/** Makes original instrumental music in a chosen style, played by a small band, entirely on the phone. */
+function MakeMusic() {
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
   const [prompt, setPrompt] = useState('');
@@ -191,8 +207,6 @@ export function MusicStudioScreen() {
   };
   const makeIt = () => (maker === 'ai' ? askComposer() : maker === 'quick' ? make() : makeAmbientTrack(noise));
   return (
-    <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
-      <ScreenHeader title="Music Studio" />
       <ScrollView contentContainerStyle={styles.body}>
         <MakePanel choices={choices} onChange={change} soundfontName={soundfont?.name} busy={busy} onMake={makeIt} onSurprise={surprise} onImport={() => { void importMidi(); }} onOwn={(id) => { const start = buildPreset(id); if (start) navigation.navigate('ScoreEditor', { score: start }); }} />
         {!!status && <View style={styles.statusRow} testID="music-status"><ActivityIndicator color={colors.primary} /><Text style={[styles.statusText, { color: colors.text }]}>{status}</Text></View>}
@@ -245,11 +259,24 @@ export function MusicStudioScreen() {
           </View>
         )}
       </ScrollView>
+  );
+}
+
+/** Music Studio: make original instrumental music in a chosen style, or switch to the AI radio, an endless station. */
+export function MusicStudioScreen({ startOn }: { startOn?: 'radio' } = {}) {
+  const { colors } = useTheme();
+  const [mode, setMode] = useState<'make' | 'radio'>(startOn ?? 'make');
+  return (
+    <SafeAreaView style={[styles.fill, { backgroundColor: colors.background }]} edges={['top']}>
+      <ScreenHeader title="Music Studio" />
+      <ModeTabs mode={mode} onChange={setMode} />
+      {mode === 'radio' ? <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled"><RadioPanel /></ScrollView> : <MakeMusic />}
     </SafeAreaView>
   );
 }
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  modes: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 8 },
   title: { fontSize: 18, fontWeight: '700' },
   body: { padding: 16, gap: 12, paddingBottom: 48 },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

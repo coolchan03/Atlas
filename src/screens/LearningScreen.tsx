@@ -1,3 +1,5 @@
+import { SourceRulesFields } from '../components/SourceRulesBox';
+import { LearningDigestCard } from './LearningDigestCard';
 import React, { useEffect, useMemo, useState } from 'react';
 import { shareItem } from '../utils/shareItem';
 import { StyleSheet, Alert, Switch, View, Text, TextInput, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
@@ -10,7 +12,7 @@ import type { ThemeColors, ThemeShadows } from '../theme';
 import { TYPOGRAPHY, SPACING } from '../constants';
 import { useAgentStore } from '../stores/agentStore';
 import { NO_AGENT, isNoAgent, setLessons, expertName } from '../learning/agents';
-import { reportsMarkdown, writeReportsFile } from '../learning/lessonsFile';
+import { shareReports as shareReportsOf } from '../learning/lessonsFile';
 import { markSources, superscript } from '../study/replySources';
 import { useProjectStore, useAppStore } from '../stores';
 import { useLearningStore, LearnEvent, defaultLearnConfig, newItem, BankStatus } from '../learning/store';
@@ -68,6 +70,17 @@ export const LearningScreen: React.FC = () => {
   const projects = useProjectStore((s) => s.projects);
   const rawCfg = useLearningStore((s) => s.config[agentId]);
   const cfg = Object.assign(defaultLearnConfig(), rawCfg || {});
+  // The subject's document names, so the guide on how to use each one can show which document each sentence was matched to.
+  const [docStatus, setDocStatus] = useState('');
+  const [docNames, setDocNames] = useState<string[]>([]);
+  useEffect(() => {
+    let live = true;
+    if (!cfg.projectId) { setDocNames([]); return undefined; }
+    require('../services/rag').ragService.getDocumentsByProject(cfg.projectId)
+      .then((docs: Array<{ name: string }>) => { if (live) setDocNames(docs.map((d) => d.name)); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, [cfg.projectId, docStatus]); // eslint-disable-line react-hooks/exhaustive-deps
   const setConfig = useLearningStore((s) => s.setConfig);
   const st = useLearningStore((s) => s.state[agentId]);
   const events = useLearningStore((s) => s.events).filter((e) => e.agentId === agentId).slice(0, 80);
@@ -112,7 +125,6 @@ export const LearningScreen: React.FC = () => {
     setOpenQ(null);
   };
   // Documents the learner reads from: picked files, or the Atlas folder. They go into a project named after the subject.
-  const [docStatus, setDocStatus] = useState('');
   const addDocuments = async (from: 'files' | 'folder' | 'pick-folder') => {
     const projectId = cfg.projectId || projectForSubject(expertName(agentId));
     if (!cfg.projectId) setConfig(agentId, { projectId });
@@ -138,12 +150,17 @@ export const LearningScreen: React.FC = () => {
     return () => { onLearningStatus(null); clearInterval(t); };
   }, []);
 
+  const [sharing, setSharing] = useState(false);
   const shareReports = async () => {
-    const reports = st?.reportLog ?? [];
-    const name = expertName(agentId);
-    const path = await writeReportsFile(name, reports);
-    await shareItem({ title: `Reports on ${name}`, text: reportsMarkdown(name, reports) });
-    if (path) Alert.alert('Saved as a file too', path);
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0)); // let the button show it is working before the file is built
+      const db = require('../learning/knowledgeDb').learningKnowledgeDb;
+      const done = await shareReportsOf(expertName(agentId), { reports: st?.reportLog ?? [], archive: { subjectId: agentId, count: () => db.reportCount(agentId), page: (limit: number, offset: number) => db.reportPage(agentId, limit, offset) } }, shareItem);
+      if (done.how === 'failed') Alert.alert('Could not share the reports', done.path ? `They are saved as a file instead: ${done.path}` : 'The phone could not open the share sheet.');
+      else if (done.how === 'text' && done.path) Alert.alert('Shared as text', `The reports are saved as a file too: ${done.path}`);
+    } finally { setSharing(false); }
   };
   const [refining, setRefining] = useState(false);
   const [suggestion, setSuggestion] = useState('');
@@ -295,6 +312,8 @@ export const LearningScreen: React.FC = () => {
         ))}
       </View>
       <Text style={styles.counts}>{STRICTNESS_OPTIONS.find((o) => o.id === (cfg.judgeStrictness ?? DEFAULT_STRICTNESS))?.hint}</Text>
+      <Text style={styles.note}>Sources that differ: say what field this is and which source wins (the law over a guide, a newer edition over an older one, a filing over news). A source that outranks another replaces its claim instead of starting a dispute.</Text>
+      <SourceRulesFields key={agentId} value={cfg} names={docNames} disabled={running} onChange={(patch) => setConfig(agentId, patch)} />
       <TouchableOpacity style={styles.row} accessibilityRole="switch" accessibilityState={{ checked: cfg.keepAwake !== false }} testID="learning-keep-awake"
         onPress={() => setConfig(agentId, { keepAwake: cfg.keepAwake === false })}>
         <Icon name={cfg.keepAwake !== false ? 'check-square' : 'square'} size={18} color={colors.primary} />
@@ -320,8 +339,8 @@ export const LearningScreen: React.FC = () => {
       <View style={styles.reportsHead}>
         <View style={styles.grow}>{foldHead('reports', 'Reports it wrote')}</View>
         {!folded.reports && (st?.reportLog ?? []).length > 0 && (
-          <TouchableOpacity onPress={shareReports} style={styles.smallBtn} testID="share-reports" accessibilityRole="button">
-            <Text style={styles.smallBtnText}>Share reports</Text>
+          <TouchableOpacity onPress={shareReports} disabled={sharing} style={styles.smallBtn} testID="share-reports" accessibilityRole="button">
+            <Text style={styles.smallBtnText}>{sharing ? 'Sharing...' : 'Share reports'}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -502,6 +521,7 @@ export const LearningScreen: React.FC = () => {
 
   const feed = (
     <View>
+      <LearningDigestCard agentId={agentId} changed={(st?.totalReports ?? 0) + (running ? 0 : 1)} />
       {foldHead('activity', 'Activity')}
       {!folded.activity && events.length === 0 && <Text style={styles.note}>Nothing yet. Describe the task and press Start.</Text>}
       {!folded.activity && events.map((e: LearnEvent) => (

@@ -1,6 +1,7 @@
 import { OfficialStandardButton } from '../components/OfficialStandardButton';
 import { DocRoleLine } from '../components/DocRoleLine';
 import { SourceRulesBox } from '../components/SourceRulesBox';
+import { CaseFileCard } from '../components/CaseFileCard';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, Switch, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -134,6 +135,7 @@ export const KnowledgeBaseSection: React.FC<KBSectionProps> = ({ projectId, colo
       )}
 
       {kbDocs.length > 0 && <SourceRulesBox projectId={projectId} names={kbDocs.map((d) => d.name)} />}
+      {kbDocs.length > 0 && <CaseFileCard projectId={projectId} names={kbDocs.map((d) => d.name)} />}
 
       {kbDocs.length === 0 && !indexingFile ? (
         <View style={styles.emptyState}>

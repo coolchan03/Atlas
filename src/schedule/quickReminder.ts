@@ -6,7 +6,7 @@
  */
 import type { Repeat } from './due';
 
-interface QuickReminder { text: string; repeat: Repeat; hour: number; minute: number; weekday?: number; onceAt?: number }
+export interface QuickReminder { text: string; repeat: Repeat; hour: number; minute: number; weekday?: number; onceAt?: number }
 export type QuickResult = { ok: true; reminder: QuickReminder } | { ok: false; error: string };
 
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];

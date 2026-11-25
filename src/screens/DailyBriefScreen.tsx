@@ -1,16 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OfflineNote } from '../components/OfflineNote';
 import { NudgesCard } from '../components/NudgesCard';
-import { ActivityIndicator, Alert, Linking, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenBackground } from '../components/ScreenBackground';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { SwipeRow } from '../components/SwipeRow';
 import { useTheme, useThemedStyles } from '../theme';
+import { SPACING, TYPOGRAPHY } from '../constants';
 import { Button, Card } from '../components';
 import { useWideLayout } from '../hooks/useWideLayout';
 import { useStudyStore, type StudyResult } from '../study/engine';
+import { EpisodeAudioReady } from './EpisodeAudioButtons';
+import { audioFor, useEpisodeAudio } from '../atlasVoice/episodeAudioStore';
 import { BRIEF_PROJECT, funFactAttempt, makeBriefing, noFunFactMessage, parseInterests, todayKey, useBriefPrefs } from '../atlasTools/dailyBrief';
 import { AVOID_SUGGESTIONS } from '../atlasTools/newsSources';
 import { useStoryReview } from './BriefStorySheet';
@@ -23,7 +26,7 @@ import { uvAdvice, type WeatherData } from '../atlasTools/weather';
 import { fmtTemp, useUnits } from '../atlasTools/units';
 
 const EMPTY: never[] = [];
-const LENGTHS = [3, 5, 10, 15];
+const LENGTHS = [3, 5, 10, 15, 20];
 const fmtElapsed = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /** Progress while today's briefing is being made: current step, steps done, time so far. */
@@ -56,6 +59,23 @@ function useBriefingJob(voices: number, onDone: (r: StudyResult) => void) {
   };
   return { step, done, error, elapsed, start };
 }
+
+const briefAudioStyles = StyleSheet.create({ box: { marginTop: SPACING.sm }, row: { flexDirection: 'row', flexWrap: 'wrap' } });
+
+/** The audio file made for today's briefing (by a scheduled briefing, or from the briefing page), ready to share or keep. */
+const TodayAudio: React.FC<{ createdAt: number; title: string }> = ({ createdAt, title }) => {
+  const { colors } = useTheme();
+  const [audio, setAudio] = useState<{ path: string; seconds: number } | null>(null);
+  const last = useEpisodeAudio((s) => s.last);
+  useEffect(() => { void audioFor(`${BRIEF_PROJECT}-${createdAt}`).then(setAudio); }, [createdAt, last]);
+  if (!audio) return null;
+  return (
+    <View testID="brief-audio-ready" style={briefAudioStyles.box}>
+      <Text style={{ color: colors.textSecondary, ...TYPOGRAPHY.bodySmall }}>{`Audio file ready, about ${Math.max(1, Math.round(audio.seconds / 60))} min.`}</Text>
+      <View style={briefAudioStyles.row}><EpisodeAudioReady audio={audio} title={title} /></View>
+    </View>
+  );
+};
 
 /** A short spoken news show about your interests, made from real headlines of the day. */
 export const DailyBriefScreen: React.FC = () => {
@@ -159,6 +179,7 @@ export const DailyBriefScreen: React.FC = () => {
             </View>
           )}
           {!!job.error && <Text style={styles.error}>{job.error}</Text>}
+          {today && <TodayAudio createdAt={today.createdAt} title={today.title ?? 'Daily briefing'} />}
         </Card>
 
         {weather && (

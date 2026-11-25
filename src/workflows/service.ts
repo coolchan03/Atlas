@@ -41,6 +41,21 @@ const save = (r: AnyRun) => {
   if (r.workflowId === 'accountant' && r.ctx?.rules) useWorkflowRuns.getState().setRules(r.ctx.rules);
 };
 const deps = { ask, save };
+
+/**
+ * The specialist whose built-in knowledge a built-in job works with: the repair job has the Repair Helper's safety facts, the dinner jobs the
+ * Home Chef's food safety temperatures, the writing job the Writer's basics, the paperwork jobs the Paperwork Reader's care with exact words.
+ * The specialist's prompt (and what it has learned) goes in front of each step's own instruction, so the facts are there at every step.
+ */
+const SPECIALIST: Record<string, string> = { repair: 'repair-helper', cook: 'home-chef', mealweek: 'home-chef', writing: 'writer', accountant: 'accountant', explain: 'paperwork-reader', contract: 'paperwork-reader', bill: 'paperwork-reader' };
+function depsFor(wf: Workflow<any>): typeof deps {
+  const specialist = SPECIALIST[wf.id];
+  if (!specialist) return deps;
+  return { ...deps, ask: (system, user) => {
+    const agent = require('../stores/agentStore').useAgentStore.getState().getAgent(specialist);
+    return ask(agent ? `${require('../stores/agentStore').agentPromptWithLessons(agent)}\n\n${system}` : system, user);
+  } };
+}
 const workflowFor = (run: AnyRun): Workflow<any> => {
   const wf = workflowById(run.workflowId);
   if (!wf) throw new Error('This job is not available any more.');
@@ -54,14 +69,14 @@ export function beginWorkflow(id: string, text: string, fields: Record<string, s
   const ctx = wf.input.make(text, fields);
   if (id === 'accountant') ctx.rules = useWorkflowRuns.getState().rules;
   const run = newRun(wf, localUniqueId('wf'), ctx);
-  return { runId: run.id, done: advance(wf, run, deps) };
+  return { runId: run.id, done: advance(wf, run, depsFor(wf)) };
 }
 
 /** The titles of a job's steps, in order (empty when the job is gone). */
 export const stepTitles = (workflowId: string): string[] => workflowById(workflowId)?.steps.map((s) => s.title) ?? [];
 
-export const answerRun = (run: AnyRun, answers: Record<string, string>): Promise<AnyRun> => answer(workflowFor(run), run, { answers, deps });
-export const approveRun = (run: AnyRun): Promise<AnyRun> => approve(workflowFor(run), run, deps);
+export const answerRun = (run: AnyRun, answers: Record<string, string>): Promise<AnyRun> => answer(workflowFor(run), run, { answers, deps: depsFor(workflowFor(run)) });
+export const approveRun = (run: AnyRun): Promise<AnyRun> => approve(workflowFor(run), run, depsFor(workflowFor(run)));
 export const cancelRun = (run: AnyRun): void => save(cancel(run));
 /** Carries on a run that was left waiting or interrupted (the app was closed mid-step). */
-export const resumeRun = (run: AnyRun): Promise<AnyRun> => (run.status === 'running' || run.status === 'failed') ? advance(workflowFor(run), run, deps) : Promise.resolve(run);
+export const resumeRun = (run: AnyRun): Promise<AnyRun> => (run.status === 'running' || run.status === 'failed') ? advance(workflowFor(run), run, depsFor(workflowFor(run))) : Promise.resolve(run);

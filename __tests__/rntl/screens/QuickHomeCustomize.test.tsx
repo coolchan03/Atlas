@@ -42,3 +42,30 @@ describe('Home: the widget editor and the study card belong to Customize', () =>
     expect(view.queryByTestId('widget-launch-status')).toBeNull();
   });
 });
+
+describe('Home: hold a tile and slide it over another to move it', () => {
+  const layout = (y: number) => ({ nativeEvent: { layout: { x: 0, y, width: 300, height: 80 } } });
+  const labelsInOrder = (view: ReturnType<typeof render>) => view.getAllByTestId(/^quick-home-/).map((t) => t.props.testID.replace('quick-home-', ''));
+
+  it('moves a tile, a widget you made among them, and keeps the order', () => {
+    useHomeShortcuts.setState({ shortcuts: [{ id: 'w1', title: 'Call my coach', action: 'call' }] });
+    useNudges.setState({ homeStudy: false });
+    const view = render(<QuickHomeScreen navigation={navigation} mode="simple" />);
+    const before = labelsInOrder(view);
+    expect(before[before.length - 1]).toBe('widget-w1'); // new widgets start last
+    // The phone reports where each tile is; here they are stacked 80 apart.
+    before.forEach((key, i) => fireEvent(view.getByTestId(`quick-home-${key}`), 'layout', layout(i * 80)));
+    // Hold the widget, then slide a finger up over the second tile.
+    fireEvent(view.getByTestId('quick-home-widget-w1'), 'longPress');
+    fireEvent(view.getByTestId('home-tile-list'), 'responderGrant');
+    fireEvent(view.getByTestId('home-tile-list'), 'responderMove', { nativeEvent: { pageX: 40, pageY: 80 + 40 } });
+    fireEvent(view.getByTestId('home-tile-list'), 'responderRelease');
+    const after = labelsInOrder(view);
+    expect(after[1]).toBe('widget-w1');
+    expect(after.filter((k) => k !== 'widget-w1')).toEqual(before.filter((k) => k !== 'widget-w1'));
+    // It stays that way when the screen is opened again.
+    view.unmount();
+    const again = render(<QuickHomeScreen navigation={navigation} mode="simple" />);
+    expect(labelsInOrder(again)[1]).toBe('widget-w1');
+  });
+});

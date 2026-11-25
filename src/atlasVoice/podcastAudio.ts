@@ -172,6 +172,17 @@ export function preRenderEpisode(key: string, items: CastLine[]): void {
   items.forEach((_, i) => { render({ key, items, i }).catch(() => undefined); });
 }
 
+/**
+ * Renders every line of an episode now (the ones already saved cost nothing) and says when all are ready, for saving the whole show as
+ * one audio file. `onProgress` is told how many lines are done. False when a line could not be made or this phone cannot save speech.
+ */
+export async function renderEpisode(key: string, items: CastLine[], onProgress?: (done: number, total: number) => void): Promise<boolean> {
+  if (!renderable(items)) return false;
+  let done = 0;
+  const made = await Promise.all(items.map((_, i) => render({ key, items, i }).then((path) => { onProgress?.(++done, items.length); return path; })));
+  return made.every(Boolean);
+}
+
 let sessionReady = false;
 let ctx: any = null;
 let source: any = null;

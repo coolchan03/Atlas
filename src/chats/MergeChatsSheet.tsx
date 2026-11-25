@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { AppSheet } from '../components/AppSheet';
 import { useTheme } from '../theme';
 import { useChatStore, useProjectStore } from '../stores';
-import { useAgentStore } from '../stores/agentStore';
+import { isHiddenAgent, useAgentStore } from '../stores/agentStore';
 import { duplicateGroups, mergedMessageCount, summarizeChat, type MergeChoice } from './mergeDuplicates';
 import { mergeWithUndo } from './undoMerge';
 
@@ -66,7 +66,7 @@ export const MergeChatsSheet: React.FC<{ visible: boolean; onClose: () => void }
 
               <Text style={[styles.label, { color: colors.textSecondary }]}>Agent for the merged chat</Text>
               <View style={styles.chips}>
-                {[{ id: null as string | null, name: 'No agent' }, ...agents.map((a) => ({ id: a.id as string | null, name: a.name }))].map((a) => (
+                {[{ id: null as string | null, name: 'No agent' }, ...agents.filter((a) => !isHiddenAgent(a)).map((a) => ({ id: a.id as string | null, name: a.name }))].map((a) => (
                   <TouchableOpacity key={a.id ?? 'none'} onPress={() => set(key, { agentId: a.id })} testID={`merge-agent-${a.id ?? 'none'}`}
                     accessibilityRole="radio" accessibilityState={{ selected: agentId === a.id }} style={chip(agentId === a.id)}>
                     <Text style={[styles.chipName, { color: colors.text }]}>{a.name}</Text>

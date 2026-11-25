@@ -35,7 +35,8 @@ const wait = (ms: number): Promise<boolean> => new Promise((resolve) => {
 function report(event: StationEvent): void {
   const set = useRadioRun.setState;
   if (event.kind === 'preparing') set({ line: `${event.what}...` });
-  else if (event.kind === 'playing') set((s) => ({ line: 'Playing', title: event.title, about: describeShow(event.show), poem: event.poem, reading: false, kept: false, problem: null, songs: s.songs + 1 }));
+  else if (event.kind === 'break') set({ line: 'Break: the next song is being made', onBreak: true, title: '', poem: null, poemTitle: null, reading: false, about: describeShow(event.show) });
+  else if (event.kind === 'playing') set((s) => ({ line: 'Playing', onBreak: false, title: event.title, about: describeShow(event.show), poem: event.poem, poemTitle: event.poemTitle, reading: false, kept: false, problem: null, songs: s.songs + 1 }));
   else if (event.kind === 'poem') set({ reading: true });
   else if (event.kind === 'problem') { logger.warn(`[RADIO] ${event.message}`); set({ problem: event.message }); }
   else set({ ...EMPTY_RUN });

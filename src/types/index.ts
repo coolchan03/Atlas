@@ -411,6 +411,8 @@ export interface Project {
   citeBooks?: boolean;
   /** The person's own rules for reading this project's documents (which source wins, what binds), replacing the built-in order of authority. */
   sourceRules?: string;
+  /** How to use each document, in the person's own words (take only the general rules of one, all of another, one is the newest). Code reads which document each sentence names; see standards/guide.ts. */
+  sourceGuide?: string;
   /** Which source profile weighs this project's documents: 'auto' (tax when it holds tax material), 'federal-tax', a built-in field, or 'custom'. */
   profileId?: string;
   /** The person's own profile, written as lines (see standards/profiles.ts parseProfile), used when profileId is 'custom'. */

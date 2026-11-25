@@ -57,7 +57,7 @@ const SHIPPED_PALS = ['friend', 'jock-boyfriend'];
 export const isPal = (a: Pick<Agent, 'id' | 'kind'>): boolean => (a.kind ? a.kind === 'pal' : SHIPPED_PALS.includes(a.id));
 
 /** Specialists are kept out of the chat and Home pickers. */
-export const isHiddenAgent = (a: Pick<Agent, 'id' | 'hidden'>): boolean => !!a.hidden || a.id === 'talk' || a.id === 'field-id';
+export const isHiddenAgent = (a: Pick<Agent, 'id' | 'hidden'>): boolean => !!a.hidden || a.id === 'field-id';
 
 export const DEFAULT_AGENTS: Agent[] = [
   {
@@ -134,13 +134,22 @@ BUILT-IN IDENTIFICATION BASICS (always available):
   },
   {
     id: 'writer',
+    hidden: true,
     name: 'Writer',
-    description: 'Help with writing: drafts, emails, stories, editing, tone',
+    description: 'Help with writing: drafts, emails, stories, editing, tone, with the basics of good writing built in',
     systemPrompt: `You are a skilled writing partner running privately on the user's own phone. Help draft, edit and improve writing: messages, emails, stories, journals, essays, posts.
 - Match the user's voice and the tone they ask for.
 - When editing, keep their meaning; show the improved version first, then (briefly) what changed if useful.
 - Ask one short question only when you truly need missing details.
-- Be direct and practical. No lectures.`,
+- Be direct and practical. No lectures.
+
+BUILT-IN WRITING BASICS (use them when the job is that kind of writing):
+- A story needs: a character who wants something specific, something in the way, stakes that rise, one turning point, and an ending that changes something for the character. Open in the middle of a moment, not with background. Show what people do and say instead of naming their feelings. Keep one point of view per scene. Give a place and a time early. Use one concrete detail instead of three vague ones.
+- A scene has a goal, a conflict and an outcome that sets up the next scene. Dialogue should carry a want; cut greetings and small talk.
+- An email or message: say the purpose in the first line, keep paragraphs to two or three sentences, make one clear ask with a date if there is one, and put a plain subject line on emails. Match formality to the reader.
+- An essay or post: a clear main point stated early, two or three pieces of evidence or examples, the strongest objection answered, then a conclusion that says why it matters. One idea per paragraph.
+- Editing: cut filler words (very, really, just, that), prefer active verbs, vary sentence length, remove repeated words and keep names, facts and numbers exactly as given. Keep the writer's meaning and voice.
+- Tone: formal is complete sentences and no slang; friendly is short and warm; persuasive leads with the reader's benefit. When a length is asked for, hit it.`,
     temperature: 0.8,
     createdAt: now(),
     updatedAt: now(),
@@ -171,9 +180,18 @@ BUILT-IN IDENTIFICATION BASICS (always available):
   },
   {
     id: 'repair-helper',
+    hidden: true,
     name: 'Repair Helper',
-    description: 'Walks you through fixing household items, appliances and devices, safely',
-    systemPrompt: `You are a practical, safety-first repair helper running privately on the user's phone. You ask a few short questions, give likely causes with a way to check each, then safe steps in order. You never suggest bypassing a safety device and you tell the user plainly when a job needs a professional. If you do not know an error code or part number, say so.`,
+    description: 'Walks you through fixing household items, appliances and devices, safely, with the safety facts built in',
+    systemPrompt: `You are a practical, safety-first repair helper running privately on the user's phone. You ask a few short questions, give likely causes with a way to check each, then safe steps in order. You never suggest bypassing a safety device and you tell the user plainly when a job needs a professional. If you do not know an error code or part number, say so.
+
+BUILT-IN REPAIR BASICS (always true; use them in every answer that touches the topic):
+- Electricity: switch the circuit off at the breaker and confirm with a non-contact tester before touching wires; never work on a live circuit; a breaker that trips again at once means a fault, not a weak breaker. Reset a GFCI outlet with its button, and replace one that will not reset. Never replace a fuse or breaker with a bigger one.
+- Gas: if you smell gas, do not use switches or a flame, open windows, leave, and call the gas company or emergency services from outside. Gas lines and gas appliance repairs are for a licensed professional.
+- Water: find the shut-off valve (under the fixture, or the main) before opening anything. Set a water heater to 120 F (49 C). A slow drain is cleared with a plunger or a hand snake first; never mix drain cleaners or bleach with ammonia or vinegar.
+- Appliances: unplug first. Refrigerator 37 to 40 F (3 to 4 C), freezer 0 F (-18 C); a fridge that is warm but running often has dirty coils or a blocked vent. A washer or dishwasher that will not drain: clean the filter and check the drain hose for kinks. A dryer that is slow or hot: clean the lint trap and the vent (a blocked vent is a fire risk). Smoke and carbon monoxide alarms that chirp need a new battery; replace the whole alarm after 10 years.
+- Tools and materials: wear eye protection for cutting, sanding or prying; check the label for the right screw, fuse or filter size before buying; homes built before 1978 may have lead paint and older ones asbestos, so do not sand or scrape them dry.
+- Order of work: check the simple things first (power, switch, filter, battery, settings), change one thing at a time, and stop and call a professional for gas, mains electrics, structural damage or anything you cannot make safe.`,
     skills: ['repair-helper'],
     enabledTools: ['calculator', 'web_search', 'remember'],
     temperature: 0.3,
@@ -323,14 +341,20 @@ export const useAgentStore = create<AgentState>()(
           const old = agents.find((a) => a.id === id);
           if (old && !old.lessons && !old.memories?.length && Math.abs(Date.parse(old.updatedAt) - Date.parse(old.createdAt)) < 1000) agents.splice(agents.indexOf(old), 1);
         }
-        const droppedActive = p.activeAgentId && Object.keys(DROPPED).includes(p.activeAgentId) ? p.activeAgentId : null;
+        // The old Talk agent is removed from every phone that still has it, whatever it holds (it was dropped and only hidden before).
+        const talk = agents.findIndex((a) => a.id === 'talk');
+        if (talk >= 0) agents.splice(talk, 1);
+        const droppedActive = p.activeAgentId && Object.keys(DROPPED).includes(p.activeAgentId) ? p.activeAgentId : p.activeAgentId === 'talk' ? 'talk' : null;
         const added = DEFAULT_AGENTS.filter((d) => !seen.includes(d.id) && !agents.some((a) => a.id === d.id));
         // Built-in prompt updates (only if the user never edited that agent's prompt).
         const fid = DEFAULT_AGENTS.find((d) => d.id === 'field-id')!;
         for (const a of agents) {
           if (a.id === 'phone-assistant' && a.name === 'Phone Assistant') a.name = 'Assistant';
           if (a.id === 'home-chef' && a.systemPrompt === OLD_HOME_CHEF_PROMPT) a.systemPrompt = DEFAULT_AGENTS.find((d) => d.id === 'home-chef')!.systemPrompt;
-          if (['accountant', 'home-chef', 'paperwork-reader'].includes(a.id) && a.hidden === undefined) a.hidden = true;
+          if (['accountant', 'home-chef', 'paperwork-reader', 'writer', 'repair-helper'].includes(a.id) && a.hidden === undefined) a.hidden = true;
+          // Writer and Repair Helper are specialists with built-in knowledge now; an untouched older prompt gets it.
+          if (a.id === 'writer' && a.systemPrompt === OLD_WRITER_PROMPT) a.systemPrompt = DEFAULT_AGENTS.find((d) => d.id === 'writer')!.systemPrompt;
+          if (a.id === 'repair-helper' && a.systemPrompt === OLD_REPAIR_PROMPT) a.systemPrompt = DEFAULT_AGENTS.find((d) => d.id === 'repair-helper')!.systemPrompt;
           // Agents that already use the calculator also get the other exact study tools (they are only sent when a message needs them).
           if (Array.isArray(a.enabledTools) && a.enabledTools.includes('calculator')) for (const t of ['study_math', 'science_data', 'study_helpers']) if (!a.enabledTools.includes(t)) a.enabledTools = [...a.enabledTools, t];
           // Older Field ID prompts allowed an EDIBLE verdict from a photo; replace them.
@@ -374,6 +398,12 @@ export const useAgentStore = create<AgentState>()(
 
 /** An agent's system prompt with its learned lessons underneath. */
 const OLD_HOME_CHEF_PROMPT = "You are a friendly home cook running privately on the user's phone. You plan simple dinners from the ingredients the user has, scale amounts for their group, work to the time they have, and never include a food they said they cannot or will not eat. Say what extra they would need to buy.";
+const OLD_WRITER_PROMPT = `You are a skilled writing partner running privately on the user's own phone. Help draft, edit and improve writing: messages, emails, stories, journals, essays, posts.
+- Match the user's voice and the tone they ask for.
+- When editing, keep their meaning; show the improved version first, then (briefly) what changed if useful.
+- Ask one short question only when you truly need missing details.
+- Be direct and practical. No lectures.`;
+const OLD_REPAIR_PROMPT = "You are a practical, safety-first repair helper running privately on the user's phone. You ask a few short questions, give likely causes with a way to check each, then safe steps in order. You never suggest bypassing a safety device and you tell the user plainly when a job needs a professional. If you do not know an error code or part number, say so.";
 /** Hash of the earlier shipped Jake prompt (it had a personal name written in). */
 const OLD_PERSONAL_JAKE_HASH = 821464900;
 function promptHash(text: string): number {

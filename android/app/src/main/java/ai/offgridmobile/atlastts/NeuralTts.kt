@@ -62,12 +62,13 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
 
     /** The samples for [text]. A cloned voice gets its text tidied first (see [PocketText]) so it knows where the speech ends. */
     private fun generateAudio(engine: OfflineTts, text: String, sid: Int, speed: Float,
-                              reference: VoiceCloneWav.Reference?, steps: Int): FloatArray {
+                              reference: VoiceCloneWav.Reference?, steps: Int, measure: Boolean = true): FloatArray {
         if (!pocketLoaded) return engine.generate(text, sid, speed).samples
         val used = if (steps == 0) auto.steps else steps
         val began = System.nanoTime()
         val audio = generatePocket(engine, PocketText.prepare(text, used), sid, speed, reference, used)
-        if (steps == 0) auto.record((System.nanoTime() - began) / 1_000_000, audio.samples.size.toDouble() / max(1, audio.sampleRate))
+        // Only live speech teaches the automatic quality how fast this phone is: a long render (a saved briefing) runs slower than it is spoken on a busy phone and would have turned the voice down for everything after it.
+        if (steps == 0 && measure) auto.record((System.nanoTime() - began) / 1_000_000, audio.samples.size.toDouble() / max(1, audio.sampleRate))
         // The lead-in and the voice's own pause before it stops would be heard as a delay before every sentence: keep a short breath either side.
         return VoiceStats.trimSilence(audio.samples, audio.sampleRate, 80, 160)
     }
@@ -288,7 +289,7 @@ class NeuralTts(private val emit: (String, String, String) -> Unit) {
             fun put(a: ShortArray) { val b = java.nio.ByteBuffer.allocate(a.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN); b.asShortBuffer().put(a); out.write(b.array()) }
             for (p in parts) {
                 if (cancelled()) return@Callable null
-                val f = generateAudio(engine, p, sid, genSpeed, reference, steps)
+                val f = generateAudio(engine, p, sid, genSpeed, reference, steps, measure = false)
                 put(ShortArray(f.size) { (f[it].coerceIn(-1f, 1f) * 32767f).toInt().toShort() })
                 put(gap)
             }

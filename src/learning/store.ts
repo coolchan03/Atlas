@@ -25,6 +25,12 @@ export interface LearnConfig {
   useWeb: boolean;
   /** When useWeb is on: comma-separated domains to restrict results to (e.g. "scholar.google.com, arxiv.org"). Empty = no restriction. */
   webDomains?: string;
+  /** The kind of source this subject reads (a field's profile, 'auto', or 'custom') and the person's own rules for weighing sources that differ. See standards/profiles.ts. */
+  profileId?: string;
+  customProfile?: string;
+  sourceRules?: string;
+  /** How to use each document the subject reads, in the person's own words. See standards/guide.ts. */
+  sourceGuide?: string;
   /** Keep making new question rounds after the bank is done (keep mode). */
   continuous: boolean;
   /** Keep the screen on while it learns (on unless turned off): when the screen sleeps Android pauses the app and the learning stops. */
@@ -132,6 +138,9 @@ interface LearningState {
   config: Record<string, LearnConfig>;
   state: Record<string, PerAgent>;
   events: LearnEvent[];
+  /** When the person last looked at each subject's digest (milliseconds): the digest covers what came after. */
+  looked: Record<string, number>;
+  markLooked: (agentId: string) => void;
   getConfig: (agentId: string) => LearnConfig;
   setConfig: (agentId: string, c: Partial<LearnConfig>) => void;
   get: (agentId: string) => PerAgent;
@@ -163,6 +172,8 @@ export const useLearningStore = create<LearningState>()(
       config: {},
       state: {},
       events: [],
+      looked: {},
+      markLooked: (id) => set((s) => ({ looked: { ...(s.looked ?? {}), [id]: Date.now() } })),
       getConfig: (id) => ({ ...defaultLearnConfig(), ...(getS().config[id] || {}) }),
       setConfig: (id, c) => set((s) => ({ config: { ...s.config, [id]: { ...defaultLearnConfig(), ...(s.config[id] || {}), ...c } } })),
       get: (id) => ({ ...blankState(), ...(getS().state[id] || {}) }),

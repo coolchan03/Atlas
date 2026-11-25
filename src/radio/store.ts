@@ -8,7 +8,11 @@ interface RadioSettingsState extends RadioSettings { set: (patch: Partial<RadioS
 export const useRadioSettings = create<RadioSettingsState>()(persist((set) => ({
   ...DEFAULT_RADIO,
   set: (patch) => set(patch),
-}), { name: 'atlas-radio', version: 1, storage: createJSONStorage(() => AsyncStorage), partialize: ({ set: _set, ...settings }) => settings }));
+}), {
+  name: 'atlas-radio', version: 2, storage: createJSONStorage(() => AsyncStorage), partialize: ({ set: _set, ...settings }) => settings,
+  // The first default name was "Atlas Radio"; a station still carrying it is renamed to the new default.
+  migrate: (saved: any) => ({ ...saved, ...(saved?.stationName === 'Atlas Radio' ? { stationName: DEFAULT_RADIO.stationName } : {}) }),
+}));
 
 /** What the station is doing now. Never saved: it describes this run. */
 interface RadioRun {
@@ -19,6 +23,10 @@ interface RadioRun {
   /** What the song is, in words ("a silly punk song about revenge, about my ex-husband"). */
   about: string;
   poem: string[] | null;
+  /** The poem's name. */
+  poemTitle: string | null;
+  /** True during the break between songs, while the next one is being made. */
+  onBreak: boolean;
   /** True while the poem is being read. */
   reading: boolean;
   problem: string | null;
@@ -30,5 +38,5 @@ interface RadioRun {
   /** When the sleep timer ends the station (milliseconds since 1970), or null. */
   sleepAt: number | null;
 }
-export const EMPTY_RUN: RadioRun = { on: false, line: '', title: '', about: '', poem: null, reading: false, problem: null, songs: 0, request: null, kept: false, sleepAt: null };
+export const EMPTY_RUN: RadioRun = { on: false, line: '', title: '', about: '', poem: null, poemTitle: null, onBreak: false, reading: false, problem: null, songs: 0, request: null, kept: false, sleepAt: null };
 export const useRadioRun = create<RadioRun>(() => EMPTY_RUN);

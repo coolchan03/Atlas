@@ -8,13 +8,13 @@ Each song is a **show**, rolled from the tables in `src/radio/tables.ts` by `src
 
 | Roll | Choices |
 |---|---|
-| Genre | 24 (pop, punk, rock, funk, disco, reggae, country, blues, jazz, hip hop, dance, lo-fi, classical, bossa nova, western, 8-bit, synthwave, surf rock, folk, electronic, lullaby, sea shanty, spooky, cinematic). Each is a Music Studio style, so there is always a real tune behind it |
+| Genre | 69: every Music Studio style is a genre (pop, punk, rock, metal, funk, disco, reggae, ska, country, bluegrass, blues, soul, gospel, jazz, hip hop, trap, dance, techno, house, lo-fi, classical, waltz, tango, flamenco, bossa nova, afrobeat, dream pop, cyberpunk, fantasy quest, under the sea, sunrise, the seasons and holidays, and more). Each one has a real tune behind it |
 | Topic | 51 (a love song, revenge, a road trip, a lost sock...) |
 | Subject | 41 (my ex-husband, my dog, a pirate, a ghost...) |
 | Tone | 12 (silly, tender, dramatic, deadpan...) |
 | Poem shape | 6 (stanzas and lines, and which line ends rhyme: AABB, ABAB, ABCB, AA) |
 | Liveliness | calm, medium, lively (a genre can fix it: punk is always lively) |
-| Length | 60 to 300 seconds, never more than the "Song length" setting; the tune is one 16-bar pass that loops until the time is up |
+| Length | 60 to 300 seconds, never more than the "Song length" setting; the tune is 32 bars (two different 16-bar passes in one key) that loops until the time is up |
 | Spotlight | an instrument to feature (half of the songs) |
 | Poem or not | the "Poems" setting: Often 60%, Sometimes 40% (default), Rarely 20%, Never (music only) |
 
@@ -41,7 +41,7 @@ A tiny model only has to **choose** and **fill in**; code holds the rules.
 
 ## Playing (`station.ts`, `service.ts`)
 
-The next song is made while the current one plays. The host speaks over the start of the song (the music lowers while speech is heard), the poem is read once, 8 to 20 seconds in, in the phone's voice at a steady pitch, and the tune loops until the song's time is up. Stop and Next song end waits at once. Recordings are deleted when they have played. All of the phone's parts (model, recording, player, voice, clock) are passed in, so `__tests__/integration/radioStation.test.ts` runs the whole loop with fakes.
+Songs are separated by a **break**. When a song's time is up (or Next song is pressed) its tune carries on underneath while the host says what comes next (the music lowers while speech is heard) and the model chooses the sound and writes the next poem and its name; the model never works while a song plays, so it cannot make the music stutter. When the next song is ready it starts and the old recording is thrown away. In every break the host says, in written lines (never model output): what the song that just ended was ("That was a calm jazz song about the moon."), the station's name in a different form each time ("This is AI FM.", "You are tuned in to AI FM."; the theme is added every third break), about one time in four the time of day, and what is next. The default station name is AI FM; a saved station still named Atlas Radio is renamed. The poem is introduced by its name ("A poem called ...") and read once, 8 to 20 seconds in, in the phone's voice at a steady pitch, and the tune loops until the song's time is up. Stop and Next song end waits at once. Recordings are deleted when they have played. All of the phone's parts (model, recording, player, voice, clock) are passed in, so `__tests__/integration/radioStation.test.ts` runs the whole loop with fakes.
 
 The AI that writes is the one chosen as the background model in Model settings (else the chat model). A small model is enough. The Vulkan text engine has no grammar support, so there the answer is checked but not held to a shape.
 
