@@ -64,6 +64,9 @@ jobs:
           sleep 4
           node scripts/pwa-check.mjs http://localhost:4173/
           node scripts/smoke.mjs http://localhost:4173/ smoke.png
+          node scripts/server-backend-test.mjs http://localhost:4173/
+          node scripts/llm-e2e.mjs http://localhost:4173/
+          node scripts/voice-e2e.mjs http://localhost:4173/
       - uses: actions/upload-artifact@v4
         with:
           name: atlas-web
