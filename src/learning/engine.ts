@@ -348,14 +348,16 @@ async function writeReport(agent: Agent, cfg: LearnConfig, item: BankItem): Prom
   L().log({ agentId: agent.id, kind: 'report', title: `Report: ${item.q.slice(0, 70)}`, body: report.slice(0, 2500) });
   const entry: LearnReport = { id: `${item.id}:${item.tries + 1}`, itemId: item.id, q: item.q, text: report.slice(0, 8000), sources: src.slice(0, 3000), sourceList, at: Date.now(), status: 'waiting' };
   // Archive original bytes before trimming the UI cache. If archival fails, keep the full local log.
+  // Only reports not yet archived are written (the rest of the screen's list was archived when it was new): at thousands of reports, writing the last hundred again each time was most of the work.
   let archived = false;
   try {
-    for (const old of st.reportLog ?? []) learningKnowledgeDb.archiveReport(agent.id, old);
+    for (const old of st.reportLog ?? []) if (!ARCHIVED.has(old.id)) { learningKnowledgeDb.archiveReport(agent.id, old); ARCHIVED.add(old.id); }
     learningKnowledgeDb.archiveReport(agent.id, entry);
+    ARCHIVED.add(entry.id);
     archived = true;
   } catch (e) { logger.log(`[Learning] report archival unavailable: ${String(e)}`); }
   L().patch(agent.id, {
-    reportLog: archived ? [entry, ...(st.reportLog ?? [])].slice(0, 100) : [entry, ...(st.reportLog ?? [])],
+    reportLog: archived ? [entry, ...(st.reportLog ?? [])].slice(0, REPORTS_ON_SCREEN) : [entry, ...(st.reportLog ?? [])],
     pendingReports: [...st.pendingReports, { itemId: item.id, q: item.q, report: report.slice(0, 1600), sources: src.slice(0, 1200) }],
     reportsSinceJudge: st.reportsSinceJudge + 1,
     totalReports: st.totalReports + 1,
@@ -378,11 +380,17 @@ async function saveNote(agent: Agent, cfg: LearnConfig, note: { q: string; answe
   } catch (e) { logger.log(`[Learning] could not save note: ${String(e)}`); }
 }
 
+/** Ids of reports already written to the archive in this run, so a new report does not rewrite the ones before it. */
+const ARCHIVED = new Set<string>();
+/** The reports kept in the screen's list (and saved with the learning state on every change): the rest are in the archive, and a share or export reads all of them from there. */
+const REPORTS_ON_SCREEN = 40;
+
 /** Records the judge's ruling on the newest report written for a question. */
 function markReport(agentId: string, itemId: string, patch: Partial<LearnReport>): void {
   const log = L().get(agentId).reportLog ?? [];
   const i = log.findIndex((r) => r.itemId === itemId);
   if (i < 0) return;
+  if (patch.status || patch.score !== undefined || patch.why) safely(() => learningKnowledgeDb.setArchivedVerdict(log[i].id, { status: patch.status ?? log[i].status, score: patch.score ?? log[i].score, why: patch.why ?? log[i].why }), undefined);
   L().patch(agentId, { reportLog: log.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
 }
 

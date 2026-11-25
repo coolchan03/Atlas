@@ -321,6 +321,8 @@ async function libraryItems(interests: string[], withNews: boolean, firstN: numb
 }
 
 type Picked = { interest: number; headline: Headline };
+/** The most stories read for one briefing: the plan's most, with a tenth over so the script can stop as soon as it reaches the length. */
+const MAX_PICKED = 115;
 
 /**
  * Word lists miss stories ("Chiefs beat Bills" never says sports), so the AI on the phone also reads the headlines and names
@@ -362,7 +364,7 @@ async function gatherStories(o: { interests: string[]; minutes: number; deep: bo
     perInterest.forEach((list, k) => { perInterest[k] = list.filter((h) => !gone.has(h)); });
   }
   // A few more than the length needs are read, so the script can keep going until it really reaches the length.
-  const want = Math.min(50, budget + 4);
+  const want = Math.min(MAX_PICKED, Math.ceil(budget * 1.1) + 4);
   const picked: Picked[] = [];
   // Stories about killings, shootings and deadly crashes go to the back of each topic's list, and only about one in ten of the calm stories' number is let through, unless a topic asks for them.
   const calm = !wantsViolentNews(interests);
@@ -370,7 +372,7 @@ async function gatherStories(o: { interests: string[]; minutes: number; deep: bo
   const calmCount = perInterest.reduce((n, list) => n + list.filter((h) => !isViolentStory(h)).length, 0);
   const violentCap = Math.max(1, Math.floor(calmCount / 9)); // about one in ten of what is told, however few stories there are
   let violent = 0;
-  for (const pick of pickStories(perInterest, Math.min(80, budget * 2))) {
+  for (const pick of pickStories(perInterest, Math.min(MAX_PICKED * 2, budget * 2))) {
     if (picked.length >= want) break;
     if (calm && isViolentStory(pick.headline)) { if (violent >= violentCap) continue; violent += 1; }
     // The same event under another outlet's wording is one card, not two.

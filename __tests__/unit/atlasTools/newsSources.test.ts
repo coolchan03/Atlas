@@ -62,9 +62,12 @@ describe('daily briefing news sources', () => {
     const picked = pickStories([[h('us1'), h('us2'), h('us3')], [h('w1')], [h('b1'), h('b2')]], 5);
     expect(picked.map(p => p.headline.title)).toEqual(['us1', 'w1', 'b1', 'us2', 'b2']);
     expect(storyBudget(1)).toBe(3);
-    expect(storyBudget(5)).toBe(13);
-    expect(storyBudget(10, false)).toBe(38);
-    expect(storyBudget(30)).toBe(45);
+    expect(storyBudget(5)).toBe(15); // three stories a minute, as measured
+    expect(storyBudget(10)).toBe(30);
+    expect(storyBudget(15)).toBe(45);
+    expect(storyBudget(20)).toBe(60); // the 20 minute option really is 20 minutes of stories
+    expect(storyBudget(10, false)).toBe(45);
+    expect(storyBudget(60)).toBe(100);
   });
 
   it('sizes the script to the length the user picked', () => {

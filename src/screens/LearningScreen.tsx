@@ -145,7 +145,8 @@ export const LearningScreen: React.FC = () => {
     setSharing(true);
     try {
       await new Promise((resolve) => setTimeout(resolve, 0)); // let the button show it is working before the file is built
-      const done = await shareReportsOf(expertName(agentId), st?.reportLog ?? [], shareItem);
+      const db = require('../learning/knowledgeDb').learningKnowledgeDb;
+      const done = await shareReportsOf(expertName(agentId), { reports: st?.reportLog ?? [], archive: { subjectId: agentId, count: () => db.reportCount(agentId), page: (limit: number, offset: number) => db.reportPage(agentId, limit, offset) } }, shareItem);
       if (done.how === 'failed') Alert.alert('Could not share the reports', done.path ? `They are saved as a file instead: ${done.path}` : 'The phone could not open the share sheet.');
       else if (done.how === 'text' && done.path) Alert.alert('Shared as text', `The reports are saved as a file too: ${done.path}`);
     } finally { setSharing(false); }

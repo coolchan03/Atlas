@@ -60,9 +60,9 @@ it('looks for the fun fact in science and nature, not in the interests of the ne
   expect(mockLibrary.asked).not.toContain('United States');
 });
 
-it('plans a 15 minute show from more stories than a 10 minute one', async () => {
+it('plans three stories a minute: 30 for 10 minutes, 45 for 15 and 60 for 20', async () => {
   const { storyBudget } = require('../../../src/atlasTools/newsSources');
-  expect(storyBudget(15, true)).toBe(38);
+  expect(storyBudget(15, true)).toBe(45);
   expect(storyBudget(15, true)).toBeGreaterThan(storyBudget(10, true));
-  expect(storyBudget(20, false)).toBe(45);
+  expect(storyBudget(20, true)).toBe(60);
 });

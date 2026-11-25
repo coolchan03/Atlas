@@ -83,6 +83,8 @@ export interface ReliabilitySnapshot {
   recent: ReliabilityClaim[];
 }
 
+const safeJson = (text: unknown): EvidenceSource[] => { try { const v = JSON.parse(String(text)); return Array.isArray(v) ? v : []; } catch { return []; } };
+
 export interface StoredReport {
   id: string; q: string; text: string; sources: string; at: number;
   sourceList?: EvidenceSource[];
@@ -151,6 +153,25 @@ export class LearningKnowledgeDb {
       r.id, subjectId, r.q, r.text, r.sources, JSON.stringify(r.sourceList ?? []),
       r.at, r.status, r.score ?? null, r.why ?? null, isoNow(),
     ]);
+  }
+
+  /** Records the judge's ruling on an archived report (the report's own words are never changed). */
+  setArchivedVerdict(id: string, v: { status: string; score?: number; why?: string }): void {
+    this.sql('UPDATE atlas_report_archive SET judge_status = ?, judge_score = ?, judge_reason = ? WHERE id = ?', [v.status, v.score ?? null, v.why ?? null, id]);
+  }
+
+  /** How many reports a subject has written (all of them, not only the ones the screen keeps). */
+  reportCount(subjectId: string): number {
+    return Number(((this.sql('SELECT COUNT(*) AS n FROM atlas_report_archive WHERE subject_id = ?', [subjectId]).rows ?? [])[0] as { n?: number } | undefined)?.n) || 0;
+  }
+
+  /** One page of a subject's reports, newest first, for exporting thousands of them without holding them all at once. */
+  reportPage(subjectId: string, limit: number, offset: number): StoredReport[] {
+    return (this.sql(`SELECT id, question, report_text, source_text, source_list_json, original_timestamp, judge_status, judge_score, judge_reason
+      FROM atlas_report_archive WHERE subject_id = ? ORDER BY original_timestamp DESC, id LIMIT ? OFFSET ?`, [subjectId, limit, offset]).rows ?? []).map((r: any) => ({
+      id: String(r.id), q: String(r.question), text: String(r.report_text), sources: String(r.source_text), sourceList: safeJson(r.source_list_json),
+      at: Number(r.original_timestamp), status: (['pass', 'fail'].includes(String(r.judge_status)) ? String(r.judge_status) : 'waiting') as StoredReport['status'], score: r.judge_score ?? undefined, why: r.judge_reason ?? undefined,
+    }));
   }
 
   saveCandidate(c: CandidateClaim): void {

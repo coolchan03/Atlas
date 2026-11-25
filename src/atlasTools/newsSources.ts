@@ -87,13 +87,18 @@ export function cleanHeadlines(items: Headline[], now = Date.now(), seen: string
 /** Spoken words per minute used to size the briefing to the chosen length. */
 export const WORDS_PER_MINUTE = 150;
 
+/** Stories a minute of the show carries, measured on real briefings: about three (30 stories made about 10 minutes), a little more when the stories are short. */
+const STORIES_PER_MINUTE = 3;
+const SHORT_STORIES_PER_MINUTE = 4.5;
+/** The most stories one briefing is planned from (a 30 minute show with short stories is about this many). */
+const MAX_STORIES = 100;
+
 /**
- * How many stories fill the chosen length. Each story is a short summary (about 60 spoken words, 40 without
- * reading the article), not a full read of it. At least three, at most forty-five (thirty was too few for a 15 minute show: the stories
- * found could not carry it, and the briefing stopped near 12 minutes).
+ * How many stories fill the chosen length: three a minute. The plan used to count 60 spoken words a story, but the stories came out shorter
+ * than that, so 30 stories were about 10 minutes and a 15 minute show stopped near 12. At least three.
  */
 export const storyBudget = (minutes: number, deep = true) =>
-  Math.max(3, Math.min(45, Math.round((minutes * WORDS_PER_MINUTE) / (deep ? 60 : 40))));
+  Math.max(3, Math.min(MAX_STORIES, Math.round(minutes * (deep ? STORIES_PER_MINUTE : SHORT_STORIES_PER_MINUTE))));
 
 /** Script lines per story (about 20 spoken words each) so the stories add up to the chosen length. */
 export const linesPerStory = (minutes: number, stories: number, cap = 8) =>

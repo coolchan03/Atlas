@@ -52,13 +52,15 @@ function recordOutcome(db: LearningKnowledgeDb, summary: IngestSummary, { id, ma
 
 export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): IngestSummary {
   const summary: IngestSummary = { added: 0, duplicates: 0, contradictions: 0, unsupported: 0, updates: 0 };
+  // The known claims are read once for the whole report (and kept up to date below), not once per sentence: with thousands of claims that read and its comparison were the slow part.
+  let known = db.knownClaims(input.topic);
   claimSentences(input.reportText).forEach((sentence, index) => {
     const id = `${input.reportId}:claim:${index + 1}`;
     const claim = withoutMarkers(sentence);
     const cited = citedNumbers(sentence);
     const citedSources = input.sources.filter((s) => cited.includes(s.n));
     const support = checkSupport(claim, citedSources.map((s) => s.passage ?? ''));
-    const found = compareClaim(claim, db.knownClaims(input.topic));
+    const found = compareClaim(claim, known);
     const match = input.settling && found.relation === 'contradicts' ? { relation: 'new' as const } : found;
 
     if (match.relation === 'duplicate' && match.matchId) {
@@ -87,6 +89,8 @@ export function ingestClaims(db: LearningKnowledgeDb, input: IngestInput): Inges
     });
     summary.added += 1;
     recordOutcome(db, summary, { id, match, updates });
+    if (updates && match.matchId) known = known.filter((k) => k.id !== match.matchId); // an overruled claim is no longer compared against
+    known = [...known, { id, text: claim } as (typeof known)[number]];
   });
   return summary;
 }
