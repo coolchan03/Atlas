@@ -3,6 +3,9 @@ name: Probe stable-diffusion.cpp (Windows)
 # Manual. Downloads the stable-diffusion.cpp Windows build, prints its command line help, and makes one small test image
 # so the desktop image engine can be written against what the real executable does.
 on:
+  push:
+    branches: [claude/wizardly-brown-yik8o4]
+    paths: ['.github/workflows/atlas-sd-probe.yml', 'desktop/scripts/fetch-sd.mjs']
   workflow_dispatch:
     inputs:
       model_url:
