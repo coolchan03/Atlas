@@ -57,7 +57,7 @@ Rules for the port (so the mobile app is never touched or broken):
 ### M5. Windows app (Electron)
 - [x] `desktop/` main process, preload bridge (`window.atlasHost`), CSP, single instance, window state (verified: `ATLAS_SELFTEST=1 electron .` under xvfb passes: isolation, SharedArrayBuffer, WebGPU, disk fs, FTS5)
 - [x] file system on disk (userData/data), downloads with resume, atlas-file:// streaming protocol
-- [~] llama.cpp via bundled `llama-server.exe`: manager (`desktop/lib/llama.cjs`) + renderer backend written, `scripts/fetch-llama.mjs` downloads CPU/Vulkan/CUDA builds in CI. NOT run against a real model yet (no llama.cpp binaries reachable from the build sandbox)
+- [x] (verified on a Windows runner, run 27: the packaged Atlas.exe answered a real model through llama.cpp b12716's llama-server.exe, CPU build; GPU/Vulkan untested - no GPU on runners) llama.cpp via bundled `llama-server.exe`: manager (`desktop/lib/llama.cjs`) + renderer backend written, `scripts/fetch-llama.mjs` downloads CPU/Vulkan/CUDA builds in CI. NOT run against a real model yet (no llama.cpp binaries reachable from the build sandbox)
 - [ ] whisper / TTS on desktop
 - [x] electron-builder config: NSIS installer + portable + zip, icon, .gguf association. `--win --dir` verified on Linux (produces Atlas.exe); installers are built by CI on windows-latest
 - [x] auto-update wired (electron-updater, GitHub provider)
@@ -82,6 +82,7 @@ Remaining ideas, most valuable first:
 
 ## Log
 (newest first; one line per chunk of work)
+- 2026-11-25 05:40: run 27 green incl. the real llama-server.exe answering through the packaged Windows app.
 - 2026-11-25 05:30: **GitHub Actions now builds everything.** "Build Atlas for Windows" run 26 is green on windows-latest: web build, llama.cpp b12716 (CPU + Vulkan) bundled, packaged Atlas.exe passes its self-test on Windows, installer + portable exe + zip produced (artifact `atlas-windows`, 591 MB). "Build Atlas web (PWA)" passes install, type-check, build, PWA/offline, LLM, voice, ZIM checks. Fixes it took: onnxruntime-node install script (web/.npmrc), Windows path separators and case-insensitive resolution in the Vite plugins (Board.tsx vs board.ts), llama.cpp release lookup, ignored desktop/build icons.
 - 2026-11-25 05:00: Offline maps done (Mapsforge reader verified on Monaco, canvas map view, place search for the AI). ZIM reader fixed on a real Wikipedia ZIM (found by testing on real data). crawl2 Settings clean. Windows: CORS pass-through for downloads, open .gguf with Atlas verified.
 - 2026-11-25: UI crawl (web/scripts/crawl.mjs, ~87 controls over all tabs) found no crashes. ZIM reader tested on a generated ZIM (zim-test.mjs), Piper voices verified, Electron shell downloads and runs a real model through the WASM engine.
