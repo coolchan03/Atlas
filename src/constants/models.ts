@@ -13,7 +13,7 @@ export const MODEL_RECOMMENDATIONS = {
 
 // Curated list of recommended models for mobile (updated Apr 2026)
 // Ordered editorially: Gemma 4 featured first, then Qwen 3.5, then others.
-export const RECOMMENDED_MODELS = [
+const BASE_RECOMMENDED_MODELS = [
   // --- Gemma 4 (featured) ---
   {
     id: 'unsloth/gemma-4-E2B-it-GGUF',
@@ -123,6 +123,15 @@ export const RECOMMENDED_MODELS = [
     org: 'HuggingFaceTB',
   },
 ];
+
+/**
+ * Extra recommended models a host can add before the app starts (the web / Windows builds add browser-GPU models this
+ * way). On the phone nothing sets this, so the list is exactly the one above.
+ */
+type RecommendedModelEntry = { id: string; name: string; params: number; description: string; minRam: number; maxRam?: number; type: 'text' | 'vision'; org: string; isNew?: boolean };
+const hostExtra = (globalThis as { __ATLAS_EXTRA_MODELS__?: RecommendedModelEntry[] }).__ATLAS_EXTRA_MODELS__ ?? [];
+export const RECOMMENDED_MODELS = [...BASE_RECOMMENDED_MODELS, ...hostExtra] as typeof BASE_RECOMMENDED_MODELS;
+
 
 // Trending model families — one best-fit per family is shown as "trending"
 export const TRENDING_FAMILIES: Record<string, string[]> = {

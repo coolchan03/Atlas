@@ -14,7 +14,7 @@ let errs = [];
 page.on('pageerror', (e) => errs.push('pageerror: ' + String(e.stack || e).slice(0, 400)));
 page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 300)); });
 page.on('dialog', (d) => d.dismiss().catch(() => {}));
-const boot = async () => { errs = []; await page.goto(url, { waitUntil: 'load' }); await page.waitForTimeout(1800);
+const boot = async () => { errs = []; await page.goto(url, { waitUntil: 'load' }); await page.waitForTimeout(1200);
   if (await page.getByText('Skip', { exact: true }).count()) { await page.getByText('Skip', { exact: true }).first().click(); await page.waitForTimeout(800); }
   if (await page.getByText('Skip for Now', { exact: true }).count()) { await page.getByText('Skip for Now', { exact: true }).first().click(); await page.waitForTimeout(1200); } };
 const labels = async () => page.evaluate(() => {
@@ -38,7 +38,7 @@ for (const tab of tabs) {
   for (const [i, l] of ls.entries()) {
     await boot();
     try { await page.getByText(tab, { exact: true }).last().click({ timeout: 3000 }); await page.waitForTimeout(700);
-      errs = []; await page.getByText(l, { exact: true }).first().click({ timeout: 2500 }); await page.waitForTimeout(1100); } catch { continue; }
+      errs = []; await page.getByText(l, { exact: true }).first().click({ timeout: 2500 }); await page.waitForTimeout(800); } catch { continue; }
     const bad = await crashed();
     if (bad || errs.length) { report.push(`${tab} > "${l}": ${bad ? 'CRASH ' : ''}${errs.slice(0, 2).join(' | ')}`); if (bad) await page.screenshot({ path: `/tmp/crash-${tab}-${i}.png` }); }
   }

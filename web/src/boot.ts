@@ -13,4 +13,5 @@ export async function boot() {
 // Debug / test hook (also used by scripts/smoke checks).
 import { openDatabase } from './host/sqlite';
 import * as rnfs from './shims/react-native-fs';
-(globalThis as any).__atlas = { fs, openDatabase, rnfs };
+import { NativeModules, bus } from './native/registry';
+(globalThis as any).__atlas = { fs, openDatabase, rnfs, NativeModules, bus, llama: () => import('./shims/llama-rn'), whisper: () => import('./shims/whisper-rn') };

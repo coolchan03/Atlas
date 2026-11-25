@@ -23,6 +23,14 @@
 
 After that, airplane mode is fine.
 
+## Use it on Windows or in a browser
+
+The same app runs on a PC.
+
+- **Windows app:** download `Atlas-<version>-Setup.exe` (installer) or `Atlas-<version>-Portable.exe` (no install) from the [releases page](https://github.com/coolchan03/Atlas/releases). It bundles llama.cpp, so models run at full speed on the CPU or any GPU (Vulkan, optional CUDA). Models, chats and the library live in `%APPDATA%\Atlas\data`.
+- **Web app (PWA):** open the site, press **Install**, and it works offline like an app. Models run in your browser (WebAssembly, WebGPU for voices and speech). See [what works where](docs/WEB_WINDOWS_PARITY.md).
+- **Build it yourself:** `cd web && npm ci && npm run build` for the web app, `cd desktop && npm ci && npm run web && npm run llama && npm run dist` for the Windows app. GitHub Actions builds both (`atlas-web.yml`, `atlas-windows.yml`).
+
 ## What it does
 
 ### Atlas: emergencies, travel and off-grid life
