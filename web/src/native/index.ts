@@ -8,3 +8,4 @@ import './presentation';
 import './kiwix';
 import './speakers';
 import './video';
+import './localdream';

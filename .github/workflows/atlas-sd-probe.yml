@@ -33,29 +33,46 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SD_VARIANTS: cpu
         run: node scripts/fetch-sd.mjs
-      - name: Command line help
+      - name: Command line help (the options the app uses)
         working-directory: desktop/resources/sd/cpu
         run: |
           ls -la
-          for exe in sd-cli.exe sd.exe; do [ -f "$exe" ] && ./$exe --help 2>&1 | head -150 || true; done
-      - name: Candidate models on Hugging Face
-        run: |
-          for q in "sd-turbo gguf" "sdxl-turbo gguf" "stable-diffusion gguf" "sd-turbo"; do
-            echo "== $q"
-            curl -fsS "https://huggingface.co/api/models?search=${q// /+}&sort=downloads&limit=8" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const m of JSON.parse(s))console.log(m.id,m.downloads)})"
+          exe=sd-cli.exe; [ -f "$exe" ] || exe=sd.exe
+          ./$exe --help > help.txt 2>&1 || true
+          wc -l help.txt
+          for f in "--backend" "--list-devices" "--preview" "--preview-interval" "--preview-path" "--vae-tiling" "--clip-on-cpu" "--threads" "--log-level" "--max-vram" "--sampling-method" "--scheduler" "--cfg-scale" "--seed" "--output" "--diffusion-model" "--vae " "--clip_l" "--t5xxl" "--llm" "--lora-model-dir" "--offload-to-cpu" "-M, --mode" "--upscale-model"; do
+            echo "### $f"; grep -n -A3 -e "^ *\(-[a-zA-Z], \)\?$f" help.txt | head -8
           done
-      - name: Make a test image
-        if: inputs.model_url != ''
+          echo "### list-devices"
+          ./$exe --list-devices 2>&1 | head -20 || true
+      - name: Candidate model files
+        run: |
+          for repo in Green-Sky/SD-Turbo-GGUF samoudi/sd-turbo-gguf second-state/stable-diffusion-v1-5-GGUF gpustack/stable-diffusion-v1-5-GGUF; do
+            echo "== $repo"
+            curl -fsS "https://huggingface.co/api/models/$repo/tree/main" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const f of JSON.parse(s))console.log(f.path,Math.round((f.size||0)/1048576)+' MB')})"
+          done
+      - name: Make a test image (smallest SD-Turbo GGUF)
         working-directory: desktop/resources/sd/cpu
         run: |
-          curl -fL -o model.bin "${{ inputs.model_url }}"
-          ls -la model.bin
+          url="${{ inputs.model_url }}"
+          if [ -z "$url" ]; then
+            f=$(curl -fsS "https://huggingface.co/api/models/Green-Sky/SD-Turbo-GGUF/tree/main" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s).filter(f=>/\.gguf$/.test(f.path)).sort((a,b)=>a.size-b.size);console.log(l[0].path)})")
+            url="https://huggingface.co/Green-Sky/SD-Turbo-GGUF/resolve/main/$f"
+          fi
+          echo "model: $url"
+          curl -fL -o model.gguf "$url"
+          ls -la model.gguf
           exe=sd-cli.exe; [ -f "$exe" ] || exe=sd.exe
-          time ./$exe -m model.bin -p "a small red house on a green hill, watercolor" --steps 4 --cfg-scale 1.0 -W 256 -H 256 -s 7 -o out.png -v 2>&1 | tail -60
-          ls -la out.png
+          mkdir -p prev
+          time ./$exe -m model.gguf -p "a small red house on a green hill, watercolor" -o out.png -W 256 -H 256 --steps 4 -s 7 --cfg-scale 1.0 --vae-tiling --clip-on-cpu --threads 4 --log-level verbose --backend cpu --preview proj --preview-interval 2 --preview-path "$PWD/prev/step_%04d.png" > gen.log 2>&1 || echo "exit $?"
+          tr '\r' '\n' < gen.log | tail -60
+          ls -la out.png prev
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sd-probe
-          path: desktop/resources/sd/cpu/out.png
+          path: |
+            desktop/resources/sd/cpu/out.png
+            desktop/resources/sd/cpu/help.txt
+            desktop/resources/sd/cpu/gen.log
           if-no-files-found: ignore
