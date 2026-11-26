@@ -83,4 +83,11 @@ describe('hour-long podcast', () => {
     expect(a.all.map((s) => s.n)).toEqual([1, 2]);
     expect(a.part.map((s) => s.text)).toEqual(['same', 'new']);
   });
+
+  it('a lecture is one narrator with its own shape, even when three hosts were asked for', async () => {
+    const result = await writeEpisode([src(1)], { prompt: 'photosynthesis', minutes: 5, hosts: 3, style: 'lecture', research: false });
+    expect(result.hosts).toBe(1);
+    expect(calls.some((c) => /lecture/i.test(c.user) && /ONE idea/.test(c.user))).toBe(true);
+    expect(calls.some((c) => /ONE narrator/.test(c.user))).toBe(true);
+  });
 });

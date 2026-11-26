@@ -69,6 +69,8 @@ import { TimeCapsuleScreen } from '../capsule/TimeCapsuleScreen';
 import { FormulaScreen } from '../formulas/FormulaScreen';
 import { AskNotesScreen } from '../notes/AskNotesScreen';
 import { TeachBackScreen } from '../teachback/TeachBackScreen';
+import { RoundtableScreen } from '../roundtable/RoundtableScreen';
+import { PhotoStudioScreen } from '../photo/PhotoStudioScreen';
 import { TrailScreen } from '../trail/TrailScreen';
 import { CurrencyScreen } from '../currency/CurrencyScreen';
 import { JournalScreen } from '../journal/JournalScreen';
@@ -357,6 +359,8 @@ export const AppNavigator: React.FC = () => {
         <RootStack.Screen name="Formula" component={FormulaScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="AskNotes" component={AskNotesScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="TeachBack" component={TeachBackScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="Roundtable" component={RoundtableScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="PhotoStudio" component={PhotoStudioScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Trail" component={TrailScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Currency" component={CurrencyScreen} options={{ headerShown: false }} />
         <RootStack.Screen name="Journal" component={JournalScreen} options={{ headerShown: false }} />

@@ -39,13 +39,34 @@ Open **Atlas** from the Agents tab or Settings.
 - **Agents** decide who answers and how: each has its own instructions, model, temperature, context length and tools. Built-in agents include Atlas (survival/medical), Field ID (plants and animals from a photo, with an EDIBLE / POISONOUS / NOT SURE verdict and lookalikes), Phone Assistant (files, calendar, web pages), Writer and Talk.
 - **Projects** hold your chats and documents. Each project can have its own instructions and knowledge base.
 - **Chats** can have their own instructions, can be **private** (never saved), and long chats are **compressed automatically** so they can keep going.
+- **Ask other agents** – the Assistant can put a question to the agent who knows the subject (Home Chef, Accountant, Repair Helper, Paperwork Reader, Atlas, or an agent you made) and pass the answer on. It asks you first every time, and the other agent sees only that question. It can also hand the whole chat over to that agent. Turn it off for any agent in its editor.
 - **Tools** – web search (DuckDuckGo, SearXNG, Exa, Parallel, Tavily and more, never in off-grid mode), offline library search, files, calendar, "my location", memory.
 
 ### Learning mode (make an agent an expert)
 Give an agent a task. A **learner** writes a bank of study questions, a **judge** approves or rejects them (the learner can argue back), the learner researches each question and writes short reports, the judge checks every report for logic and sources, and every so often a **manager** reviews both against the original task and steers them back on course. Choose **Keep learning** (lessons and checked answers are saved into the agent and project) or a temporary **Practice session**. You can use a different model for each role.
 
+### Roundtable
+Roles take turns on your phone's model, each under its own persona, and you join in where the format asks you to. Open **Roundtable** from the Atlas hub or search.
+- **Debate** – two sides argue and answer each other, and a judge names the winner and the best argument on each side.
+- **Writers' room** – an optimist, a skeptic and a specialist work a problem while a moderator keeps it moving and closes with what they agree on.
+- **Red team** – one role defends your plan, another attacks it, and an auditor lists the top five remaining risks with a fix for each.
+- **Critique and revise** – a writer drafts, a critic marks it up, and the loop ends when the critic passes it.
+- **Tutor, student and quiz** – a tutor teaches, a student asks the beginner questions, then an examiner quizzes you.
+- **Game master, Mystery** – a narrator runs a story you play. A hidden referee keeps the place, your pack and the facts of the case, so the story stays consistent. With an image model chosen, **Draw the pictures** paints a picture for each scene, each idea a tutor teaches, the opening of a role-play and the story an interview writes up (not for a debate, a panel or a red team, which have nothing to see).
+- **Language role-play** – practice a real situation in another language while a coach corrects each message.
+- **Interview** – the app asks about a memory or a person, one question at a time, then writes the story using only what you said.
+- **Lesson for a child** – a short story at the child's age, then a gentle quiz.
+
+For a debate podcast where each side is a different model, run a Debate with a model for each role, then press Make an audio episode. Every role keeps its own voice when you press Listen (a fourth speaker, as in the writers' room, is the first voice at a higher pitch). A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
+
+### Photo studio
+Three things to do with one photo, from the Atlas hub or search. It needs a model with a vision file (the eye icon in My models).
+- **Narrator** – point at anything and hear it described as a nature documentary, a sports commentary, a calm guide or a museum guide. It describes only what is in the picture.
+- **Time machine** – the same place 50 or 100 years ago, or 50 or 100 years ahead: a short passage, and a picture in the look of the era when an image model is chosen. The future ones say they are imagined.
+- **Sketch to picture** – photograph a drawing, and Atlas describes it and paints a finished picture from the description, as a watercolour, a photograph, a cartoon or an oil painting. It re-imagines the sketch; it does not trace the lines. The looks come from the same guide as the **Photo styles** skill (Skills, Pictures): a detailed description of 16 styles, each with its lines, colour, light, texture, composition and mood, a ready prompt line for an image model, and what to leave out. Ask "what does the anime style look like" or "write a prompt for a watercolour lighthouse" and the matching styles are read from the guide.
+
 ### Study mode (like NotebookLM, offline)
-Pick a project and get a study guide, flashcards, a quiz, a mind map, an answer to a question, a narrated slideshow, or a **podcast episode**: choose the length, the style, optional extra research, and the number of hosts (when more than one voice is installed). Every item links back to the exact passage it came from. Players show the time and let you skip and seek.
+Pick a project and get a study guide, flashcards, a quiz, a mind map, an answer to a question, a narrated slideshow, or a **podcast episode**. Pick a format (two friends, lecture, entertaining, deep dive, debate, interview, story or for beginners) and any length from 2 to 90 minutes; the screen shows how many parts that is and about how long it takes to write on your phone. A lecture and a story use one narrator, the others use the number of hosts you choose when more than one voice is installed. Extra research is optional. The same options are in **Learn a topic**: Make a podcast from this course turns the lessons already written into an episode. Every item links back to the exact passage it came from. Players show the time and let you skip and seek.
 
 ### Voice
 - Read answers aloud, talk by voice, and **hands-free mode** for a back-and-forth like a phone call (speech-to-text with Whisper).

@@ -13,6 +13,7 @@ import { knowledgeSource } from '../services/rag/knowledgeSource';
 import { callHook, HOOKS } from '../bootstrap/hookRegistry';
 import { buildCrossword, buildWordSearch, LearningTerm, normalizeLearningWord } from './learningGames';
 export * from './store';
+import { formatOf, hostsFor, clampMinutes, podcastParts, MAX_PODCAST_MINUTES, type PodcastStyle } from './podcastFormats';
 import { type Source, type StudyResult, type Card, type QuizItem, type PodcastLine, type Slide } from './store';
 
 const SOURCE_CHARS = 700;
@@ -76,6 +77,26 @@ export async function askModel(system: string, user: string, progress?: AskProgr
 export async function askShaped(system: string, user: string, shape: { label: string; maxTokens: number; grammar?: string }): Promise<string> { return ask(system, user, { label: shape.label, shape }); }
 interface AskOptions { progress?: AskProgress; label?: string; shape?: { grammar?: string; maxTokens: number } }
 
+/**
+ * With a LiteRT text model loaded, the llama engine has no model, so a background job would fail with "No model loaded". LiteRT's
+ * one-shot session (the throwaway one its tool selector uses: no tools, no chat history, the answer at the end) answers instead.
+ * It replaces the chat's native conversation, so it is used only when no chat reply is being written; a grammar-shaped answer still
+ * needs the llama engine. Returns null whenever the usual route should be taken.
+ */
+async function liteRtOneShot(system: string, user: string): Promise<string | null> {
+  try {
+    const { llmService } = require('../services/llm');
+    if (llmService.isModelLoaded?.()) return null;
+    const { liteRTService } = require('../services/litert');
+    if (!liteRTService.isModelLoaded()) return null;
+    if (require('../services/generationService').generationService.getState().isGenerating) return null;
+    return await liteRTService.generateToolSelection(system, user);
+  } catch (e) {
+    logger.warn(`[AI] the LiteRT one-shot call failed: ${String((e as Error)?.message || e).slice(0, 160)}`);
+    return null;
+  }
+}
+
 async function ask(system: string, user: string, { progress, label = 'Writing a script or lesson', shape }: AskOptions = {}): Promise<string> {
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
   // A shaped answer (a grammar, a length) and private text are always written by the phone's own engine: a server cannot be held to a grammar.
@@ -103,9 +124,10 @@ async function ask(system: string, user: string, { progress, label = 'Writing a 
   let out: string;
   try {
   const messages = [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }];
+  const lite = shape ? null : await liteRtOneShot(system, user);
   out = shape
     ? await llmService.generateWithMaxTokens(messages, shape.maxTokens, { grammar: shape.grammar })
-    : await llmService.generateResponse(
+    : lite ?? await llmService.generateResponse(
       messages,
       { disableThinking: true, onStream: progress ? (t: { content?: string; reasoningContent?: string }) => progress('writing', `${t?.reasoningContent ?? ''}${t?.content ?? ''}`) : undefined },
     );
@@ -299,8 +321,8 @@ export async function generate(projectId: string, kind: StudyResult['kind'], top
 
 
 // ---------------------------------------------------------------- podcast episodes
+export { podcastParts, MAX_PODCAST_MINUTES };
 type PodcastLength = 'short' | 'medium' | 'long';
-export type PodcastStyle = 'casual' | 'deep' | 'debate' | 'interview' | 'beginner' | 'news';
 export interface PodcastOptions {
   prompt: string; length?: PodcastLength; minutes?: number; hosts?: 1 | 2 | 3; style: PodcastStyle; research: boolean; funFacts?: boolean; title?: string;
   /** Checked between parts: true ends the episode early and keeps what is written so far. */
@@ -330,14 +352,10 @@ export interface PodcastOptions {
   sourcesFor?: (topic: string) => Promise<Source[]>;
 }
 
-/** Longest episode: 90 minutes (60 written parts of about 1.5 minutes each). */
-export const MAX_PODCAST_MINUTES = 90;
 /** Parts per planning call; a phone model plans a dozen topics reliably, not forty. */
 const PLAN_BATCH = 12;
 const SEGMENT_RE = (i: number) => new RegExp(`(?:SEGMENT|PART)\\s*${i}\\s*[:.)\\-–]\\s*(.+)`, 'i');
 
-/** Number of written parts for an episode length (about 1.5 minutes of speech each). */
-export const podcastParts = (minutes: number): number => Math.max(1, Math.min(MAX_PODCAST_MINUTES / 1.5, Math.round(minutes / 1.5)));
 
 /**
  * Each written part is its own model call (sources + outline + the last lines), so an hour-long
@@ -353,6 +371,15 @@ export function podcastContextWarning(): string | null {
   return null;
 }
 
+/** The loaded model's last measured speed in tokens a second, or undefined before it has written anything. */
+export function modelSpeed(): number | undefined {
+  try {
+    const { llmService } = require('../services/llm');
+    const tps = Number(llmService.getPerformanceStats?.()?.lastTokensPerSecond) || 0;
+    return tps > 0 ? tps : undefined;
+  } catch { return undefined; }
+}
+
 /** Sources for a long part must not repeat the same passages: merge new ones into the episode's list. */
 export function mergeEpisodeSources(all: Source[], fresh: Source[]): { all: Source[]; part: Source[] } {
   const part: Source[] = [];
@@ -365,15 +392,6 @@ export function mergeEpisodeSources(all: Source[], fresh: Source[]): { all: Sour
   }
   return { all: next, part };
 }
-
-const STYLE_TEXT: Record<PodcastStyle, string> = {
-  casual: 'friendly and relaxed, like two friends chatting',
-  deep: 'a deep dive: careful, detailed, connecting ideas',
-  debate: 'a friendly debate: the hosts take different sides and weigh the evidence',
-  interview: 'an interview: A is the interviewer, B is the expert guest',
-  beginner: 'for complete beginners: simple words, everyday examples, no jargon',
-  news: 'a friendly daily news show: story by story, each explained simply, upbeat but accurate',
-};
 
 /** Extra research: offline library (Kiwix) first, then the web when online and not in off-grid mode. */
 async function researchSources(query: string, startN: number, onStep: (m: string) => void): Promise<Source[]> {
@@ -550,16 +568,17 @@ async function writeOutlinedEpisode(
 export async function writeEpisode(sources: Source[], opts: PodcastOptions, onStep: (m: string) => void = () => undefined): Promise<StudyResult> {
   const S = `SOURCES:\n${sourceBlock(sources)}\n\n`;
   // About 1.5 minutes of speech per written part (10 lines of ~25 words).
-  const minutes = opts.minutes ?? (opts.length === 'short' ? 3 : opts.length === 'long' ? 10 : 6);
+  const minutes = clampMinutes(opts.minutes ?? (opts.length === 'short' ? 3 : opts.length === 'long' ? 10 : 6));
   const nSeg = podcastParts(minutes);
-  const hosts = opts.hosts ?? 2;
+  const format = formatOf(opts.style);
+  const hosts = hostsFor(opts.style, opts.hosts);
   const cast = hosts === 1
     ? 'ONE narrator (A) speaking alone, like a solo podcast'
     : hosts === 3
       ? 'THREE hosts: A (curious host), B (explains), C (adds practical tips and examples)'
       : 'TWO hosts: A (curious, asks questions) and B (explains)';
   const fmt = hosts === 1 ? 'A: ...' : hosts === 3 ? 'A: ...\nB: ...\nC: ...' : 'A: ...\nB: ...';
-  const style = STYLE_TEXT[opts.style];
+  const style = format.style;
 
   if (opts.outline?.length) return writeOutlinedEpisode(opts.outline, opts, { cast, fmt, style, hosts, onStep });
   onStep('Planning the episode...');
@@ -575,7 +594,7 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
     const ending = to === nSeg ? (nSeg > 1 ? `The last part (${nSeg}) is the wrap-up with key takeaways.\n` : '') : 'More parts follow after these.\n';
     const plan = await ask(
       'You plan podcast episodes based only on the given sources.',
-      `${S}${ask0}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\n${so_far}${ending}Reply exactly:\n${from === 1 ? 'TITLE: catchy episode title\n' : ''}${batchList}`,
+      `${S}${ask0}Style: ${style}. Length: about ${minutes} minutes, in ${nSeg} parts.\n${format.plan ? `${format.plan}\n` : ''}${so_far}${ending}Reply exactly:\n${from === 1 ? 'TITLE: catchy episode title\n' : ''}${batchList}`,
     );
     const P = plan.replace(/\*\*|__/g, '');
     if (from === 1 && !title) title = (P.match(/TITLE\s*:\s*(.+)/i)?.[1] || opts.prompt || 'Episode').replace(/["*]/g, '').trim();
@@ -614,7 +633,7 @@ export async function writeEpisode(sources: Source[], opts: PodcastOptions, onSt
     const where = topics.length === 1 ? 'This is the WHOLE episode: A welcomes listeners and introduces the title, the topic is covered, then a short wrap-up and goodbye.' : i === 0 ? 'This is the START: A welcomes listeners and introduces the episode title.' : i === topics.length - 1 ? 'This is the LAST part: finish the topic, then wrap up with a short summary and goodbye.' : 'This is the MIDDLE: continue naturally from the last lines.';
     const t = await ask(
       'You write natural podcast scripts. Facts must come only from the sources. Never mention source numbers in the script.',
-      `${PS}Episode: "${title}". Style: ${style}. Cast: ${cast}.\n${outline}This part is about: ${topics[i]}\n${where}\n${opts.funFacts ? 'End this part with one short fun fact related to it, introduced as a fun fact. Use only facts you are sure are true.\n' : ''}${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
+      `${PS}Episode: "${title}". Style: ${style}. Cast: ${cast}.\n${outline}This part is about: ${topics[i]}\n${where}\n${opts.funFacts ? 'End this part with one short fun fact related to it, introduced as a fun fact. Use only facts you are sure are true.\n' : ''}${format.write ? `${format.write}\n` : ''}${recap ? `Last lines so far:\n${recap}\n` : ''}Write about 10 lines (each 1-3 sentences), one line each, exactly in this format:\n${fmt}`,
     );
     lines.push(...parse(t));
   }

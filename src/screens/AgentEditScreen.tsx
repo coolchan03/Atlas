@@ -32,7 +32,7 @@ const PAL_PROFILE_FIELDS: Array<{ key: 'age' | 'occupation' | 'origin' | 'appear
   { key: 'appearance', label: 'Appearance / other notes', placeholder: 'e.g. tall, dark hair, athletic' },
 ];
 
-function buildAdvFields(adv: { custom: boolean; temperature: number; topP: number; maxTokens: number; repeatPenalty: number; contextLength: number; toolsCustom: boolean; tools: string[]; modelId: string; voiceProfileId: string; projectId: string }) {
+function buildAdvFields(adv: { consultable: boolean; custom: boolean; temperature: number; topP: number; maxTokens: number; repeatPenalty: number; contextLength: number; toolsCustom: boolean; tools: string[]; modelId: string; voiceProfileId: string; projectId: string }) {
   return {
     temperature: adv.custom ? adv.temperature : undefined,
     topP: adv.custom ? adv.topP : undefined,
@@ -40,6 +40,7 @@ function buildAdvFields(adv: { custom: boolean; temperature: number; topP: numbe
     repeatPenalty: adv.custom ? adv.repeatPenalty : undefined,
     contextLength: adv.custom ? adv.contextLength : undefined,
     enabledTools: adv.toolsCustom ? adv.tools : undefined,
+    consultable: adv.consultable ? undefined : false,
     modelId: adv.modelId || undefined,
     voiceProfileId: adv.voiceProfileId || undefined,
     projectId: adv.projectId || undefined,
@@ -137,6 +138,7 @@ export const AgentEditScreen: React.FC = () => {
 
   const g = useAppStore.getState().settings as any;
   const [adv, setAdv] = useState({
+    consultable: true,
     custom: false,
     temperature: g?.temperature ?? 0.7,
     topP: g?.topP ?? 0.95,
@@ -163,6 +165,7 @@ export const AgentEditScreen: React.FC = () => {
         repeatPenalty: a.repeatPenalty ?? p.repeatPenalty,
         contextLength: a.contextLength ?? p.contextLength,
         toolsCustom: Array.isArray(a.enabledTools),
+        consultable: a.consultable !== false,
         modelId: a.modelId ?? '',
         voiceProfileId: a.voiceProfileId ?? '',
         projectId: a.projectId ?? '',
@@ -340,6 +343,13 @@ export const AgentEditScreen: React.FC = () => {
             </View>
           )}
 
+          <View style={styles.switchRow}>
+            <View style={styles.switchText}>
+              <Text style={styles.label}>Other agents can ask this one</Text>
+              <Text style={styles.hint}>The assistant can put a question to this agent and pass on the answer. You are asked each time, and this agent sees only that question.</Text>
+            </View>
+            <Switch value={adv.consultable} onValueChange={(v) => setAdv({ ...adv, consultable: v })} testID="agent-consultable" />
+          </View>
           <View style={styles.switchRow}>
             <View style={styles.switchText}>
               <Text style={styles.label}>Custom tools</Text>

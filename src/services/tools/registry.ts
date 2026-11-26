@@ -317,6 +317,16 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    id: 'ask_specialist', name: 'ask_specialist', displayName: 'Ask another agent', icon: 'users',
+    description: "Ask another agent who knows the subject better (a chef for cooking, an accountant for tax and bookkeeping, a repair helper for fixing things) and pass their answer on. The user is asked to approve each time. Use it for a question that clearly belongs to one of them; answer everything else yourself.",
+    describe: () => { const roster = require('../agentConsult').specialistRoster(); return `Ask another agent who knows the subject better and pass their answer on. The user is asked to approve each time. Use it for a question that clearly belongs to one of them; answer everything else yourself.${roster ? ` Agents you can ask: ${roster}.` : ''}`; },
+    parameters: {
+      question: { type: 'string', description: 'The question, written so it makes sense on its own (the other agent does not see this chat)', required: true },
+      agent: { type: 'string', description: 'The name of the agent to ask, when you know which one fits' },
+      stay: { type: 'string', description: "'false' to hand the whole conversation over to that agent (when the user is clearly starting a long chat about their subject). Leave out to ask one question and stay in this chat", enum: ['true', 'false'] },
+    },
+  },
+  {
     id: 'make_music', name: 'make_music', displayName: 'Make music', icon: 'music',
     description: "Make an original instrumental tune and play it. A specialist composer with dozens of instruments writes it, not you: just describe what the user wants. Use when they ask for music, a song, a tune, background music, a lullaby, a soundtrack or a beat. Instrumental only, no singing.",
     parameters: {
@@ -370,7 +380,7 @@ export function getToolsAsOpenAISchema(enabledToolIds: string[]) {
       type: 'function' as const,
       function: {
         name: tool.name,
-        description: tool.description,
+        description: tool.describe?.() ?? tool.description,
         parameters: {
           type: 'object',
           properties: Object.fromEntries(
@@ -395,6 +405,6 @@ export function buildToolSystemPromptHint(enabledToolIds: string[]): string {
   const enabledTools = AVAILABLE_TOOLS.filter(t => enabledToolIds.includes(t.id));
   if (enabledTools.length === 0) return '';
 
-  const toolList = enabledTools.map(t => `- ${t.name}: ${t.description}`).join('\n');
+  const toolList = enabledTools.map(t => `- ${t.name}: ${t.describe?.() ?? t.description}`).join('\n');
   return `\n\nTools available:\n${toolList}\nUse these tools proactively and precisely - call the right tool at the right moment rather than guessing or saying you cannot help.`;
 }

@@ -6,6 +6,8 @@ export interface ToolDefinition {
   icon: string;
   parameters: Record<string, ToolParameter>;
   requiresNetwork?: boolean;
+  /** A description built when the tool list is sent (for a tool whose options change, such as which agents can be asked). Falls back to `description`. */
+  describe?: () => string;
 }
 
 interface ToolParameter {

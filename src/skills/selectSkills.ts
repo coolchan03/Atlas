@@ -7,9 +7,10 @@
 import type { Skill } from './skillsStore';
 import { skillSteps } from './skillSteps';
 
-const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'you', 'your', 'use', 'when', 'from', 'are', 'can', 'will', 'has', 'have', 'not', 'any', 'all', 'how', 'what', 'please', 'about', 'into', 'its', 'they', 'them', 'then', 'also', 'such', 'like', 'make', 'just']);
+const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'you', 'your', 'use', 'when', 'from', 'are', 'can', 'will', 'has', 'have', 'not', 'any', 'all', 'how', 'what', 'please', 'about', 'into', 'its', 'they', 'them', 'then', 'also', 'such', 'like', 'make', 'just', 'does', 'did']);
 const words = (s: string) => s.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !STOP.has(w));
-const stem = (w: string) => (w.length > 4 ? w.replace(/(ing|ed|es|s)$/, '') : w);
+/** A rough stem: the ending taken off, and a final e too, so style, styles and styled meet. */
+const stem = (w: string) => (w.length > 4 ? w.replace(/(ing|ed|es|s)$/, '').replace(/e$/, '') : w);
 
 /** The skill named at the start of the message ("/name rest"), if it can be called that way. */
 export function calledSkill(message: string, skills: Skill[]): Skill | undefined {

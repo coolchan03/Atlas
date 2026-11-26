@@ -16,14 +16,14 @@ import { storyJumps, currentStory } from '../study/storyJumps';
 import { resumeLine } from '../study/listenPosition';
 import { playEpisode } from '../study/playEpisode';
 import { BRIEF_PROJECT, STORY_PAUSE_SECONDS, useBriefPrefs } from '../atlasTools/dailyBrief';
-import { generate, generatePodcast, podcastContextWarning, useStudyStore, StudyResult, Source, PodcastStyle } from '../study/engine';
+import { generate, generatePodcast, podcastContextWarning, modelSpeed, useStudyStore, StudyResult, Source } from '../study/engine';
+import { PodcastOptionsForm, DEFAULT_PODCAST, type PodcastChoices } from '../components/PodcastOptionsForm';
 import { briefingSummary, briefingTranscript, safeFileName, saveMarkdown, studyMarkdown } from '../study/exportFiles';
 import { deckSlides, savePptx } from '../study/pptx';
 import { ProjectLearningGame } from '../components/ProjectLearningGame';
 import { ProjectGame } from '../components/games/ProjectGame';
 import { generateGame, PROJECT_GAMES, type GameType } from '../study/games/generate';
 import { dueItems, streakFrom, useStudyProgress } from '../study/progress';
-import { Switch } from 'react-native';
 import logger from '../utils/logger';
 import { briefTrace, noteBriefTrace } from '../atlasVoice/briefTrace';
 import { shareItem } from '../utils/shareItem';
@@ -112,15 +112,7 @@ const literalStyles = StyleSheet.create({
   s59: { flex: 1, backgroundColor: BACKGROUNDCOLOR_RGBA_0_0_0_0_5, justifyContent: 'flex-end' },
   s60: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 18, width: '100%', maxWidth: 720, alignSelf: 'center' },
   s61: { fontSize: 18, fontWeight: '700' },
-  s62: { fontSize: 13, marginTop: 4 },
-  s63: { borderRadius: 10, padding: 12, marginTop: 10, minHeight: 60 },
   s64: { fontSize: 12, marginTop: 12 },
-  s65: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  s66: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16 },
-  s67: { fontSize: 13 },
-  s68: { flexDirection: 'row', gap: 8, marginTop: 6 },
-  s69: { flexDirection: 'row', alignItems: 'center', marginTop: 14 },
-  s70: { flex: 1, paddingRight: 10 },
   s71: { flexDirection: 'row', gap: 10, marginTop: 16 },
   s72: { flex: 1, padding: 13, borderRadius: 10, borderWidth: 1 },
   s73: { alignItems: 'center' },
@@ -177,7 +169,7 @@ export const StudyScreen: React.FC = () => {
   /** Open one saved item directly (e.g. a daily briefing); back then leaves the screen. */
   const openAt: number | undefined = route.params?.openAt;
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
   const learningEnabled = project?.allowLearningActivities !== false;
   const savedRaw = useStudyStore((s) => s.saved[projectId]);
@@ -200,7 +192,7 @@ export const StudyScreen: React.FC = () => {
   const stopRef = useRef(false);
   const stopEpisode = useRef(false);
   const [podOpen, setPodOpen] = useState(false);
-  const [pod, setPod] = useState<{ prompt: string; minutes: number; hosts: 1 | 2 | 3; style: PodcastStyle; research: boolean }>({ prompt: '', minutes: 5, hosts: 2, style: 'casual', research: false });
+  const [pod, setPod] = useState<PodcastChoices>(DEFAULT_PODCAST);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   React.useEffect(() => {
     void listVoices('en').then(setVoices).catch(() => setVoices([]));
@@ -674,7 +666,7 @@ export const StudyScreen: React.FC = () => {
         <View style={literalStyles.s45}>
           {KINDS.filter(k => learningEnabled || !['quiz','podcast','crossword','wordsearch','match','practice','plan','rubric'].includes(k.kind)).map((k) => (
             <View key={k.kind} style={[{ width: width >= 700 ? WIDTH_33_3 : WIDTH_50 }, literalStyles.s46]}>
-              <TouchableOpacity disabled={!!busy} onPress={() => run(k.kind)} style={[card, literalStyles.s47]}>
+              <TouchableOpacity disabled={!!busy} onPress={() => run(k.kind)} style={[card, literalStyles.s47]} testID={`study-kind-${k.kind}`}>
                 <Icon name={k.icon} size={20} color={colors.primary} />
                 <Text style={[{ color: colors.text }, literalStyles.s48]}>{busy === k.label ? 'Making...' : k.label}</Text>
                 <Text style={[{ color: colors.textSecondary }, literalStyles.s3]}>{k.desc}</Text>
@@ -733,59 +725,14 @@ export const StudyScreen: React.FC = () => {
         <View style={literalStyles.s59}>
           <View style={[{ backgroundColor: colors.surface }, literalStyles.s60]}>
             <Text style={[{ color: colors.text }, literalStyles.s61]}>New podcast episode</Text>
-            <Text style={[{ color: colors.textSecondary }, literalStyles.s62]}>Leave the prompt empty and it picks the episode itself from your sources.</Text>
-            <TextInput value={pod.prompt} onChangeText={(t) => setPod((p) => ({ ...p, prompt: t }))} multiline
-              placeholder="e.g. Explain how to purify water for a 10-year-old, with examples"
-              placeholderTextColor={colors.textMuted}
-              style={[{ backgroundColor: colors.background, color: colors.text }, literalStyles.s63]} />
-            <Text style={[{ color: colors.textSecondary }, literalStyles.s64]}>ABOUT HOW LONG</Text>
-            <View style={literalStyles.s65}>
-              {[3, 5, 10, 15, 20, 30, 45, 60].map((m) => (
-                <TouchableOpacity key={m} onPress={() => setPod((p) => ({ ...p, minutes: m }))} style={[literalStyles.s66, { backgroundColor: pod.minutes === m ? colors.primary : colors.background }]}>
-                  <Text style={[{ color: pod.minutes === m ? COLOR_FFF : colors.text }, literalStyles.s67]}>{m} min</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {pod.minutes >= 10 && <Text style={[{ color: colors.textMuted }, literalStyles.s32]}>
-              {pod.minutes >= 30
-                ? `Writing ${pod.minutes} minutes takes roughly ${Math.round(pod.minutes * 0.6)}-${pod.minutes * 2} minutes on a phone, one part at a time. Keep Atlas open and plugged in. You can stop at any point and keep what is written.`
-                : 'Longer episodes take several minutes to write on a phone.'}
-            </Text>}
-            {pod.minutes >= 30 && !!podcastContextWarning() && <Text style={[{ color: colors.error }, literalStyles.s32]}>{podcastContextWarning()}</Text>}
-            {voices.length >= 2 && (
-              <>
-                <Text style={[{ color: colors.textSecondary }, literalStyles.s64]}>PEOPLE ({voices.length} voices installed)</Text>
-                <View style={literalStyles.s68}>
-                  {([1, 2, 3] as const).filter((n) => n <= Math.min(3, voices.length)).map((n) => (
-                    <TouchableOpacity key={n} onPress={() => setPod((p) => ({ ...p, hosts: n }))} style={[literalStyles.s66, { backgroundColor: pod.hosts === n ? colors.primary : colors.background }]}>
-                      <Text style={[{ color: pod.hosts === n ? COLOR_FFF : colors.text }, literalStyles.s67]}>{n === 1 ? 'Solo narrator' : `${n} hosts`}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <Text style={[{ color: colors.textSecondary }, literalStyles.s64]}>VOICES</Text>
-                <PodcastVoicePicker hosts={pod.hosts} />
-              </>
-            )}
-            <Text style={[{ color: colors.textSecondary }, literalStyles.s64]}>STYLE</Text>
-            <View style={literalStyles.s65}>
-              {([['casual', 'Casual'], ['deep', 'Deep dive'], ['debate', 'Debate'], ['interview', 'Interview'], ['beginner', 'For beginners']] as [PodcastStyle, string][]).map(([k, l]) => (
-                <TouchableOpacity key={k} onPress={() => setPod((p) => ({ ...p, style: k }))} style={[literalStyles.s66, { backgroundColor: pod.style === k ? colors.primary : colors.background }]}>
-                  <Text style={[{ color: pod.style === k ? COLOR_FFF : colors.text }, literalStyles.s67]}>{l}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={literalStyles.s69}>
-              <View style={literalStyles.s70}>
-                <Text style={[{ color: colors.text }, literalStyles.s54]}>Extra research</Text>
-                <Text style={[{ color: colors.textSecondary }, literalStyles.s3]}>Also look in your offline library and, when online, the web. Extra sources are marked 📚 / 🌐.</Text>
-              </View>
-              <Switch value={pod.research} onValueChange={(v) => setPod((p) => ({ ...p, research: v }))} />
-            </View>
+            <ScrollView style={{ maxHeight: windowHeight * 0.6 }} keyboardShouldPersistTaps="handled">
+              <PodcastOptionsForm value={pod} onChange={setPod} voiceCount={voices.length} tokensPerSecond={modelSpeed()} contextWarning={podcastContextWarning()} />
+            </ScrollView>
             <View style={literalStyles.s71}>
               <TouchableOpacity onPress={() => setPodOpen(false)} style={[literalStyles.s72, { borderColor: colors.border }, literalStyles.s73]}>
                 <Text style={{ color: colors.text }}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={makeEpisode} style={[literalStyles.s74, { backgroundColor: colors.primary }, literalStyles.s73]}>
+              <TouchableOpacity onPress={makeEpisode} testID="podcast-make" style={[literalStyles.s74, { backgroundColor: colors.primary }, literalStyles.s73]}>
                 <Text style={literalStyles.s75}>Make episode</Text>
               </TouchableOpacity>
             </View>

@@ -14,19 +14,19 @@ import { FORMATS, type CourseRequest, type SquareContent, type SquareFormat } fr
 import { courseProgress, useTopics, type Course } from './store';
 import { friendlyTitle } from './chapters';
 import { createChapterCourse, createCourse, findSources, squareContent, type Rewrite } from './service';
-import { importCourseFile, saveStudyGuide, shareCourseFile } from './courseFiles';
+import { importCourseFile } from './courseFiles';
 import { MAX_SOURCES, makeSource, outlineSources, sourceQuestions, type CourseSource } from './sources';
 import { addFilesToProject, pickAndAddFiles, pickFiles, projectForSubject, summarize, type PickedFile } from '../learning/documents';
 import { ProjectChips } from '../components/ProjectChips';
 import { SquareView } from './SquareViews';
-import { ExamMatchCard } from './ExamMatchCard';
-import { AskLaterCard } from './AskLaterCard';
+import { CourseShareTools } from './CourseShareTools';
 import { Fold } from '../components/Fold';
 import { AddSquarePanel, ChangeBoardPanel, SourceLine, ExpandingNote, ReadingDepthChips, useDeepening, WritingNotice, WritingStatus } from './BoardExtras';
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
 import { SwipeRow } from '../components/SwipeRow';
 import { WriteNowPanel } from './WriteNowPanel';
+import { CoursePodcastCard } from './CoursePodcastCard';
 import { matchExam, type ExamCode } from '../cpa/blueprints';
 import { setupCpaExam } from '../cpa/setup';
 import { ensureExamCourse } from '../cpa/course';
@@ -345,6 +345,7 @@ export const TopicBoardScreen: React.FC = () => {
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
         <WriteNowPanel course={course} />
+        <CoursePodcastCard course={course} />
         <AddSquarePanel course={course} currentKey={spaces[current]?.key} /><ChangeBoardPanel course={course} />
         {prep.courseId === course.id && !!prep.working && !writingNow && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
@@ -354,12 +355,7 @@ export const TopicBoardScreen: React.FC = () => {
         )}
         <Fold title="Sources, exam match, questions and sharing" testID="course-tools">
         <SourcesCard course={course} />
-        <ExamMatchCard course={course} />
-        <AskLaterCard course={course} />
-        <Button title="Send this course to another phone" variant="outline" testID="course-share"
-          onPress={() => shareCourseFile(course).catch((e) => Alert.alert('Could not save the course', String(e?.message || e)))} />
-        <Button title="Save a printable study guide" variant="outline" testID="course-guide"
-          onPress={() => saveStudyGuide(course).catch((e) => Alert.alert('Could not make the guide', String(e?.message || e)))} />
+        <CourseShareTools course={course} />
         </Fold>
         <Board spaces={spaces} isDone={done} isOpen={open} current={current}
           onPress={(s) => (twoPane ? setPicked(s.key) : navigation.navigate('TopicSquare', { courseId, key: s.key }))} />
