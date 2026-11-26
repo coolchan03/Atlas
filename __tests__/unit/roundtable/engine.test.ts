@@ -92,16 +92,18 @@ describe('roundtable engine', () => {
 
 describe('every roundtable format', () => {
   const { ROUNDTABLE_FORMATS } = require('../../../src/roundtable/formats');
-  it.each(ROUNDTABLE_FORMATS.map((f: { id: string }) => [f.id] as [string]))('%s only uses its own roles, ends on a closing step, and only the person speaks at player steps', (id) => {
-    const f = fmt(id);
-    const s = newSession(f, { topic: 'A topic', rounds: f.maxRounds });
-    const ids = new Set(s.roles.map((r) => r.id));
-    expect(s.steps.every((st) => ids.has(st.role))).toBe(true);
-    expect(s.steps.filter((st) => st.kind === 'player').every((st) => s.roles.find((r) => r.id === st.role)?.human)).toBe(true);
-    expect(s.steps.filter((st) => st.kind === 'hidden').every((st) => !s.roles.find((r) => r.id === st.role)?.human)).toBe(true);
-    expect(s.steps[s.steps.length - 1].closing).toBe(true);
-    if (f.state) expect(s.steps.some((st) => st.kind === 'hidden')).toBe(true); // a format with shared state has someone who keeps it
-  });
+  for (const { id } of ROUNDTABLE_FORMATS as { id: string }[]) {
+    it(`${id} only uses its own roles, ends on a closing step, and only the person speaks at player steps`, () => {
+      const f = fmt(id);
+      const s = newSession(f, { topic: 'A topic', rounds: f.maxRounds });
+      const ids = new Set(s.roles.map((r) => r.id));
+      expect(s.steps.every((st) => ids.has(st.role))).toBe(true);
+      expect(s.steps.filter((st) => st.kind === 'player').every((st) => s.roles.find((r) => r.id === st.role)?.human)).toBe(true);
+      expect(s.steps.filter((st) => st.kind === 'hidden').every((st) => !s.roles.find((r) => r.id === st.role)?.human)).toBe(true);
+      expect(s.steps[s.steps.length - 1].closing).toBe(true);
+      if (f.state) expect(s.steps.some((st) => st.kind === 'hidden')).toBe(true); // a format with shared state has someone who keeps it
+    });
+  }
 
   it('an interview ends by writing up only what the person said', async () => {
     const { ask, prompts } = scripted(() => 'A reply.');
