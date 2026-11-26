@@ -14,7 +14,7 @@ export interface Role {
   draws?: boolean;
 }
 
-export type StepKind = 'say' | 'player' | 'hidden';
+type StepKind = 'say' | 'player' | 'hidden';
 
 export interface Step {
   role: string;

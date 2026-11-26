@@ -8,7 +8,7 @@ import { formatById, type Role, type RoundtableFormat, type Step } from './forma
 
 export interface Turn { role: string; name: string; text: string; hidden?: boolean; /** A picture drawn for this turn (file path). */ image?: string }
 
-export type SessionStatus = 'running' | 'waiting' | 'stopped' | 'done' | 'error';
+type SessionStatus = 'running' | 'waiting' | 'stopped' | 'done' | 'error';
 
 export interface Session {
   id: string;
@@ -64,7 +64,7 @@ export function cleanReply(raw: string, name: string): string {
   return t.trim().slice(0, MAX_REPLY);
 }
 
-export interface TurnInput {
+interface TurnInput {
   role: Role;
   step: Step;
   format: RoundtableFormat;
@@ -76,7 +76,7 @@ export interface TurnInput {
 }
 
 /** The prompts for one role's turn. Exported so the other places where one agent speaks for another use the same shape. */
-export function turnPrompt(i: TurnInput): { system: string; user: string } {
+function turnPrompt(i: TurnInput): { system: string; user: string } {
   const sentences = i.step.sentences ?? 4;
   const system = `${i.role.persona}\n${i.format.rules}\nYou are ${i.role.name}. Speak only as ${i.role.name}, in at most ${sentences} sentences.`;
   const parts = [
@@ -91,7 +91,7 @@ export function turnPrompt(i: TurnInput): { system: string; user: string } {
 }
 
 /** One role speaks once. The single place a role's turn is built, asked and cleaned. */
-export async function runRoleTurn(input: TurnInput, ask: Ask): Promise<string> {
+async function runRoleTurn(input: TurnInput, ask: Ask): Promise<string> {
   const { system, user } = turnPrompt(input);
   return cleanReply(await ask(system, user), input.role.name);
 }

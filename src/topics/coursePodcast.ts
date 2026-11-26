@@ -11,7 +11,7 @@ import type { Course } from './store';
 export const coursePodcastProject = (courseId: string): string => `course-podcast:${courseId}`;
 
 /** What each written lesson says, as numbered sources (headings, text, examples and key points), in board order. */
-export function courseSources(course: Course): Source[] {
+function courseSources(course: Course): Source[] {
   const out: Source[] = [];
   for (const sq of course.squares) {
     const c = course.content[sq.key];
@@ -28,7 +28,7 @@ export function courseSources(course: Course): Source[] {
 const wordsOf = (t: string): string[] => t.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3);
 
 /** The lessons that share the most words with a part's topic (for long episodes, where each part reads its own lessons). */
-export function lessonsAbout(all: Source[], topic: string, count = 3): Source[] {
+function lessonsAbout(all: Source[], topic: string, count = 3): Source[] {
   const want = new Set(wordsOf(topic));
   return all
     .map((x) => ({ x, score: wordsOf(`${x.doc} ${x.text}`).filter((w) => want.has(w)).length }))

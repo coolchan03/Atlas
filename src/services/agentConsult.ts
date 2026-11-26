@@ -57,7 +57,7 @@ export function specialistRelevant(message: string): boolean {
   return consultable(agents, activeAgentId).some((a) => fit(message, a) > 0);
 }
 
-/** The roster the model sees in the tool's description: who can be asked and what they are for. */
+/** The roster the model sees in the tool's description: who can be asked and what they are for. Called from the tool registry. @public */
 export function specialistRoster(): string {
   const { agents, activeAgentId } = useAgentStore.getState();
   return consultable(agents, activeAgentId).map((a) => `${a.name} (${a.description})`).join('; ');

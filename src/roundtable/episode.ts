@@ -8,9 +8,9 @@ import { hostOf, type Session } from './engine';
 import { formatById } from './formats';
 
 /** Where roundtable episodes are kept, one id per session, so they stay out of any project's study results. */
-export const episodeProject = (sessionId: string): string => `roundtable:${sessionId}`;
+const episodeProject = (sessionId: string): string => `roundtable:${sessionId}`;
 
-export function toEpisode(s: Session, now: number = Date.now()): StudyResult {
+function toEpisode(s: Session, now: number = Date.now()): StudyResult {
   const human = new Set(s.roles.filter((r) => r.human).map((r) => r.id));
   const turns = s.turns.filter((t) => !t.hidden && !human.has(t.role));
   const speakers = new Set(turns.map((t) => hostOf(s, t.role))).size;
