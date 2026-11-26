@@ -39,11 +39,25 @@ Open **Atlas** from the Agents tab or Settings.
 - **Agents** decide who answers and how: each has its own instructions, model, temperature, context length and tools. Built-in agents include Atlas (survival/medical), Field ID (plants and animals from a photo, with an EDIBLE / POISONOUS / NOT SURE verdict and lookalikes), Phone Assistant (files, calendar, web pages), Writer and Talk.
 - **Projects** hold your chats and documents. Each project can have its own instructions and knowledge base.
 - **Chats** can have their own instructions, can be **private** (never saved), and long chats are **compressed automatically** so they can keep going.
-- **Ask other agents** – the Assistant can put a question to the agent who knows the subject (Home Chef, Accountant, Repair Helper, Paperwork Reader, Atlas, or an agent you made) and pass the answer on. It asks you first every time, and the other agent sees only that question. Turn it off for any agent in its editor.
+- **Ask other agents** – the Assistant can put a question to the agent who knows the subject (Home Chef, Accountant, Repair Helper, Paperwork Reader, Atlas, or an agent you made) and pass the answer on. It asks you first every time, and the other agent sees only that question. It can also hand the whole chat over to that agent. Turn it off for any agent in its editor.
 - **Tools** – web search (DuckDuckGo, SearXNG, Exa, Parallel, Tavily and more, never in off-grid mode), offline library search, files, calendar, "my location", memory.
 
 ### Learning mode (make an agent an expert)
 Give an agent a task. A **learner** writes a bank of study questions, a **judge** approves or rejects them (the learner can argue back), the learner researches each question and writes short reports, the judge checks every report for logic and sources, and every so often a **manager** reviews both against the original task and steers them back on course. Choose **Keep learning** (lessons and checked answers are saved into the agent and project) or a temporary **Practice session**. You can use a different model for each role.
+
+### Roundtable
+Roles take turns on your phone's model, each under its own persona, and you join in where the format asks you to. Open **Roundtable** from the Atlas hub or search.
+- **Debate** – two sides argue and answer each other, and a judge names the winner and the best argument on each side.
+- **Writers' room** – an optimist, a skeptic and a specialist work a problem while a moderator keeps it moving and closes with what they agree on.
+- **Red team** – one role defends your plan, another attacks it, and an auditor lists the top five remaining risks with a fix for each.
+- **Critique and revise** – a writer drafts, a critic marks it up, and the loop ends when the critic passes it.
+- **Tutor, student and quiz** – a tutor teaches, a student asks the beginner questions, then an examiner quizzes you.
+- **Game master, Mystery** – a narrator runs a story you play. A hidden referee keeps the place, your pack and the facts of the case, so the story stays consistent. With an image model chosen, **Draw each scene** paints a picture under each scene.
+- **Language role-play** – practice a real situation in another language while a coach corrects each message.
+- **Interview** – the app asks about a memory or a person, one question at a time, then writes the story using only what you said.
+- **Lesson for a child** – a short story at the child's age, then a gentle quiz.
+
+Every role keeps its own voice when you press Listen. A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
 
 ### Study mode (like NotebookLM, offline)
 Pick a project and get a study guide, flashcards, a quiz, a mind map, an answer to a question, a narrated slideshow, or a **podcast episode**. Pick a format (two friends, lecture, entertaining, deep dive, debate, interview, story or for beginners) and any length from 2 to 90 minutes; the screen shows how many parts that is and about how long it takes to write on your phone. A lecture and a story use one narrator, the others use the number of hosts you choose when more than one voice is installed. Extra research is optional. The same options are in **Learn a topic**: Make a podcast from this course turns the lessons already written into an episode. Every item links back to the exact passage it came from. Players show the time and let you skip and seek.

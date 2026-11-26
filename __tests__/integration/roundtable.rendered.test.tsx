@@ -18,9 +18,10 @@ jest.mock('../../src/services/llm', () => ({
     },
   },
 }));
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
-  useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
+  useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
 }));
 
 const mount = () => {
@@ -47,6 +48,14 @@ it('a debate runs side against side and ends with the judge\'s verdict', async (
   expect(view.getAllByText(/Cars crowd out people/)).toHaveLength(2); // opening and closing, with the "Pro:" prefix the model added stripped
   expect(view.getAllByText(/Shops lose customers/)).toHaveLength(2);
   expect(view.getByTestId('roundtable-progress').props.children.join('')).toMatch(/5 of 5 steps · finished/);
+
+  // A finished debate becomes an episode in the podcast player: one voice per side, the judge a third.
+  rtl.fireEvent.press(view.getByTestId('roundtable-episode'));
+  expect(mockNavigate).toHaveBeenCalledWith('Study', expect.objectContaining({ projectId: expect.stringMatching(/^roundtable:/) }));
+  const { useStudyStore } = require('../../src/study/store');
+  const [episode] = Object.values(useStudyStore.getState().saved)[0] as { podcast: { host: string; text: string }[]; hosts: number }[];
+  expect(episode.podcast.map((l) => l.host)).toEqual(['A', 'B', 'A', 'B', 'C']);
+  expect(episode.hosts).toBe(3);
 }, 30000);
 
 it('a game waits for you, then carries on from what you did', async () => {

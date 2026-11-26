@@ -15,6 +15,8 @@ import { shareItem } from '../utils/shareItem';
 import { ROUNDTABLE_FORMATS, formatById, type RoundtableFormat } from './formats';
 import { advance, hostOf, newSession, playerSays, progress, transcriptText, wrapUp, type Session } from './engine';
 import { useRoundtables } from './store';
+import { saveEpisode } from './episode';
+import { useNavigation } from '@react-navigation/native';
 import { canDraw, illustrateScene } from './illustrate';
 import { resolveDocumentPath } from '../utils/resolveDocumentPath';
 
@@ -84,7 +86,7 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
 const ROLE_COLORS = ['#0E7490', '#9A3412', '#4338CA', '#047857'];
 
 /** The buttons under the transcript: what can be done depends on whether it is running, stopped, finished or failed. */
-const Actions: React.FC<{ session: Session; working: boolean; listening: boolean; hasTurns: boolean; title: string; onRun: (s: Session) => void; onStop: () => void; onListen: () => void; onLeave: () => void; styles: Styles }> = ({ session, working, listening, hasTurns, title, onRun, onStop, onListen, onLeave, styles }) => {
+const Actions: React.FC<{ session: Session; working: boolean; listening: boolean; hasTurns: boolean; title: string; onRun: (s: Session) => void; onStop: () => void; onListen: () => void; onEpisode: () => void; onLeave: () => void; styles: Styles }> = ({ session, working, listening, hasTurns, title, onRun, onStop, onListen, onEpisode, onLeave, styles }) => {
   if (working) return <View style={styles.actions}><Button title="Stop" variant="outline" onPress={onStop} testID="roundtable-stop" /></View>;
   const retry = session.status === 'stopped' || session.status === 'error';
   return (
@@ -92,6 +94,7 @@ const Actions: React.FC<{ session: Session; working: boolean; listening: boolean
       {retry && <Button title={session.status === 'error' ? 'Try again' : 'Continue'} onPress={() => onRun(session)} testID="roundtable-continue" />}
       {session.status !== 'done' && <Button title="Wrap up" variant="outline" onPress={() => onRun(wrapUp(session))} testID="roundtable-wrapup" />}
       {hasTurns && <Button title={listening ? 'Stop listening' : 'Listen'} variant="outline" onPress={onListen} testID="roundtable-listen" />}
+      {hasTurns && session.status === 'done' && <Button title="Make an audio episode" variant="outline" onPress={onEpisode} testID="roundtable-episode" />}
       {hasTurns && <Button title="Share" variant="outline" onPress={() => void shareItem({ title, text: transcriptText(session) })} testID="roundtable-share" />}
       <Button title="New roundtable" variant="outline" onPress={onLeave} testID="roundtable-new" />
     </View>
@@ -101,6 +104,7 @@ const Actions: React.FC<{ session: Session; working: boolean; listening: boolean
 /** The transcript, whose turn it is, and what the person can do now. */
 const RunView: React.FC<{ session: Session; working: boolean; onRun: (s: Session) => void; onStop: () => void; onSend: (text: string) => void; onLeave: () => void; styles: Styles }> = ({ session, working, onRun, onStop, onSend, onLeave, styles }) => {
   const { colors } = useTheme();
+  const navigation = useNavigation<any>();
   const wide = useWideLayout(760);
   const [reply, setReply] = useState('');
   const [listening, setListening] = useState(false);
@@ -152,7 +156,7 @@ const RunView: React.FC<{ session: Session; working: boolean; onRun: (s: Session
           <Button title="Send" onPress={() => { onSend(reply); setReply(''); }} disabled={!reply.trim() || working} testID="roundtable-send" />
         </View>
       )}
-      <Actions session={session} working={working} listening={listening} hasTurns={!!turns.length} title={`${fmt?.label}: ${session.topic}`} onRun={onRun} onStop={onStop} onListen={() => void listen()} onLeave={onLeave} styles={styles} />
+      <Actions session={session} working={working} listening={listening} hasTurns={!!turns.length} title={`${fmt?.label}: ${session.topic}`} onRun={onRun} onStop={onStop} onListen={() => void listen()} onEpisode={() => navigation.navigate('Study', saveEpisode(session))} onLeave={onLeave} styles={styles} />
     </ScrollView>
   );
 };
