@@ -351,6 +351,15 @@ export function podcastContextWarning(): string | null {
   return null;
 }
 
+/** The loaded model's last measured speed in tokens a second, or undefined before it has written anything. */
+export function modelSpeed(): number | undefined {
+  try {
+    const { llmService } = require('../services/llm');
+    const tps = Number(llmService.getPerformanceStats?.()?.lastTokensPerSecond) || 0;
+    return tps > 0 ? tps : undefined;
+  } catch { return undefined; }
+}
+
 /** Sources for a long part must not repeat the same passages: merge new ones into the episode's list. */
 export function mergeEpisodeSources(all: Source[], fresh: Source[]): { all: Source[]; part: Source[] } {
   const part: Source[] = [];
