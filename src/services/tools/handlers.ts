@@ -43,6 +43,8 @@ async function dispatchTool(call: ToolCall): Promise<string> {
   if (NETWORK_TOOLS.includes(call.name) && offGridOn()) {
     return 'Off-grid mode is on, so internet tools are off. Answer from the offline library and what you know, and say the answer was not checked online.';
   }
+  // Research-library tools (library_search, library_read ...) live in their own module.
+  if (call.name.startsWith('library_')) return (await import('../researchLibrary/tools')).runLibraryTool(call.name, call.arguments, call.context?.projectId);
   switch (call.name) {
     case 'web_search': {
       const q = requireString(call, 'query');
@@ -69,13 +71,6 @@ async function dispatchTool(call: ToolCall): Promise<string> {
       if (!q) throw new Error('Missing required parameter: query');
       return handleSearchKnowledgeBase(q, call.context?.projectId);
     }
-    case 'library_search':
-    case 'library_find_reference':
-    case 'library_read':
-    case 'library_versions':
-    case 'library_related':
-    case 'library_status':
-      return (await import('../researchLibrary/tools')).runLibraryTool(call.name, call.arguments, call.context?.projectId);
     case 'update_project_document': {
       const name = requireString(call, 'name');
       const content = requireString(call, 'content');

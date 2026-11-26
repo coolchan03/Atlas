@@ -13,6 +13,7 @@ it('says how many documents and passages a project has and how much space they t
   const { describeLibrary } = require('../../src/services/rag/libraryStats');
   mockText = `Leases. ${'The lessee records a right-of-use asset at commencement. '.repeat(60)}`;
   await ragService.indexDocument({ projectId: 'p1', filePath: '/in/a.txt', fileName: 'a.txt', fileSize: 10 });
+  mockText = `${mockText} A second, different document.`; // identical content under another name is skipped as a duplicate
   await ragService.indexDocument({ projectId: 'p1', filePath: '/in/b.txt', fileName: 'b.txt', fileSize: 10 });
   const stats = await ragService.libraryStats('p1');
   expect(stats.documents).toHaveLength(2);

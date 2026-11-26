@@ -27,6 +27,7 @@ export const NOT_BACKED_UP: Record<string, string> = {
   'atlas-case-file': 'the results of web checks on court decisions, which are a day\'s search and are run again when needed',
   'atlas-read-resume': 'how far recently read documents got on this phone',
   'atlas-drug-labels': 'FDA drug labels seen on this phone: public text that is looked up again when needed',
+  'atlas-research-libraries': 'which research libraries (large read-only collections) are installed on this phone: they are installed again from their own zip, and a project keeps the names of the ones it uses',
   'atlas-backup-reminder': 'when this phone last reminded about a backup',
   'atlas-pane-ratios': 'how this phone or tablet splits its screen',
   'atlas-table-fit': 'whether tables are fitted to this phone\'s screen width or scrolled sideways',

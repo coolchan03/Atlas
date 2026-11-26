@@ -2,6 +2,7 @@ jest.mock('../../../../src/services/rag/database', () => ({
   ragDatabase: {
     ensureReady: jest.fn(() => Promise.resolve()),
     insertDocument: jest.fn((_doc: any) => 1),
+    findNameByHash: jest.fn(() => null),
     insertChunks: jest.fn(() => [1, 2]),
     deleteDocument: jest.fn(),
     getDocumentById: jest.fn(() => null),
@@ -69,7 +70,7 @@ describe('RagService', () => {
       const docId = await ragService.indexDocument({ projectId: 'proj1', filePath: '/path/test.txt', fileName: 'test.txt', fileSize: 100, onProgress });
 
       expect(mockDocService.processDocumentFromPath).toHaveBeenCalledWith('/path/test.txt', 'test.txt', 3_000_000);
-      expect(mockDb.insertDocument).toHaveBeenCalledWith({ projectId: 'proj1', name: 'test.txt', path: '/path/to/doc', size: 100 });
+      expect(mockDb.insertDocument).toHaveBeenCalledWith({ projectId: 'proj1', name: 'test.txt', path: '/path/to/doc', size: 100, contentHash: expect.any(String) });
       expect(mockDb.insertChunks).toHaveBeenCalled();
       expect(docId).toBe(1);
 

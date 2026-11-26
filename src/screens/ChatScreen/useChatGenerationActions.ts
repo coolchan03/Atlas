@@ -366,7 +366,7 @@ async function generateWithCompactionRetry(
 export async function injectRagContext(projectId: string | undefined, query: string, prompt: string, enabledTools: string[] = []): Promise<string> {
   const withDocuments = await injectDocumentContext(projectId, query, prompt, enabledTools);
   // Research libraries (pre-indexed collections) are searched before every answer, for any model, within the model's real context.
-  const contextTokens = llmService.getPerformanceSettings().contextLength || 4096;
+  const contextTokens = llmService.getPerformanceSettings?.()?.contextLength || 4096;
   return injectLibraryContext({ projectId, query, prompt: withDocuments, contextTokens });
 }
 async function injectDocumentContext(projectId: string | undefined, query: string, prompt: string, enabledTools: string[] = []): Promise<string> {
