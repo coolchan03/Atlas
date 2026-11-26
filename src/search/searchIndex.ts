@@ -40,6 +40,7 @@ const DESTINATIONS: Destination[] = [
   { title: 'Time capsule', route: 'TimeCapsule', icon: 'archive', keywords: 'letter future self seal open year later memory message to myself' },
   { title: 'Formula helper', route: 'Formula', icon: 'percent', keywords: 'spreadsheet excel sheets formula sum sumif average vlookup cells columns' },
   { title: 'Ask my notes', route: 'AskNotes', icon: 'search', keywords: 'my notes journal chats recordings remember what did i say decide search memory personal wiki' },
+  { title: 'Roundtable', route: 'Roundtable', icon: 'message-circle', keywords: 'debate panel red team critique game master story tutor quiz roles argue discuss roleplay agents talk to each other' },
   { title: 'Teach it back', route: 'TeachBack', icon: 'users', keywords: 'explain teach feynman study learn gaps missed points tutor revise exam' },
   { title: 'Trail', route: 'Trail', icon: 'navigation', keywords: 'track back record walk hike route gps return start lost way back trail journal distance' },
   { title: 'Journal', route: 'Journal', icon: 'edit-3', keywords: 'diary write day mood gratitude reflect notes private week review' },
