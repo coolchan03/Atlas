@@ -34,6 +34,7 @@ export type RootStackParamList = {
   AskNotes: undefined;
   TeachBack: undefined;
   Roundtable: undefined;
+  PhotoStudio: undefined;
   Trail: undefined;
   Currency: undefined;
   Journal: undefined;

@@ -47,6 +47,7 @@ Regenerate with `node scripts/route-matrix.cjs`; rows you filled in are kept.
 | OfflineLibrary | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Onboarding | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Pedometer | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
+| PhotoStudio | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Phrases | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Pins | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |
 | Planner | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested | not tested |  |  |  |

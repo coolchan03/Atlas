@@ -59,6 +59,12 @@ Roles take turns on your phone's model, each under its own persona, and you join
 
 Every role keeps its own voice when you press Listen. A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
 
+### Photo studio
+Three things to do with one photo, from the Atlas hub or search. It needs a model with a vision file (the eye icon in My models).
+- **Narrator** – point at anything and hear it described as a nature documentary, a sports commentary, a calm guide or a museum guide. It describes only what is in the picture.
+- **Time machine** – the same place 50 or 100 years ago, or 50 or 100 years ahead: a short passage, and a picture in the look of the era when an image model is chosen. The future ones say they are imagined.
+- **Sketch to picture** – photograph a drawing, and Atlas describes it and paints a finished picture from the description, as a watercolour, a photograph, a cartoon or an oil painting. It re-imagines the sketch; it does not trace the lines.
+
 ### Study mode (like NotebookLM, offline)
 Pick a project and get a study guide, flashcards, a quiz, a mind map, an answer to a question, a narrated slideshow, or a **podcast episode**. Pick a format (two friends, lecture, entertaining, deep dive, debate, interview, story or for beginners) and any length from 2 to 90 minutes; the screen shows how many parts that is and about how long it takes to write on your phone. A lecture and a story use one narrator, the others use the number of hosts you choose when more than one voice is installed. Extra research is optional. The same options are in **Learn a topic**: Make a podcast from this course turns the lessons already written into an episode. Every item links back to the exact passage it came from. Players show the time and let you skip and seek.
 

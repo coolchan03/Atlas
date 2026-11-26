@@ -1,10 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, Clipboard, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { launchCamera, launchImageLibrary, type Asset } from 'react-native-image-picker';
+import type { Asset } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme } from '../theme';
 import { SPACING, TYPOGRAPHY } from '../constants';
-import { audioSessionManager } from '../services/audioSessionManager';
+import { pickPicture } from '../services/pickPicture';
 import { Button } from '../components/Button';
 import { languageFor } from './languages';
 import { loadVisionModel, translatePicture, visionChoices } from './translateService';
@@ -38,15 +38,9 @@ export function CameraPanel({ shared }: { shared?: { uri: string; mime: string }
   };
   React.useEffect(() => { if (shared?.uri) void run({ uri: shared.uri, type: shared.mime || undefined }); }, [shared?.uri]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (source: 'camera' | 'library') => {
-    try {
-      await audioSessionManager.deactivate(); // the camera and the speech session collide on iOS; a no-op on Android
-      const opts = { mediaType: 'photo' as const, quality: 0.8 as const, maxWidth: 1600, maxHeight: 1600 };
-      const result = source === 'camera' ? await launchCamera(opts) : await launchImageLibrary(opts);
-      if (result.errorCode === 'permission') { setError(source === 'camera' ? 'Atlas needs permission to use the camera. Allow it in the phone\'s app settings.' : 'Atlas needs permission to read your pictures. Allow it in the phone\'s app settings.'); return; }
-      if (result.errorCode) { setError(result.errorMessage || 'The picture could not be opened.'); return; }
-      const first = result.assets?.[0];
-      if (first) await run(first);
-    } catch { /* the picker reports its own problems */ } finally { audioSessionManager.ensurePlayback().catch(() => undefined); }
+    const picked = await pickPicture(source);
+    if (picked.error) setError(picked.error);
+    else if (picked.asset) await run(picked.asset);
   };
 
   return (
