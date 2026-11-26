@@ -26,7 +26,7 @@ import { AddSquarePanel, ChangeBoardPanel, SourceLine, ExpandingNote, ReadingDep
 import { DIFFICULTIES } from '../study/difficulty';
 import { CitedFold, RewriteRow } from './CitedFold';
 import { SwipeRow } from '../components/SwipeRow';
-import { WriteNowPanel } from './WriteNowPanel';
+import { WriteNowPanel } from './WriteNowPanel';import { CoursePodcastCard } from './CoursePodcastCard';
 import { matchExam, type ExamCode } from '../cpa/blueprints';
 import { setupCpaExam } from '../cpa/setup';
 import { ensureExamCourse } from '../cpa/course';
@@ -344,7 +344,7 @@ export const TopicBoardScreen: React.FC = () => {
         <View style={styles.chips} testID="course-ahead">
           {AHEAD_CHOICES.map((n) => <Chip key={n} label={n ? String(n) : 'Off'} on={aheadFor(course) === n} onPress={() => useTopics.getState().setPrepareAhead(course.id, n)} testID={`course-ahead-${n}`} />)}
         </View>
-        <WriteNowPanel course={course} />
+        <WriteNowPanel course={course} /><CoursePodcastCard course={course} />
         <AddSquarePanel course={course} currentKey={spaces[current]?.key} /><ChangeBoardPanel course={course} />
         {prep.courseId === course.id && !!prep.working && !writingNow && (
           <Text style={[styles.meta, { color: colors.textMuted }]} testID="course-ahead-status">Writing "{friendlyTitle(course.squares.find((q) => q.key === prep.working)?.title ?? 'the next lesson')}" ({prep.ready + 1} of {prep.total}). Opening a lesson yourself goes first.</Text>
