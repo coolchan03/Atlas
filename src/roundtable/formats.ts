@@ -177,6 +177,85 @@ export const ROUNDTABLE_FORMATS: RoundtableFormat[] = [
       say('gm', 'Bring the story to a satisfying end in one paragraph, using what happened.', { closing: true, sentences: 6 }),
     ],
   },
+  {
+    id: 'mystery', label: 'Mystery', blurb: 'A case with suspects, clues and one culprit. You question them; a hidden referee keeps the facts straight.',
+    topicHint: 'The setting, e.g. A theft at a village bakery the night before the fair',
+    rules: `This is a murder-mystery style detective game with no violence shown. The case has exactly one culprit, a motive, and clues that make the answer deducible. The hidden SECRET in STATE is true and never contradicted. Reveal clues only when the player asks the right person the right thing; never name the culprit until the player accuses someone. ${PLAIN}`,
+    defaultRounds: 8, maxRounds: 20, state: true,
+    roles: () => [
+      { id: 'gm', name: 'Narrator', persona: 'You narrate the case and speak for every suspect and witness, one at a time, each with their own voice and their own reasons to hide things. You play fair: every answer is consistent with STATE.', draws: true },
+      { id: 'ref', name: 'Referee', persona: 'You design and keep the case: the culprit, the motive, three suspects with alibis (one false), and four clues. You record what the player has learned.' },
+      { id: 'you', name: 'You', persona: 'The detective.', human: true },
+    ],
+    plan: (rounds) => [
+      { role: 'ref', kind: 'hidden', instruction: 'Design the case for the topic. Write STATE as: SECRET (culprit, motive, how), SUSPECTS (three, with alibis, one alibi false), CLUES (four, each tied to who it points to), LEARNED (nothing yet). Under 160 words.' },
+      say('gm', 'Open the case: where we are, what happened, who the three suspects are, in four or five sentences. Do not reveal SECRET. End with "Who do you want to question first?"', { sentences: 6 }),
+      ...times(rounds, () => [
+        { role: 'you', kind: 'player' as const, instruction: 'Ask a question, search somewhere, or accuse someone.' },
+        say('gm', 'Answer as the person asked (or describe what the search finds), consistent with STATE. If the player accused someone, say whether they are right and stop there. Give clues only when earned.', { sentences: 5 }),
+        { role: 'ref', kind: 'hidden' as const, instruction: 'Rewrite the whole STATE (keep SECRET, SUSPECTS and CLUES exactly) and update LEARNED with what the player now knows. Under 200 words.' },
+      ]),
+      say('gm', 'Reveal the solution: who did it, why, and which clues proved it. Say how well the player did. One paragraph.', { closing: true, sentences: 7 }),
+    ],
+  },
+  {
+    id: 'roleplay', label: 'Language role-play', blurb: 'Practice a real situation in another language. A coach corrects each message you send.',
+    topicHint: 'Language and situation, e.g. Spanish: ordering at a market stall, I am a beginner',
+    rules: `This is language practice. The topic names the language, the situation and the learner's level. The Partner speaks only in that language at that level. The Coach writes in English, except for the corrected sentences. ${PLAIN}`,
+    defaultRounds: 6, maxRounds: 15,
+    roles: () => [
+      { id: 'partner', name: 'Partner', persona: 'You play the other person in the situation, naturally, in short sentences at the learner\'s level, in the target language only. You keep the conversation going with a question.' },
+      { id: 'coach', name: 'Coach', persona: 'You are a kind language coach. You correct the learner\'s last message briefly: the better version first, then in one phrase why. If it was good, say so in a few words.' },
+      { id: 'you', name: 'You', persona: 'The learner.', human: true },
+    ],
+    plan: (rounds) => [
+      say('partner', 'Start the scene with one or two short sentences that fit the situation, and ask the learner something.', { sentences: 2 }),
+      ...times(rounds, () => [
+        { role: 'you', kind: 'player' as const, instruction: 'Reply in the language.' },
+        say('coach', "Correct the learner's last message: give the better version, then say why in one short phrase. If it was fine, say so.", { sentences: 3 }),
+        say('partner', 'Answer the learner naturally and ask the next thing, in the language, in one or two short sentences.', { sentences: 2 }),
+      ]),
+      say('coach', 'Close: name the three things the learner should practice next, one line each, with an example.', { closing: true, sentences: 6 }),
+    ],
+  },
+  {
+    id: 'interview', label: 'Interview', blurb: 'The app interviews you about a memory or a person, then writes the story from what you said.',
+    topicHint: 'Whose story or which memory, e.g. My grandmother and the farm where she grew up',
+    rules: `This is an interview. The Interviewer asks one question at a time and follows what the person just said. The write-up uses only what the person said, in their words where possible, and invents nothing. ${PLAIN}`,
+    defaultRounds: 8, maxRounds: 20,
+    roles: () => [
+      { id: 'int', name: 'Interviewer', persona: 'You are a warm, curious interviewer. You ask one open question at a time, never two, and you follow up on a detail the person just gave: a name, a place, a feeling, a date.' },
+      { id: 'you', name: 'You', persona: 'The person being interviewed.', human: true },
+    ],
+    plan: (rounds) => [
+      say('int', 'Open: one friendly sentence, then the first question about the topic.', { sentences: 3 }),
+      ...times(rounds, () => [
+        { role: 'you', kind: 'player' as const, instruction: 'Your answer.' },
+        say('int', 'Follow up on one specific detail in the last answer with one question. Do not summarize.', { sentences: 2 }),
+      ]),
+      say('int', 'Write the story in the first person, in two or three paragraphs, using only what the person said. Do not add facts. End with a line listing anything worth asking about next time.', { closing: true, sentences: 14 }),
+    ],
+  },
+  {
+    id: 'kid', label: 'Lesson for a child', blurb: 'A short story that teaches one topic at a child\'s age, then a gentle quiz.',
+    topicHint: 'Topic and age, e.g. Why the sky is blue, for a 7-year-old',
+    rules: `The topic names the subject and the child's age. Use words and examples that age knows, short sentences, and a friendly voice. Everything stated as fact must be true. ${PLAIN}`,
+    defaultRounds: 2, maxRounds: 4,
+    roles: () => [
+      { id: 'story', name: 'Storyteller', persona: 'You teach through a short story with a friendly character and one clear idea per part. You speak to the child directly.', draws: true },
+      { id: 'quiz', name: 'Quizmaster', persona: 'You ask kind, simple questions about the story and celebrate effort. You never make the child feel wrong.' },
+      { id: 'you', name: 'You', persona: 'The child.', human: true },
+    ],
+    plan: (rounds) => [
+      ...times(rounds, () => [say('story', 'Tell the next part of the story: one idea, one picture the child can imagine, four to six short sentences.', { sentences: 6 })]),
+      ...times(3, () => [
+        say('quiz', 'Ask one simple question about the story. Do not give the answer.', { sentences: 2 }),
+        { role: 'you', kind: 'player' as const, instruction: 'Your answer.' },
+        say('quiz', 'Say kindly whether that is right. If not quite, give the answer in one simple sentence.', { sentences: 3 }),
+      ]),
+      say('quiz', 'Close: say well done, name the one thing to remember, in two short sentences.', { closing: true, sentences: 3 }),
+    ],
+  },
 ];
 
 export const formatById = (id: string): RoundtableFormat | undefined => ROUNDTABLE_FORMATS.find((f) => f.id === id);
