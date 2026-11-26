@@ -64,7 +64,7 @@ export function ResearchLibrariesSection({ projectId }: { projectId: string }) {
       {libraries.length === 0 && !busy ? <Text style={styles.note}>Large, pre-indexed collections of original documents (law, standards, manuals). Install one from a .zip; Atlas searches it in place and never rewrites it.</Text> : null}
       {libraries.map((l) => (
         <View key={l.id} style={styles.row}>
-          <TouchableOpacity onPress={() => toggle(l.id)} accessibilityRole="switch" accessibilityState={{ checked: attached.includes(l.id) }} testID={`library-toggle-${l.id}`} style={styles.action}>
+          <TouchableOpacity onPress={() => toggle(l.id)} accessibilityRole="switch" accessibilityLabel={`Use ${l.name} in this project`} accessibilityState={{ checked: attached.includes(l.id) }} testID={`library-toggle-${l.id}`} style={styles.action}>
             <Icon name={attached.includes(l.id) ? 'check-square' : 'square'} size={20} color={attached.includes(l.id) ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
           <View style={styles.grow}>

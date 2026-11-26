@@ -59,8 +59,6 @@ class RagDatabase {
           enabled INTEGER NOT NULL DEFAULT 1
         )`
       );
-      // Added later: the hash of a document's converted text, to recognise the same content under another name.
-      try { this.db.executeSync('ALTER TABLE rag_documents ADD COLUMN content_hash TEXT'); } catch { /* already there */ }
       this.db.executeSync(
         `CREATE TABLE IF NOT EXISTS rag_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +78,8 @@ class RagDatabase {
           FOREIGN KEY (doc_id) REFERENCES rag_documents(id)
         )`
       );
+      // Added later: the hash of a document's converted text, to recognise the same content under another name.
+      try { this.db.executeSync('ALTER TABLE rag_documents ADD COLUMN content_hash TEXT'); } catch { /* already there */ }
       this.setupFts();
       this.ready = true;
     } catch (error) {
