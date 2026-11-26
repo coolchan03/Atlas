@@ -174,8 +174,8 @@ async function advanceSteps(session: Session, deps: Deps, switchTo: SwitchModel)
   return { ...s, status: 'done' };
 }
 
-/** Whether the turn just written should be drawn: pictures are on, the role can be drawn, and it spoke rather than kept notes. */
-const wantsPicture = (s: Session, role: Role, step: Step): boolean => !!s.pictures && !!role.draws && step.kind === 'say';
+/** Whether the turn just written should be drawn: pictures are on, the turn or its role can be drawn, and it spoke rather than kept notes. */
+const wantsPicture = (s: Session, role: Role, step: Step): boolean => !!s.pictures && (step.draws ?? role.draws) === true && step.kind === 'say';
 
 /** Draws the turn just written. A picture that fails is simply left out; the story goes on. */
 async function drawLast(s: Session, deps: Deps): Promise<Session> {

@@ -26,6 +26,8 @@ export interface Step {
   closing?: boolean;
   /** Most sentences the speaker may use. */
   sentences?: number;
+  /** This turn can be drawn when pictures are on, whatever its role (a tutor's example, a memory written up). */
+  draws?: boolean;
 }
 
 export interface RoundtableFormat {
@@ -144,7 +146,7 @@ export const ROUNDTABLE_FORMATS: RoundtableFormat[] = [
     ],
     plan: (rounds) => [
       ...times(rounds, () => [
-        say('tutor', 'Teach ONE new idea about the topic in three or four sentences, with one concrete example. Do not repeat earlier ideas.'),
+        say('tutor', 'Teach ONE new idea about the topic in three or four sentences, with one concrete example. Do not repeat earlier ideas.', { draws: true }),
         say('student', 'Restate the idea in your own words, then ask one "wait, why?" question.', { sentences: 3 }),
         say('tutor', "Answer the student's question in two sentences.", { sentences: 3 }),
       ]),
@@ -209,7 +211,7 @@ export const ROUNDTABLE_FORMATS: RoundtableFormat[] = [
       { id: 'you', name: 'You', persona: 'The learner.', human: true },
     ],
     plan: (rounds) => [
-      say('partner', 'Start the scene with one or two short sentences that fit the situation, and ask the learner something.', { sentences: 2 }),
+      say('partner', 'Start the scene with one or two short sentences that fit the situation, and ask the learner something.', { sentences: 2, draws: true }),
       ...times(rounds, () => [
         { role: 'you', kind: 'player' as const, instruction: 'Reply in the language.' },
         say('coach', "Correct the learner's last message: give the better version, then say why in one short phrase. If it was fine, say so.", { sentences: 3 }),
@@ -233,7 +235,7 @@ export const ROUNDTABLE_FORMATS: RoundtableFormat[] = [
         { role: 'you', kind: 'player' as const, instruction: 'Your answer.' },
         say('int', 'Follow up on one specific detail in the last answer with one question. Do not summarize.', { sentences: 2 }),
       ]),
-      say('int', 'Write the story in the first person, in two or three paragraphs, using only what the person said. Do not add facts. End with a line listing anything worth asking about next time.', { closing: true, sentences: 14 }),
+      say('int', 'Write the story in the first person, in two or three paragraphs, using only what the person said. Do not add facts. End with a line listing anything worth asking about next time.', { closing: true, sentences: 14, draws: true }),
     ],
   },
   {
@@ -257,5 +259,8 @@ export const ROUNDTABLE_FORMATS: RoundtableFormat[] = [
     ],
   },
 ];
+
+/** Whether a format has anything worth drawing: a role that narrates, or a turn marked as drawable. */
+export const formatDraws = (f: RoundtableFormat): boolean => f.roles('').some((r) => r.draws) || f.plan(1).some((st) => st.draws);
 
 export const formatById = (id: string): RoundtableFormat | undefined => ROUNDTABLE_FORMATS.find((f) => f.id === id);

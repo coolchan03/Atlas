@@ -1,5 +1,5 @@
 import { advance, newSession, playerSays, wrapUp, cleanReply, hostOf, type Ask } from '../../../src/roundtable/engine';
-import { formatById } from '../../../src/roundtable/formats';
+import { formatById, formatDraws } from '../../../src/roundtable/formats';
 
 const fmt = (id: string) => formatById(id)!;
 /** A model that answers by who is speaking, and remembers every prompt it was given. */
@@ -160,5 +160,21 @@ describe('a model for each role', () => {
     const s = await advance(newSession(fmt('debate'), { topic: 'Cars', roleModels: { pro: 'big' } }), { ask, useModel: async (id) => { loads.push(id); if (id === 'big') throw new Error('out of memory'); } });
     expect(s.status).toBe('error');
     expect(loads).toEqual(['big', null]);
+  });
+
+  it('draws a tutor\'s examples and a memory\'s write-up, but nothing in a debate', async () => {
+    const { ask } = scripted(() => 'A reply.');
+    const drawn: string[] = [];
+    const illustrate = async (turn: { name: string }) => { drawn.push(turn.name); return '/Documents/x.png'; };
+    let t = await advance(newSession(fmt('teach'), { topic: 'Tides', rounds: 2, pictures: true }), { ask, illustrate });
+    expect(t.status).toBe('waiting');
+    expect(drawn).toEqual(['Tutor', 'Tutor']); // the two taught ideas, not the student's reaction or the answer
+    drawn.length = 0;
+    const d = await advance(newSession(fmt('debate'), { topic: 'Cars', rounds: 1, pictures: true }), { ask, illustrate });
+    expect(d.status).toBe('done');
+    expect(drawn).toEqual([]);
+    expect(formatDraws(fmt('debate'))).toBe(false);
+    expect(formatDraws(fmt('interview'))).toBe(true);
+    expect(formatDraws(fmt('roleplay'))).toBe(true);
   });
 });

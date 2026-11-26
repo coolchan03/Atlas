@@ -77,6 +77,26 @@ export async function askModel(system: string, user: string, progress?: AskProgr
 export async function askShaped(system: string, user: string, shape: { label: string; maxTokens: number; grammar?: string }): Promise<string> { return ask(system, user, { label: shape.label, shape }); }
 interface AskOptions { progress?: AskProgress; label?: string; shape?: { grammar?: string; maxTokens: number } }
 
+/**
+ * With a LiteRT text model loaded, the llama engine has no model, so a background job would fail with "No model loaded". LiteRT's
+ * one-shot session (the throwaway one its tool selector uses: no tools, no chat history, the answer at the end) answers instead.
+ * It replaces the chat's native conversation, so it is used only when no chat reply is being written; a grammar-shaped answer still
+ * needs the llama engine. Returns null whenever the usual route should be taken.
+ */
+async function liteRtOneShot(system: string, user: string): Promise<string | null> {
+  try {
+    const { llmService } = require('../services/llm');
+    if (llmService.isModelLoaded?.()) return null;
+    const { liteRTService } = require('../services/litert');
+    if (!liteRTService.isModelLoaded()) return null;
+    if (require('../services/generationService').generationService.getState().isGenerating) return null;
+    return await liteRTService.generateToolSelection(system, user);
+  } catch (e) {
+    logger.warn(`[AI] the LiteRT one-shot call failed: ${String((e as Error)?.message || e).slice(0, 160)}`);
+    return null;
+  }
+}
+
 async function ask(system: string, user: string, { progress, label = 'Writing a script or lesson', shape }: AskOptions = {}): Promise<string> {
   // A bigger model on a server, when one is chosen for chat, writes lessons and reports; otherwise the phone's model does.
   // A shaped answer (a grammar, a length) and private text are always written by the phone's own engine: a server cannot be held to a grammar.
@@ -104,9 +124,10 @@ async function ask(system: string, user: string, { progress, label = 'Writing a 
   let out: string;
   try {
   const messages = [{ id: 's', role: 'system', content: system, timestamp: 0 }, { id: 'u', role: 'user', content: user, timestamp: 0 }];
+  const lite = shape ? null : await liteRtOneShot(system, user);
   out = shape
     ? await llmService.generateWithMaxTokens(messages, shape.maxTokens, { grammar: shape.grammar })
-    : await llmService.generateResponse(
+    : lite ?? await llmService.generateResponse(
       messages,
       { disableThinking: true, onStream: progress ? (t: { content?: string; reasoningContent?: string }) => progress('writing', `${t?.reasoningContent ?? ''}${t?.content ?? ''}`) : undefined },
     );

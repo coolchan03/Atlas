@@ -12,7 +12,7 @@ import { askModel } from '../study/engine';
 import { speakAndWait, stop as stopSpeech, listVoices, keepScreenOn } from '../atlasVoice/tts';
 import { castLine } from '../atlasVoice/podcastAudio';
 import { shareItem } from '../utils/shareItem';
-import { ROUNDTABLE_FORMATS, formatById, type RoundtableFormat } from './formats';
+import { ROUNDTABLE_FORMATS, formatById, formatDraws, type RoundtableFormat } from './formats';
 import { advance, hostOf, speakerIndex, newSession, playerSays, progress, transcriptText, wrapUp, type Session } from './engine';
 import { useRoundtables } from './store';
 import { useAppStore } from '../stores/appStore';
@@ -37,7 +37,7 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
   const [pictures, setPictures] = useState(false);
   const [roleModels, setRoleModels] = useState<Record<string, string>>({});
   const models = useAppStore((s) => s.downloadedModels);
-  const canIllustrate = format.roles('').some((r) => r.draws) && canDraw();
+  const canIllustrate = formatDraws(format) && canDraw();
   const shown = clampRounds(format, rounds);
   const start = () => {
     if (!topic.trim()) { Alert.alert('Add a topic first', format.topicHint); return; }
@@ -87,8 +87,8 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
       {canIllustrate && (
         <View style={styles.row}>
           <View style={styles.grow}>
-            <Text style={styles.name}>Draw each scene</Text>
-            <Text style={styles.hint}>Your image model paints a picture after each scene. Slower, and it needs the memory an image model uses.</Text>
+            <Text style={styles.name}>Draw the pictures</Text>
+            <Text style={styles.hint}>Your image model paints a picture for the scenes, examples and stories in this format. Slower, and it needs the memory an image model uses.</Text>
           </View>
           <Switch value={pictures} onValueChange={setPictures} testID="roundtable-pictures" />
         </View>

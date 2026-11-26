@@ -52,12 +52,12 @@ Roles take turns on your phone's model, each under its own persona, and you join
 - **Red team** – one role defends your plan, another attacks it, and an auditor lists the top five remaining risks with a fix for each.
 - **Critique and revise** – a writer drafts, a critic marks it up, and the loop ends when the critic passes it.
 - **Tutor, student and quiz** – a tutor teaches, a student asks the beginner questions, then an examiner quizzes you.
-- **Game master, Mystery** – a narrator runs a story you play. A hidden referee keeps the place, your pack and the facts of the case, so the story stays consistent. With an image model chosen, **Draw each scene** paints a picture under each scene.
+- **Game master, Mystery** – a narrator runs a story you play. A hidden referee keeps the place, your pack and the facts of the case, so the story stays consistent. With an image model chosen, **Draw the pictures** paints a picture for each scene, each idea a tutor teaches, the opening of a role-play and the story an interview writes up (not for a debate, a panel or a red team, which have nothing to see).
 - **Language role-play** – practice a real situation in another language while a coach corrects each message.
 - **Interview** – the app asks about a memory or a person, one question at a time, then writes the story using only what you said.
 - **Lesson for a child** – a short story at the child's age, then a gentle quiz.
 
-Every role keeps its own voice when you press Listen (a fourth speaker, as in the writers' room, is the first voice at a higher pitch). A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
+For a debate podcast where each side is a different model, run a Debate with a model for each role, then press Make an audio episode. Every role keeps its own voice when you press Listen (a fourth speaker, as in the writers' room, is the first voice at a higher pitch). A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
 
 ### Photo studio
 Three things to do with one photo, from the Atlas hub or search. It needs a model with a vision file (the eye icon in My models).
