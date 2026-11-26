@@ -5,12 +5,10 @@
 import { runBackgroundJob } from '../services/llmJobQueue';
 import { llmService } from '../services/llm';
 import { ensureTextModel } from '../atlasTools/models';
-import { localUniqueId } from '../utils/uniqueId';
+import { runVision } from '../services/pictureAsk';
 import { useAppStore } from '../stores/appStore';
 import type { TranslatorLanguage } from './languages';
 import { bothWaysMessages, cleanTranslation, parseDirected, parsePicture, pictureMessages, textMessages } from './translate';
-
-const NO_VISION_MESSAGE = 'The loaded model cannot see pictures. Pick a model that has a vision file (the eye icon in My models) and try again.';
 
 async function ask(messages: unknown[], label: string): Promise<string> {
   await ensureTextModel(null);
@@ -29,11 +27,7 @@ export async function translateBothWays(text: string, a: TranslatorLanguage, b: 
 
 /** Camera mode: the text in a picture, and its translation. Needs a model that can see pictures. */
 export async function translatePicture(uri: string, mimeType: string | undefined, to: TranslatorLanguage): Promise<ReturnType<typeof parsePicture>> {
-  await ensureTextModel(null);
-  if (!llmService.supportsVision()) throw new Error(NO_VISION_MESSAGE);
-  const attachment = { id: localUniqueId('img'), type: 'image' as const, uri: uri.startsWith('file://') || uri.startsWith('content://') ? uri : `file://${uri}`, mimeType: mimeType ?? 'image/jpeg' };
-  const raw = await runBackgroundJob(() => llmService.generateResponse(pictureMessages(attachment, to) as never, { disableThinking: true }), { label: 'Translating a picture', maxWaitMs: 10 * 60_000 });
-  return parsePicture(raw);
+  return parsePicture(await runVision((attachment) => pictureMessages(attachment, to), { uri, mimeType }, 'Translating a picture'));
 }
 
 /** Whether a downloaded model has a vision file attached and switched on (so it can read a picture once it is loaded). */
