@@ -57,7 +57,7 @@ Roles take turns on your phone's model, each under its own persona, and you join
 - **Interview** – the app asks about a memory or a person, one question at a time, then writes the story using only what you said.
 - **Lesson for a child** – a short story at the child's age, then a gentle quiz.
 
-Every role keeps its own voice when you press Listen. A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
+Every role keeps its own voice when you press Listen (a fourth speaker, as in the writers' room, is the first voice at a higher pitch). A finished session can become an audio episode in the podcast player, and every session is saved so a game can be continued. Long sessions stay inside a small model's memory because older turns are folded into a short summary.
 
 ### Photo studio
 Three things to do with one photo, from the Atlas hub or search. It needs a model with a vision file (the eye icon in My models).

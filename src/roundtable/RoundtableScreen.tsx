@@ -13,8 +13,10 @@ import { speakAndWait, stop as stopSpeech, listVoices, keepScreenOn } from '../a
 import { castLine } from '../atlasVoice/podcastAudio';
 import { shareItem } from '../utils/shareItem';
 import { ROUNDTABLE_FORMATS, formatById, type RoundtableFormat } from './formats';
-import { advance, hostOf, newSession, playerSays, progress, transcriptText, wrapUp, type Session } from './engine';
+import { advance, hostOf, speakerIndex, newSession, playerSays, progress, transcriptText, wrapUp, type Session } from './engine';
 import { useRoundtables } from './store';
+import { useAppStore } from '../stores/appStore';
+import { ensureTextModel } from '../atlasTools/models';
 import { saveEpisode } from './episode';
 import { useNavigation } from '@react-navigation/native';
 import { canDraw, illustrateScene } from './illustrate';
@@ -33,11 +35,13 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
   const [notes, setNotes] = useState('');
   const [rounds, setRounds] = useState(ROUNDTABLE_FORMATS[0].defaultRounds);
   const [pictures, setPictures] = useState(false);
+  const [roleModels, setRoleModels] = useState<Record<string, string>>({});
+  const models = useAppStore((s) => s.downloadedModels);
   const canIllustrate = format.roles('').some((r) => r.draws) && canDraw();
   const shown = clampRounds(format, rounds);
   const start = () => {
     if (!topic.trim()) { Alert.alert('Add a topic first', format.topicHint); return; }
-    onStart(newSession(format, { topic, rounds: shown, notes, pictures: canIllustrate && pictures }));
+    onStart(newSession(format, { topic, rounds: shown, notes, pictures: canIllustrate && pictures, roleModels }));
   };
   return (
     <ScrollView contentContainerStyle={[styles.body, wide.column]} keyboardShouldPersistTaps="handled" testID="roundtable-setup">
@@ -62,6 +66,24 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
       </View>
       <Text style={styles.label}>NOTES (OPTIONAL)</Text>
       <TextInput value={notes} onChangeText={setNotes} multiline placeholder="Paste facts the roles may use" placeholderTextColor={colors.textMuted} style={[styles.input, styles.notes]} testID="roundtable-notes" />
+      {models.length >= 2 && (
+        <>
+          <Text style={styles.label}>A MODEL FOR EACH ROLE (OPTIONAL)</Text>
+          <Text style={styles.hint}>Each role can think on a different downloaded model. Switching models takes a while on a phone, so roles that share a model go together. Your own model is put back at the end.</Text>
+          {format.roles('').filter((r) => !r.human).map((r) => (
+            <View key={r.id} testID={`roundtable-models-${r.id}`}>
+              <Text style={styles.name}>{r.name}</Text>
+              <View style={styles.chips}>
+                {[{ id: '', name: 'My model' }, ...models].map((m) => (
+                  <TouchableOpacity key={m.id || 'mine'} onPress={() => setRoleModels((p) => { const next = { ...p }; if (m.id) next[r.id] = m.id; else delete next[r.id]; return next; })} testID={`roundtable-model-${r.id}-${m.id || 'mine'}`} style={[styles.chip, (roleModels[r.id] ?? '') === m.id && styles.chipOn]}>
+                    <Text style={(roleModels[r.id] ?? '') === m.id ? styles.chipTextOn : styles.chipText}>{m.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
+        </>
+      )}
       {canIllustrate && (
         <View style={styles.row}>
           <View style={styles.grow}>
@@ -128,7 +150,7 @@ const RunView: React.FC<{ session: Session; working: boolean; onRun: (s: Session
       for (const t of turns) {
         if (token !== listenRef.current) break;
         const cast = castLine(hostOf(session, t.role), speakers, voices);
-        await speakAndWait(t.text, { voice: cast.voice, pitch: cast.pitch, messageId: 'roundtable' });
+        await speakAndWait(t.text, { voice: cast.voice, pitch: cast.pitch * (speakerIndex(session, t.role) >= 3 ? 1.2 : 1), messageId: 'roundtable' });
       }
     } finally { if (token === listenRef.current) setListening(false); }
   };
@@ -178,11 +200,12 @@ export const RoundtableScreen: React.FC = () => {
     const mine = { stopped: false };
     current.current = mine;
     const live = () => current.current === mine;
+    const myModel = useAppStore.getState().activeModelId; // the person's own model, put back when the run ends
     setWorking(true);
     setSession(from);
     keepScreenOn(true, 'roundtable'); // several model turns in a row: don't let the phone sleep and pause it
     try {
-      const done = await advance(from, { ask: askModel, shouldStop: () => mine.stopped, onUpdate: (s) => { if (live()) setSession(s); }, illustrate: (turn, sess) => illustrateScene(turn, sess, askModel) });
+      const done = await advance(from, { ask: askModel, shouldStop: () => mine.stopped, onUpdate: (s) => { if (live()) setSession(s); }, useModel: (id) => ensureTextModel(id ?? myModel), illustrate: (turn, sess) => illustrateScene(turn, sess, askModel) });
       if (live()) keep(done); else useRoundtables.getState().save(done); // a run that was left still keeps what it wrote, without touching the screen
     } finally { if (live()) { setWorking(false); keepScreenOn(false, 'roundtable'); } }
   };

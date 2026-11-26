@@ -28,6 +28,8 @@ export interface Session {
   error?: string;
   /** Draw a picture for the turns of roles that can be drawn. */
   pictures?: boolean;
+  /** A downloaded model to use for a role (by role id). A role not listed uses the person's own model. */
+  roleModels?: Record<string, string>;
   createdAt: number;
 }
 
@@ -36,6 +38,8 @@ export interface Deps {
   ask: Ask; shouldStop?: () => boolean; onUpdate?: (s: Session) => void;
   /** Draws a turn and returns the picture's file path, or null. Failing to draw never stops the session. */
   illustrate?: (turn: Turn, session: Session) => Promise<string | null>;
+  /** Loads a model for a role; null puts the person's own model back. Called only when the model changes. */
+  useModel?: (modelId: string | null) => Promise<void>;
 }
 
 /** Turns kept word for word in each prompt; older ones live in the summary. */
@@ -46,11 +50,12 @@ const MAX_REPLY = 1400;
 /** The longest shared state kept: the mystery's case file (about 200 words) is the largest the formats ask for. */
 const MAX_STATE = 1800;
 
-export function newSession(format: RoundtableFormat, opts: { topic: string; rounds?: number; notes?: string; id?: string; pictures?: boolean }): Session {
+export function newSession(format: RoundtableFormat, opts: { topic: string; rounds?: number; notes?: string; id?: string; pictures?: boolean; roleModels?: Record<string, string> }): Session {
   const rounds = Math.max(1, Math.min(format.maxRounds, Math.round(opts.rounds ?? format.defaultRounds)));
   return {
     id: opts.id ?? `rt-${Date.now().toString(36)}`, formatId: format.id, topic: opts.topic.trim(), notes: (opts.notes ?? '').trim(),
     roles: format.roles(opts.topic), steps: format.plan(rounds), cursor: 0, turns: [], summary: '', summarized: 0, state: '', status: 'running', createdAt: Date.now(), ...(opts.pictures ? { pictures: true } : {}),
+    ...(opts.roleModels && Object.keys(opts.roleModels).length ? { roleModels: opts.roleModels } : {}),
   };
 }
 
@@ -123,11 +128,20 @@ const closingIndex = (steps: Step[], from: number): number => {
   return i < 0 ? steps.length : i;
 };
 
+type SwitchModel = (modelId: string | null) => Promise<void>;
+
 /**
- * Runs the steps from the cursor until the session needs the person, is stopped, fails or ends. A failed turn leaves the
- * cursor where it was, so running again retries that turn.
+ * Runs the steps from the cursor until the session needs the person, is stopped, fails or ends. A role with its own model has it
+ * loaded just before its turn, only when the model changes, and the person's own model is put back however the run ends. A failed
+ * turn leaves the cursor where it was, so running again retries that turn.
  */
 export async function advance(session: Session, deps: Deps): Promise<Session> {
+  let current: string | null = null;
+  const switchTo: SwitchModel = async (id) => { if (deps.useModel && id !== current) { await deps.useModel(id); current = id; } };
+  try { return await advanceSteps(session, deps, switchTo); } finally { await switchTo(null).catch(() => undefined); }
+}
+
+async function advanceSteps(session: Session, deps: Deps, switchTo: SwitchModel): Promise<Session> {
   const format = formatById(session.formatId);
   if (!format) return { ...session, status: 'error', error: 'This kind of roundtable is no longer available.' };
   let s: Session = { ...session, status: 'running', error: undefined };
@@ -138,6 +152,7 @@ export async function advance(session: Session, deps: Deps): Promise<Session> {
     const role = s.roles.find((r) => r.id === step.role);
     if (!role) { s = { ...s, cursor: s.cursor + 1 }; continue; }
     try {
+      await switchTo(s.roleModels?.[role.id] ?? null);
       s = await compact(s, deps.ask);
       const visible = s.turns.filter((t) => !t.hidden);
       const reply = await runRoleTurn({ role, step, format, topic: s.topic, notes: s.notes, state: s.state, summary: s.summary, recent: visible.slice(-RECENT), others: step.kind === 'hidden' ? [] : s.roles.filter((r) => r.id !== role.id).map((r) => r.name), limit: step.kind === 'hidden' ? MAX_STATE : MAX_REPLY }, deps.ask);
@@ -149,7 +164,7 @@ export async function advance(session: Session, deps: Deps): Promise<Session> {
         state: step.kind === 'hidden' ? reply.slice(0, MAX_STATE) : s.state,
       };
       if (step.endsIf && new RegExp(step.endsIf).test(reply)) s = { ...s, cursor: closingIndex(s.steps, s.cursor) };
-      if (s.pictures && role.draws && step.kind === 'say' && deps.illustrate) s = await drawLast(s, deps);
+      if (wantsPicture(s, role, step)) s = await drawLast(s, deps);
       deps.onUpdate?.(s);
     } catch (e) {
       return { ...s, status: 'error', error: String((e as Error)?.message || e).slice(0, 200) };
@@ -158,11 +173,15 @@ export async function advance(session: Session, deps: Deps): Promise<Session> {
   return { ...s, status: 'done' };
 }
 
+/** Whether the turn just written should be drawn: pictures are on, the role can be drawn, and it spoke rather than kept notes. */
+const wantsPicture = (s: Session, role: Role, step: Step): boolean => !!s.pictures && !!role.draws && step.kind === 'say';
+
 /** Draws the turn just written. A picture that fails is simply left out; the story goes on. */
 async function drawLast(s: Session, deps: Deps): Promise<Session> {
+  if (!deps.illustrate) return s;
   const last = s.turns[s.turns.length - 1];
   try {
-    const image = await deps.illustrate!(last, s);
+    const image = await deps.illustrate(last, s);
     if (!image) return s;
     const turns = s.turns.slice(0, -1).concat({ ...last, image });
     const drawn = { ...s, turns };
@@ -191,9 +210,12 @@ export const progress = (s: Session): { done: number; total: number } => ({ done
 
 /**
  * The speaker letter used to pick a voice (A, B or C) for a role: each role keeps the same voice throughout. Only three voices
- * are cast, so a format with four speaking roles (the writers' room) shares one voice between two of them.
+ * are cast; a fourth speaking role (the writers' room) keeps the first voice's letter and is raised in pitch when listening.
  */
-export const hostOf = (s: Session, roleId: string): 'A' | 'B' | 'C' => (['A', 'B', 'C'] as const)[Math.max(0, s.roles.filter((r) => !r.human).findIndex((r) => r.id === roleId)) % 3];
+export const hostOf = (s: Session, roleId: string): 'A' | 'B' | 'C' => (['A', 'B', 'C'] as const)[speakerIndex(s, roleId) % 3];
+
+/** Where a role stands among the speaking roles (the person is not one). A fourth speaker is told apart by pitch when listening. */
+export const speakerIndex = (s: Session, roleId: string): number => Math.max(0, s.roles.filter((r) => !r.human).findIndex((r) => r.id === roleId));
 
 /** The visible transcript as plain text to share or save. */
 export function transcriptText(s: Session): string {

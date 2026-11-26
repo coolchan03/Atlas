@@ -127,3 +127,30 @@ describe('the shared state', () => {
     expect(s.state).toContain('LEARNED: nothing yet');
   });
 });
+
+describe('a model for each role', () => {
+  it('loads a role\'s model only when it changes, and puts the person\'s own model back at the end', async () => {
+    const loads: Array<string | null> = [];
+    const { ask } = scripted((system) => `${who(system)} speaks.`);
+    const s = await advance(newSession(fmt('debate'), { topic: 'Cars', rounds: 2, roleModels: { pro: 'big', con: 'small' } }), { ask, useModel: async (id) => { loads.push(id); } });
+    expect(s.status).toBe('done');
+    // Pro and Con alternate, the judge has no model of its own (the person's), and the last call restores it.
+    expect(loads).toEqual(['big', 'small', 'big', 'small', 'big', 'small', null]);
+  });
+
+  it('puts the person\'s own model back even when the run fails', async () => {
+    const loads: Array<string | null> = [];
+    const { ask } = scripted(() => { throw new Error('model busy'); });
+    const s = await advance(newSession(fmt('debate'), { topic: 'Cars', roleModels: { pro: 'big' } }), { ask, useModel: async (id) => { loads.push(id); } });
+    expect(s.status).toBe('error');
+    expect(loads).toEqual(['big', null]);
+  });
+
+  it('a failure to load a role\'s model is reported as an error on that turn', async () => {
+    const { ask } = scripted(() => 'x');
+    const s = await advance(newSession(fmt('debate'), { topic: 'Cars', roleModels: { pro: 'gone' } }), { ask, useModel: async (id) => { if (id === 'gone') throw new Error('That model is no longer downloaded.'); } });
+    expect(s.status).toBe('error');
+    expect(s.error).toMatch(/no longer downloaded/);
+    expect(s.cursor).toBe(0);
+  });
+});

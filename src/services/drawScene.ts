@@ -9,7 +9,7 @@ import { useAppStore } from '../stores';
 /** Whether an image model is chosen, so a feature can offer to draw. */
 export const canDraw = (): boolean => !!useAppStore.getState().activeImageModelId;
 
-export const DEFAULT_STYLE = 'storybook illustration, soft light, painted';
+const DEFAULT_STYLE = 'storybook illustration, soft light, painted';
 
 type Ask = (system: string, user: string) => Promise<string>;
 
