@@ -39,6 +39,7 @@ function getToolIcon(toolName?: string): string {
     case 'get_current_datetime': return 'clock';
     case 'get_device_info': return 'smartphone';
     case 'work_in_steps': return 'list';
+    case 'ask_specialist': return 'users';
     default: return 'tool';
   }
 }
@@ -54,6 +55,7 @@ function getToolLabel(toolName?: string, content?: string): string {
     case 'get_current_datetime': return 'Retrieved date/time';
     case 'get_device_info': return 'Retrieved device info';
     case 'work_in_steps': { const n = content ? /^Done in (\d+) steps/.exec(content)?.[1] : null; return n ? `Did the job in ${n} steps` : 'Big job in steps'; }
+    case 'ask_specialist': { const who = content ? /^Asked ([^.\n]+)\./.exec(content)?.[1] : null; return who ? `Asked ${who}` : 'Asked another agent'; }
     default: return toolName || 'Tool result';
   }
 }

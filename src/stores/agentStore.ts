@@ -36,6 +36,8 @@ export interface Agent {
   voiceProfileId?: string;
   /** Per-agent tool list (e.g. web_search). Unset = use the global tool toggles. */
   enabledTools?: string[];
+  /** Whether other agents may ask this one (the Assistant asks, with the person's OK each time). Unset = yes for working agents, never for pals and the Therapist. */
+  consultable?: boolean;
   /** A specialist: kept out of the chat and Home pickers, listed under Specialists on the Agents screen. Only agents whose prompt really changes the answers (safety facts, citing exact words) are shipped this way. */
   hidden?: boolean;
   /** 'pal' = a character to talk to or role-play with (Friend, Jake). Unset = a working agent, except the two pals Atlas ships. */
@@ -128,7 +130,7 @@ BUILT-IN IDENTIFICATION BASICS (always available):
 - When you edit a document: read it, change only what was asked, then write the whole new version.
 - Keep replies short and say what you did.`,
     temperature: 0.4,
-    enabledTools: ['list_files', 'read_file', 'write_file', 'create_web_page', 'open_file', 'calendar_events', 'add_calendar_event', 'remember', 'my_location', 'calculator', 'study_math', 'science_data', 'study_helpers', 'find_image', 'get_current_datetime', 'search_knowledge_base'],
+    enabledTools: ['ask_specialist', 'list_files', 'read_file', 'write_file', 'create_web_page', 'open_file', 'calendar_events', 'add_calendar_event', 'remember', 'my_location', 'calculator', 'study_math', 'science_data', 'study_helpers', 'find_image', 'get_current_datetime', 'search_knowledge_base'],
     createdAt: now(),
     updatedAt: now(),
   },

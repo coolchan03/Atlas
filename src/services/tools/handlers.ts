@@ -43,6 +43,7 @@ async function dispatchTool(call: ToolCall): Promise<string> {
   if (NETWORK_TOOLS.includes(call.name) && offGridOn()) {
     return 'Off-grid mode is on, so internet tools are off. Answer from the offline library and what you know, and say the answer was not checked online.';
   }
+  if (call.name === 'ask_specialist') return require('../agentConsult').consultSpecialist(call.arguments ?? {}, call.signal);
   switch (call.name) {
     case 'web_search': {
       const q = requireString(call, 'query');
