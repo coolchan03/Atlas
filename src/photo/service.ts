@@ -35,6 +35,7 @@ export async function runPhoto(job: { mode: PhotoMode; choiceId?: string; pictur
 
   if (mode.id === 'narrate') {
     const text = clean(await look(picture, `Look at this picture and narrate it as ${choice.text}. Use four to six sentences. Describe only what is really visible and never guess names of people or places.`, 'Narrating a picture'));
+    if (!text) throw new Error('The model could not describe the picture. Try a clearer one.');
     return { text, seen: text, image: null };
   }
 

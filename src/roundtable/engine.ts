@@ -137,7 +137,8 @@ type SwitchModel = (modelId: string | null) => Promise<void>;
  */
 export async function advance(session: Session, deps: Deps): Promise<Session> {
   let current: string | null = null;
-  const switchTo: SwitchModel = async (id) => { if (deps.useModel && id !== current) { await deps.useModel(id); current = id; } };
+  // `current` is set before the load, so a load that fails half way still gets the person's own model put back afterwards.
+  const switchTo: SwitchModel = async (id) => { if (!deps.useModel || id === current) return; current = id; await deps.useModel(id); };
   try { return await advanceSteps(session, deps, switchTo); } finally { await switchTo(null).catch(() => undefined); }
 }
 

@@ -1,6 +1,7 @@
 /** Photo studio: pick a mode, choose a photo, read the result. Fakes the picker and the model. */
 import { installNativeBoundary, requireRTL } from '../harness/nativeBoundary';
 
+let mockHold: Promise<void> | null = null;
 jest.mock('../../src/atlasTools/models', () => ({ ensureTextModel: async () => undefined }));
 jest.mock('../../src/services/llmJobQueue', () => ({ runBackgroundJob: (fn: () => Promise<unknown>) => fn() }));
 jest.mock('../../src/services/llm', () => ({
@@ -9,6 +10,7 @@ jest.mock('../../src/services/llm', () => ({
     getPerformanceSettings: () => ({ contextLength: 4096 }),
     getPerformanceStats: () => ({ lastTokensPerSecond: 0, lastTimeToFirstToken: 0, lastTokenCount: 0 }),
     generateResponse: async (msgs: { content: string; attachments?: unknown[] }[]) => {
+      if (mockHold) await mockHold;
       const last = msgs[msgs.length - 1];
       if (last.attachments?.length) return /narrate/.test(last.content) ? 'A calm harbour wakes up as the boats go out.' : 'A harbour with wooden fishing boats at dawn.';
       return 'The quay was busy with men mending nets by hand.';
@@ -42,4 +44,20 @@ it('the narrator describes a photo, then the time machine writes the same place 
   rtl.fireEvent.press(view.getByTestId('photo-library'));
   await rtl.waitFor(() => expect(view.getByTestId('photo-text').props.children).toMatch(/men mending nets/));
   expect(view.getByTestId('photo-note').props.children).toMatch(/Choose an image model/); // no picture model: the passage still comes
+}, 30000);
+
+it('switching mode while a photo is being read does not show the old mode\'s result under the new one', async () => {
+  installNativeBoundary({ fs: true });
+  const rtl = requireRTL();
+  const React = require('react');
+  const { PhotoStudioScreen } = require('../../src/photo/PhotoStudioScreen');
+  const view = rtl.render(React.createElement(PhotoStudioScreen));
+  let release: () => void = () => undefined;
+  mockHold = new Promise<void>((r) => { release = r; });
+  rtl.fireEvent.press(view.getByTestId('photo-library'));
+  await rtl.waitFor(() => expect(view.getByText(/Working on it/)).toBeTruthy());
+  rtl.fireEvent.press(view.getByTestId('photo-mode-sketch'));
+  await rtl.act(async () => { release(); mockHold = null; await new Promise((r) => setTimeout(r, 100)); });
+  expect(view.queryByTestId('photo-result')).toBeNull(); // the narration finished, but it is not shown under Sketch to picture
+  expect(view.queryByText(/Working on it/)).toBeNull();
 }, 30000);

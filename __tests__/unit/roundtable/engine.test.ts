@@ -153,4 +153,12 @@ describe('a model for each role', () => {
     expect(s.error).toMatch(/no longer downloaded/);
     expect(s.cursor).toBe(0);
   });
+
+  it('still puts the person\'s own model back when loading a role\'s model fails half way', async () => {
+    const loads: Array<string | null> = [];
+    const { ask } = scripted(() => 'x');
+    const s = await advance(newSession(fmt('debate'), { topic: 'Cars', roleModels: { pro: 'big' } }), { ask, useModel: async (id) => { loads.push(id); if (id === 'big') throw new Error('out of memory'); } });
+    expect(s.status).toBe('error');
+    expect(loads).toEqual(['big', null]);
+  });
 });

@@ -65,4 +65,8 @@ describe('photo studio', () => {
   it('every mode has choices that are all different', () => {
     for (const m of PHOTO_MODES) expect(new Set(m.choices.map((c) => c.id)).size).toBe(m.choices.length);
   });
+
+  it('an empty narration is an error, not a blank card', async () => {
+    await expect(runPhoto({ mode: modeById('narrate'), picture: pic }, { look: async () => '<think>hm</think>  ' })).rejects.toThrow(/could not describe/);
+  });
 });

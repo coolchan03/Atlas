@@ -33,11 +33,15 @@ export const PhotoStudioScreen: React.FC = () => {
   const vision = visionChoices();
   useEffect(() => () => { run.current++; void stopSpeech(); keepScreenOn(false, 'photo-studio'); }, []);
 
-  const pickMode = (m: PhotoMode) => { setMode(m); setChoiceId(m.choices[0].id); setResult(null); setError(null); };
+  /** Whatever was shown or playing belongs to the old mode or choice: drop it, and let a run still in flight finish unseen. */
+  const reset = () => { run.current++; setBusy(false); void stopSpeech(); setSpeaking(false); setResult(null); setError(null); };
+  const pickMode = (m: PhotoMode) => { reset(); setMode(m); setChoiceId(m.choices[0].id); };
+  const pickChoice = (id: string) => { reset(); setChoiceId(id); };
   const go = async (a: Asset, m: PhotoMode, choice: string) => {
     if (!a.uri) return;
-    const mine = ++run.current;
-    setAsset(a); setResult(null); setError(null); setBusy(true);
+    reset();
+    const mine = run.current;
+    setAsset(a); setBusy(true);
     keepScreenOn(true, 'photo-studio');
     try {
       const r = await runPhoto({ mode: m, choiceId: choice, picture: { uri: a.uri, mimeType: a.type } });
@@ -72,7 +76,7 @@ export const PhotoStudioScreen: React.FC = () => {
         <Text style={styles.label}>{mode.choiceLabel}</Text>
         <View style={styles.chips}>
           {mode.choices.map((c) => (
-            <TouchableOpacity key={c.id} onPress={() => setChoiceId(c.id)} testID={`photo-choice-${c.id}`} accessibilityRole="radio" accessibilityState={{ selected: choiceOf(mode, choiceId).id === c.id }} style={[styles.chip, choiceOf(mode, choiceId).id === c.id && styles.chipOn]}>
+            <TouchableOpacity key={c.id} onPress={() => pickChoice(c.id)} testID={`photo-choice-${c.id}`} accessibilityRole="radio" accessibilityState={{ selected: choiceOf(mode, choiceId).id === c.id }} style={[styles.chip, choiceOf(mode, choiceId).id === c.id && styles.chipOn]}>
               <Text style={choiceOf(mode, choiceId).id === c.id ? styles.chipTextOn : styles.chipText}>{c.label}</Text>
             </TouchableOpacity>
           ))}
