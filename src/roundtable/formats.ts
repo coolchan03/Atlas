@@ -10,6 +10,8 @@ export interface Role {
   persona: string;
   /** The person takes this role: the session waits for them at its steps. */
   human?: boolean;
+  /** This role's turns can be drawn as a picture (a narrator's scene), when the person turns pictures on. */
+  draws?: boolean;
 }
 
 export type StepKind = 'say' | 'player' | 'hidden';
@@ -160,7 +162,7 @@ export const ROUNDTABLE_FORMATS: RoundtableFormat[] = [
     rules: `This is an interactive story. The player decides what the player character does and says; you never do that for them. Stay consistent with STATE: do not invent items, places or people that contradict it. ${PLAIN}`,
     defaultRounds: 6, maxRounds: 20, state: true,
     roles: () => [
-      { id: 'gm', name: 'Narrator', persona: 'You are a vivid, fair game master. You describe what the player sees and what happens because of what they did, then hand the choice back.' },
+      { id: 'gm', name: 'Narrator', persona: 'You are a vivid, fair game master. You describe what the player sees and what happens because of what they did, then hand the choice back.', draws: true },
       { id: 'ref', name: 'Referee', persona: 'You keep the game honest. You record where the player is, what they carry, who they have met and what they are trying to do, exactly and briefly.' },
       { id: 'you', name: 'You', persona: 'The player.', human: true },
     ],

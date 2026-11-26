@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Feather';
 import { useTheme, useThemedStyles } from '../theme';
@@ -15,6 +15,8 @@ import { shareItem } from '../utils/shareItem';
 import { ROUNDTABLE_FORMATS, formatById, type RoundtableFormat } from './formats';
 import { advance, hostOf, newSession, playerSays, progress, transcriptText, wrapUp, type Session } from './engine';
 import { useRoundtables } from './store';
+import { canDraw, illustrateScene } from './illustrate';
+import { resolveDocumentPath } from '../utils/resolveDocumentPath';
 
 const clampRounds = (f: RoundtableFormat, n: number) => (Number.isFinite(n) ? Math.max(1, Math.min(f.maxRounds, Math.round(n))) : f.defaultRounds);
 type Styles = ReturnType<typeof createStyles>;
@@ -28,10 +30,12 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
   const [rounds, setRounds] = useState(ROUNDTABLE_FORMATS[0].defaultRounds);
+  const [pictures, setPictures] = useState(false);
+  const canIllustrate = format.roles('').some((r) => r.draws) && canDraw();
   const shown = clampRounds(format, rounds);
   const start = () => {
     if (!topic.trim()) { Alert.alert('Add a topic first', format.topicHint); return; }
-    onStart(newSession(format, { topic, rounds: shown, notes }));
+    onStart(newSession(format, { topic, rounds: shown, notes, pictures: canIllustrate && pictures }));
   };
   return (
     <ScrollView contentContainerStyle={[styles.body, wide.column]} keyboardShouldPersistTaps="handled" testID="roundtable-setup">
@@ -56,6 +60,15 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
       </View>
       <Text style={styles.label}>NOTES (OPTIONAL)</Text>
       <TextInput value={notes} onChangeText={setNotes} multiline placeholder="Paste facts the roles may use" placeholderTextColor={colors.textMuted} style={[styles.input, styles.notes]} testID="roundtable-notes" />
+      {canIllustrate && (
+        <View style={styles.row}>
+          <View style={styles.grow}>
+            <Text style={styles.name}>Draw each scene</Text>
+            <Text style={styles.hint}>Your image model paints a picture after each scene. Slower, and it needs the memory an image model uses.</Text>
+          </View>
+          <Switch value={pictures} onValueChange={setPictures} testID="roundtable-pictures" />
+        </View>
+      )}
       <Button title="Start" onPress={start} testID="roundtable-start" />
       {!!saved.length && <Text style={styles.label}>SAVED</Text>}
       {saved.slice(0, 8).map((s) => (
@@ -126,6 +139,7 @@ const RunView: React.FC<{ session: Session; working: boolean; onRun: (s: Session
           <View key={`${i}-${t.role}`} style={[styles.turn, role?.human && styles.turnYou]} testID={`roundtable-turn-${i}`}>
             <Text style={[styles.who, { color: ROLE_COLORS[Math.max(0, session.roles.indexOf(role!)) % 4] }]}>{t.name}</Text>
             <Text style={styles.text}>{t.text}</Text>
+            {!!t.image && <Image source={{ uri: `file://${resolveDocumentPath(t.image)}` }} style={styles.picture} accessibilityLabel={`Picture for ${t.name}'s turn`} testID={`roundtable-picture-${i}`} />}
           </View>
         );
       })}
@@ -157,7 +171,7 @@ export const RoundtableScreen: React.FC = () => {
     setWorking(true);
     setSession(from);
     keepScreenOn(true, 'roundtable'); // several model turns in a row: don't let the phone sleep and pause it
-    try { keep(await advance(from, { ask: askModel, shouldStop: () => stopRef.current, onUpdate: setSession })); } finally { setWorking(false); keepScreenOn(false, 'roundtable'); }
+    try { keep(await advance(from, { ask: askModel, shouldStop: () => stopRef.current, onUpdate: setSession, illustrate: (turn, sess) => illustrateScene(turn, sess, askModel) })); } finally { setWorking(false); keepScreenOn(false, 'roundtable'); }
   };
   const leave = () => { stopRef.current = true; setSession(null); };
 
@@ -194,6 +208,8 @@ const createStyles = (colors: ThemeColors, _shadows: ThemeShadows) => ({
   who: { ...TYPOGRAPHY.label },
   text: { ...TYPOGRAPHY.body, color: colors.text },
   row: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: SPACING.sm },
+  grow: { flex: 1 },
+  picture: { width: '100%' as const, aspectRatio: 1, borderRadius: 8, marginTop: SPACING.xs },
   error: { ...TYPOGRAPHY.bodySmall, color: colors.error },
   actions: { gap: SPACING.sm, marginTop: SPACING.md },
 });

@@ -74,4 +74,18 @@ describe('roundtable engine', () => {
     expect(cleanReply('<think>hmm</think>Pro: I agree.\nCon: And I do not.', 'Pro')).toBe('I agree.');
     expect(hostOf(newSession(fmt('teach'), { topic: 't' }), 'student')).toBe('B');
   });
+
+  it('draws a narrator\'s scenes when pictures are on, and a picture that fails never stops the story', async () => {
+    const { ask } = scripted((system) => (/Referee/.test(system) ? 'PLACE: cellar.' : 'You see a door. What do you do?'));
+    const drawn: string[] = [];
+    const illustrate = async (turn: { text: string }) => { drawn.push(turn.text); if (drawn.length === 2) throw new Error('no memory'); return `/Documents/scene-${drawn.length}.png`; };
+    let s = await advance(newSession(fmt('game'), { topic: 'A door', rounds: 2, pictures: true }), { ask, illustrate });
+    expect(s.turns.find((t) => t.role === 'gm')?.image).toBe('/Documents/scene-1.png');
+    s = await advance(playerSays(s, 'open it'), { ask, illustrate });
+    expect(s.status).toBe('waiting'); // the second picture failed and the story went on
+    expect(s.turns.filter((t) => t.role === 'gm').map((t) => t.image)).toEqual(['/Documents/scene-1.png', undefined]);
+    const off = await advance(newSession(fmt('game'), { topic: 'A door', rounds: 1 }), { ask, illustrate });
+    expect(off.turns.some((t) => t.image)).toBe(false);
+    expect(drawn).toHaveLength(2); // nothing was drawn for the session with pictures off
+  });
 });

@@ -6,7 +6,7 @@
  */
 import { formatById, type Role, type RoundtableFormat, type Step } from './formats';
 
-export interface Turn { role: string; name: string; text: string; hidden?: boolean }
+export interface Turn { role: string; name: string; text: string; hidden?: boolean; /** A picture drawn for this turn (file path). */ image?: string }
 
 export type SessionStatus = 'running' | 'waiting' | 'stopped' | 'done' | 'error';
 
@@ -26,11 +26,17 @@ export interface Session {
   state: string;
   status: SessionStatus;
   error?: string;
+  /** Draw a picture for the turns of roles that can be drawn. */
+  pictures?: boolean;
   createdAt: number;
 }
 
 export type Ask = (system: string, user: string) => Promise<string>;
-export interface Deps { ask: Ask; shouldStop?: () => boolean; onUpdate?: (s: Session) => void }
+export interface Deps {
+  ask: Ask; shouldStop?: () => boolean; onUpdate?: (s: Session) => void;
+  /** Draws a turn and returns the picture's file path, or null. Failing to draw never stops the session. */
+  illustrate?: (turn: Turn, session: Session) => Promise<string | null>;
+}
 
 /** Turns kept word for word in each prompt; older ones live in the summary. */
 const RECENT = 4;
@@ -38,11 +44,11 @@ const RECENT = 4;
 const COMPACT_AT = 4;
 const MAX_REPLY = 1400;
 
-export function newSession(format: RoundtableFormat, opts: { topic: string; rounds?: number; notes?: string; id?: string }): Session {
+export function newSession(format: RoundtableFormat, opts: { topic: string; rounds?: number; notes?: string; id?: string; pictures?: boolean }): Session {
   const rounds = Math.max(1, Math.min(format.maxRounds, Math.round(opts.rounds ?? format.defaultRounds)));
   return {
     id: opts.id ?? `rt-${Date.now().toString(36)}`, formatId: format.id, topic: opts.topic.trim(), notes: (opts.notes ?? '').trim(),
-    roles: format.roles(opts.topic), steps: format.plan(rounds), cursor: 0, turns: [], summary: '', summarized: 0, state: '', status: 'running', createdAt: Date.now(),
+    roles: format.roles(opts.topic), steps: format.plan(rounds), cursor: 0, turns: [], summary: '', summarized: 0, state: '', status: 'running', createdAt: Date.now(), ...(opts.pictures ? { pictures: true } : {}),
   };
 }
 
@@ -134,12 +140,26 @@ export async function advance(session: Session, deps: Deps): Promise<Session> {
         state: step.kind === 'hidden' ? reply.slice(0, 700) : s.state,
       };
       if (step.endsIf && new RegExp(step.endsIf).test(reply)) s = { ...s, cursor: closingIndex(s.steps, s.cursor) };
+      if (s.pictures && role.draws && step.kind === 'say' && deps.illustrate) s = await drawLast(s, deps);
       deps.onUpdate?.(s);
     } catch (e) {
       return { ...s, status: 'error', error: String((e as Error)?.message || e).slice(0, 200) };
     }
   }
   return { ...s, status: 'done' };
+}
+
+/** Draws the turn just written. A picture that fails is simply left out; the story goes on. */
+async function drawLast(s: Session, deps: Deps): Promise<Session> {
+  const last = s.turns[s.turns.length - 1];
+  try {
+    const image = await deps.illustrate!(last, s);
+    if (!image) return s;
+    const turns = s.turns.slice(0, -1).concat({ ...last, image });
+    const drawn = { ...s, turns };
+    deps.onUpdate?.(drawn);
+    return drawn;
+  } catch { return s; }
 }
 
 /** The person's turn at a waiting step. */
