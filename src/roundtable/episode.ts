@@ -10,13 +10,13 @@ import { formatById } from './formats';
 /** Where roundtable episodes are kept, one id per session, so they stay out of any project's study results. */
 const episodeProject = (sessionId: string): string => `roundtable:${sessionId}`;
 
-function toEpisode(s: Session, now: number = Date.now()): StudyResult {
+function toEpisode(s: Session): StudyResult {
   const human = new Set(s.roles.filter((r) => r.human).map((r) => r.id));
   const turns = s.turns.filter((t) => !t.hidden && !human.has(t.role));
   const speakers = new Set(turns.map((t) => hostOf(s, t.role))).size;
   const wordCount = turns.reduce((n, t) => n + t.text.split(/\s+/).filter(Boolean).length, 0);
   return {
-    kind: 'podcast', createdAt: now, topic: s.topic, title: `${formatById(s.formatId)?.label ?? 'Roundtable'}: ${s.topic}`.slice(0, 90), sources: [],
+    kind: 'podcast', createdAt: s.createdAt, topic: s.topic, title: `${formatById(s.formatId)?.label ?? 'Roundtable'}: ${s.topic}`.slice(0, 90), sources: [],
     podcast: turns.map((t) => ({ host: hostOf(s, t.role), text: t.text })), hosts: Math.max(1, speakers), minutes: Math.max(1, Math.round(wordCount / 155)),
   };
 }
@@ -25,6 +25,8 @@ function toEpisode(s: Session, now: number = Date.now()): StudyResult {
 export function saveEpisode(s: Session): { projectId: string; openAt: number } {
   const episode = toEpisode(s);
   const projectId = episodeProject(s.id);
+  // One episode per session: making it again replaces the earlier one, which may be from before the session finished.
+  useStudyStore.getState().remove(projectId, episode.createdAt);
   useStudyStore.getState().add(projectId, episode);
   return { projectId, openAt: episode.createdAt };
 }

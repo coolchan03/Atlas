@@ -70,8 +70,10 @@ describe('roundtable engine', () => {
     expect(prompts.some((p) => /Earlier in this session: They argued/.test(p.user))).toBe(true);
   });
 
-  it('cleans a reply: no reasoning, no name prefix, no next speaker\'s line', () => {
-    expect(cleanReply('<think>hmm</think>Pro: I agree.\nCon: And I do not.', 'Pro')).toBe('I agree.');
+  it('cleans a reply: no reasoning, no name prefix, no other role\'s line, but state lines and reasons are kept', () => {
+    expect(cleanReply('<think>hmm</think>Pro: I agree.\nCon: And I do not.', 'Pro', { others: ['Con', 'Judge'] })).toBe('I agree.');
+    expect(cleanReply('Verdict: Pro.\nReasons: it was better argued.', 'Judge', { others: ['Pro', 'Con'] })).toBe('Verdict: Pro.\nReasons: it was better argued.');
+    expect(cleanReply('PLACE: cellar\nCARRYING: lamp\nGOAL: find the key', 'Referee')).toBe('PLACE: cellar\nCARRYING: lamp\nGOAL: find the key');
     expect(hostOf(newSession(fmt('teach'), { topic: 't' }), 'student')).toBe('B');
   });
 
@@ -113,5 +115,15 @@ describe('every roundtable format', () => {
     expect(s.status).toBe('done');
     expect(prompts[prompts.length - 1].user).toContain('You: Forty hives.');
     expect(prompts[prompts.length - 1].user).toMatch(/using only what the person said/);
+  });
+});
+
+describe('the shared state', () => {
+  it('keeps every line of a long case file the referee writes, not just the first', async () => {
+    const caseFile = ['SECRET: the baker, for the recipe', 'SUSPECTS: the baker, the miller, the courier', 'CLUES: flour on a sleeve; a torn note; a key; a late delivery', 'LEARNED: nothing yet'].join('\n').padEnd(1500, ' ');
+    const { ask } = scripted((system) => (/Referee/.test(system) ? caseFile : 'The narrator speaks.'));
+    const s = await advance(newSession(fmt('mystery'), { topic: 'A theft', rounds: 1 }), { ask });
+    expect(s.state).toContain('CLUES: flour on a sleeve');
+    expect(s.state).toContain('LEARNED: nothing yet');
   });
 });

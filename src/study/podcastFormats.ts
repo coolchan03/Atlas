@@ -15,6 +15,8 @@ export interface PodcastFormat {
   style: string;
   /** Set when the format only works with this many speakers (a lecture is one teacher). Unset = the person chooses. */
   hosts?: 1 | 2 | 3;
+  /** Fewest speakers the format makes sense with (a debate needs two sides). With one installed voice the two are told apart by pitch. */
+  minHosts?: 2;
   /** Guidance for the planner on how the parts add up to this kind of episode. Empty = the plain plan. */
   plan: string;
   /** Guidance for the writer of each part. Empty = the plain writing prompt. */
@@ -24,6 +26,7 @@ export interface PodcastFormat {
 export const PODCAST_FORMATS: Record<PodcastStyle, PodcastFormat> = {
   casual: {
     id: 'casual', label: 'Two friends', blurb: 'Relaxed chat. One knows more, the other asks the "wait, why?" questions.',
+    minHosts: 2,
     style: 'friendly and relaxed, like two friends chatting',
     plan: '',
     write: 'Keep it a real conversation: short turns, one host reacts or asks a follow-up before the other explains, and they may drift to a related thought and come back.',
@@ -37,6 +40,7 @@ export const PODCAST_FORMATS: Record<PodcastStyle, PodcastFormat> = {
   },
   entertaining: {
     id: 'entertaining', label: 'Entertaining', blurb: 'Jokes, analogies and banter. Every fact still comes from your sources.',
+    minHosts: 2,
     style: 'entertaining and playful: banter, vivid analogies and light jokes, while every fact stays accurate',
     plan: 'Make each part have its own surprising angle on the material. If the sources allow, include one part that sorts myth from fact and one where the hosts quiz each other. The final part lands a memorable takeaway.',
     write: 'Be funny without being wrong: use analogies, playful teasing between the hosts and one running joke across the episode. Jokes never state new facts. Every real claim must come from the sources.',
@@ -48,12 +52,14 @@ export const PODCAST_FORMATS: Record<PodcastStyle, PodcastFormat> = {
   },
   debate: {
     id: 'debate', label: 'Debate', blurb: 'The hosts take different sides and weigh the evidence.',
+    minHosts: 2,
     style: 'a friendly debate: the hosts take different sides and weigh the evidence',
     plan: 'Shape it as a debate: opening positions, then rounds where each side answers the other\'s strongest point, then a closing where each says what the evidence supports.',
     write: 'The hosts disagree politely and answer each other\'s last point directly. Each side may only argue from the sources. Do not let them simply agree.',
   },
   interview: {
     id: 'interview', label: 'Interview', blurb: 'An interviewer questions an expert guest.',
+    minHosts: 2,
     style: 'an interview: A is the interviewer, B is the expert guest',
     plan: '', write: '',
   },
@@ -121,4 +127,7 @@ export function lengthPlan(minutes: number, tokensPerSecond?: number): LengthPla
 }
 
 /** The most speakers a format allows when the person asked for `wanted` (a format may fix the number). */
-export const hostsFor = (style: PodcastStyle | undefined, wanted: 1 | 2 | 3 | undefined): 1 | 2 | 3 => formatOf(style).hosts ?? wanted ?? 2;
+export const hostsFor = (style: PodcastStyle | undefined, wanted: 1 | 2 | 3 | undefined): 1 | 2 | 3 => {
+  const f = formatOf(style);
+  return f.hosts ?? Math.max(f.minHosts ?? 1, wanted ?? 2) as 1 | 2 | 3;
+};

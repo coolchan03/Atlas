@@ -83,7 +83,6 @@ const SetupView: React.FC<{ onStart: (s: Session) => void; onOpen: (s: Session) 
   );
 };
 
-const ROLE_COLORS = ['#0E7490', '#9A3412', '#4338CA', '#047857'];
 
 /** The buttons under the transcript: what can be done depends on whether it is running, stopped, finished or failed. */
 const Actions: React.FC<{ session: Session; working: boolean; listening: boolean; hasTurns: boolean; title: string; onRun: (s: Session) => void; onStop: () => void; onListen: () => void; onEpisode: () => void; onLeave: () => void; styles: Styles }> = ({ session, working, listening, hasTurns, title, onRun, onStop, onListen, onEpisode, onLeave, styles }) => {
@@ -106,6 +105,7 @@ const RunView: React.FC<{ session: Session; working: boolean; onRun: (s: Session
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
   const wide = useWideLayout(760);
+  const roleColors = [colors.primary, colors.success, colors.info, colors.textSecondary];
   const [reply, setReply] = useState('');
   const [listening, setListening] = useState(false);
   const listenRef = useRef(0);
@@ -141,7 +141,7 @@ const RunView: React.FC<{ session: Session; working: boolean; onRun: (s: Session
         const role = session.roles.find((r) => r.id === t.role);
         return (
           <View key={`${i}-${t.role}`} style={[styles.turn, role?.human && styles.turnYou]} testID={`roundtable-turn-${i}`}>
-            <Text style={[styles.who, { color: ROLE_COLORS[Math.max(0, session.roles.indexOf(role!)) % 4] }]}>{t.name}</Text>
+            <Text style={[styles.who, { color: roleColors[Math.max(0, session.roles.indexOf(role!)) % 4] }]}>{t.name}</Text>
             <Text style={styles.text}>{t.text}</Text>
             {!!t.image && <Image source={{ uri: `file://${resolveDocumentPath(t.image)}` }} style={styles.picture} accessibilityLabel={`Picture for ${t.name}'s turn`} testID={`roundtable-picture-${i}`} />}
           </View>
@@ -166,24 +166,33 @@ export const RoundtableScreen: React.FC = () => {
   const styles = useThemedStyles(createStyles);
   const [session, setSession] = useState<Session | null>(null);
   const [working, setWorking] = useState(false);
-  const stopRef = useRef(false);
-  useEffect(() => () => { stopRef.current = true; keepScreenOn(false, 'roundtable'); }, []);
+  // Each run has its own stop flag, and only the current run may touch the screen: leaving or starting another one can never
+  // be undone by a run that is still finishing its last turn.
+  const current = useRef<{ stopped: boolean } | null>(null);
+  const halt = () => { if (current.current) current.current.stopped = true; };
+  useEffect(() => () => { halt(); keepScreenOn(false, 'roundtable'); }, []);
 
   const keep = (s: Session) => { setSession(s); useRoundtables.getState().save(s); };
   const run = async (from: Session) => {
-    stopRef.current = false;
+    halt();
+    const mine = { stopped: false };
+    current.current = mine;
+    const live = () => current.current === mine;
     setWorking(true);
     setSession(from);
     keepScreenOn(true, 'roundtable'); // several model turns in a row: don't let the phone sleep and pause it
-    try { keep(await advance(from, { ask: askModel, shouldStop: () => stopRef.current, onUpdate: setSession, illustrate: (turn, sess) => illustrateScene(turn, sess, askModel) })); } finally { setWorking(false); keepScreenOn(false, 'roundtable'); }
+    try {
+      const done = await advance(from, { ask: askModel, shouldStop: () => mine.stopped, onUpdate: (s) => { if (live()) setSession(s); }, illustrate: (turn, sess) => illustrateScene(turn, sess, askModel) });
+      if (live()) keep(done); else useRoundtables.getState().save(done); // a run that was left still keeps what it wrote, without touching the screen
+    } finally { if (live()) { setWorking(false); keepScreenOn(false, 'roundtable'); } }
   };
-  const leave = () => { stopRef.current = true; setSession(null); };
+  const leave = () => { halt(); current.current = null; setWorking(false); keepScreenOn(false, 'roundtable'); setSession(null); };
 
   return (
     <SafeAreaView style={styles.fill} edges={['top']}>
       <ScreenHeader title={session ? formatById(session.formatId)?.label ?? 'Roundtable' : 'Roundtable'} onBack={session ? leave : undefined} />
       {session
-        ? <RunView session={session} working={working} styles={styles} onRun={(s) => void run(s)} onStop={() => { stopRef.current = true; }} onLeave={leave}
+        ? <RunView session={session} working={working} styles={styles} onRun={(s) => void run(s)} onStop={halt} onLeave={leave}
           onSend={(text) => { const next = playerSays(session, text); keep(next); void run(next); }} />
         : <SetupView styles={styles} onStart={(s) => void run(s)} onOpen={setSession} />}
     </SafeAreaView>

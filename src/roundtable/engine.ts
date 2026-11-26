@@ -43,6 +43,8 @@ const RECENT = 4;
 /** When this many turns are older than the recent ones, they are folded into the summary. */
 const COMPACT_AT = 4;
 const MAX_REPLY = 1400;
+/** The longest shared state kept: the mystery's case file (about 200 words) is the largest the formats ask for. */
+const MAX_STATE = 1800;
 
 export function newSession(format: RoundtableFormat, opts: { topic: string; rounds?: number; notes?: string; id?: string; pictures?: boolean }): Session {
   const rounds = Math.max(1, Math.min(format.maxRounds, Math.round(opts.rounds ?? format.defaultRounds)));
@@ -55,13 +57,16 @@ export function newSession(format: RoundtableFormat, opts: { topic: string; roun
 const line = (t: Turn) => `${t.name}: ${t.text}`;
 
 /** The model's reply as a clean spoken turn: no reasoning, no "Name:" prefix, no leftover markup, a sane length. */
-export function cleanReply(raw: string, name: string): string {
+export function cleanReply(raw: string, name: string, opts: { others?: string[]; limit?: number } = {}): string {
+  const { others = [], limit = MAX_REPLY } = opts;
   let t = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/\*\*|__/g, '').trim();
   t = t.replace(new RegExp(`^\\s*(?:\\[?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]?)\\s*[:\\-]\\s*`, 'i'), '');
-  // A model sometimes goes on to write the next speaker's line: keep only this role's turn.
-  const next = t.search(/\n\s*[A-Z][A-Za-z ]{1,20}:\s/);
+  // A model sometimes goes on to write another role's line: keep only this role's turn. Only the names of the other roles
+  // count, so a state written as PLACE: / CARRYING: lines, or a verdict followed by Reasons:, is kept whole.
+  const names = others.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const next = names.length ? t.search(new RegExp(`\\n\\s*(?:${names.join('|')}):\\s`)) : -1;
   if (next > 0) t = t.slice(0, next);
-  return t.trim().slice(0, MAX_REPLY);
+  return t.trim().slice(0, limit);
 }
 
 interface TurnInput {
@@ -73,6 +78,10 @@ interface TurnInput {
   state?: string;
   summary?: string;
   recent?: Turn[];
+  /** Names of the other roles, so a reply that runs on into their lines is cut there. */
+  others?: string[];
+  /** Longest reply kept (a shared state is longer than a spoken turn). */
+  limit?: number;
 }
 
 /** The prompts for one role's turn. Exported so the other places where one agent speaks for another use the same shape. */
@@ -93,7 +102,7 @@ function turnPrompt(i: TurnInput): { system: string; user: string } {
 /** One role speaks once. The single place a role's turn is built, asked and cleaned. */
 async function runRoleTurn(input: TurnInput, ask: Ask): Promise<string> {
   const { system, user } = turnPrompt(input);
-  return cleanReply(await ask(system, user), input.role.name);
+  return cleanReply(await ask(system, user), input.role.name, { others: input.others, limit: input.limit });
 }
 
 /** Folds the turns older than the recent ones into the summary (one short model call). */
@@ -131,13 +140,13 @@ export async function advance(session: Session, deps: Deps): Promise<Session> {
     try {
       s = await compact(s, deps.ask);
       const visible = s.turns.filter((t) => !t.hidden);
-      const reply = await runRoleTurn({ role, step, format, topic: s.topic, notes: s.notes, state: s.state, summary: s.summary, recent: visible.slice(-RECENT) }, deps.ask);
+      const reply = await runRoleTurn({ role, step, format, topic: s.topic, notes: s.notes, state: s.state, summary: s.summary, recent: visible.slice(-RECENT), others: step.kind === 'hidden' ? [] : s.roles.filter((r) => r.id !== role.id).map((r) => r.name), limit: step.kind === 'hidden' ? MAX_STATE : MAX_REPLY }, deps.ask);
       if (!reply) throw new Error(`${role.name} did not answer.`);
       if (deps.shouldStop?.() && step.kind === 'say') return { ...s, status: 'stopped' }; // stopped while it was writing: drop the half turn
       s = {
         ...s, cursor: s.cursor + 1,
         turns: [...s.turns, { role: role.id, name: role.name, text: reply, hidden: step.kind === 'hidden' }],
-        state: step.kind === 'hidden' ? reply.slice(0, 700) : s.state,
+        state: step.kind === 'hidden' ? reply.slice(0, MAX_STATE) : s.state,
       };
       if (step.endsIf && new RegExp(step.endsIf).test(reply)) s = { ...s, cursor: closingIndex(s.steps, s.cursor) };
       if (s.pictures && role.draws && step.kind === 'say' && deps.illustrate) s = await drawLast(s, deps);
@@ -180,7 +189,10 @@ export function wrapUp(session: Session): Session {
 /** How far through the session is: the steps done out of all of them. */
 export const progress = (s: Session): { done: number; total: number } => ({ done: Math.min(s.cursor, s.steps.length), total: s.steps.length });
 
-/** The speaker letter used to pick a voice (A, B or C) for a role: each role keeps the same voice throughout. */
+/**
+ * The speaker letter used to pick a voice (A, B or C) for a role: each role keeps the same voice throughout. Only three voices
+ * are cast, so a format with four speaking roles (the writers' room) shares one voice between two of them.
+ */
 export const hostOf = (s: Session, roleId: string): 'A' | 'B' | 'C' => (['A', 'B', 'C'] as const)[Math.max(0, s.roles.filter((r) => !r.human).findIndex((r) => r.id === roleId)) % 3];
 
 /** The visible transcript as plain text to share or save. */

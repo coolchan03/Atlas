@@ -1,6 +1,7 @@
 /** Roundtable: roles take turns and the person joins in where the format asks. Fakes only the AI. */
 import { installNativeBoundary, requireRTL } from '../harness/nativeBoundary';
 
+let mockHold: Promise<void> | null = null;
 jest.mock('../../src/atlasTools/models', () => ({ ensureTextModel: async () => undefined }));
 jest.mock('../../src/services/llmJobQueue', () => ({ runBackgroundJob: (fn: () => Promise<unknown>) => fn() }));
 jest.mock('../../src/services/llm', () => ({
@@ -9,6 +10,7 @@ jest.mock('../../src/services/llm', () => ({
     getPerformanceStats: () => ({ lastTokensPerSecond: 0, lastTimeToFirstToken: 0, lastTokenCount: 0 }),
     generateResponse: async (msgs: { content: string }[]) => {
       const system = msgs[0].content; const user = msgs[1].content;
+      if (mockHold) await mockHold;
       if (/You are Judge/.test(system)) return 'Verdict: Pro. The cost argument was better supported.';
       if (/You are Pro/.test(system)) return 'Pro: Cars crowd out people, and the data shows it.';
       if (/You are Con/.test(system)) return 'Con: Shops lose customers who drive in.';
@@ -70,4 +72,18 @@ it('a game waits for you, then carries on from what you did', async () => {
   await rtl.waitFor(() => expect(view.getByText(/The door opens onto a cellar/)).toBeTruthy(), { timeout: 8000 });
   expect(view.getByText('I open the door')).toBeTruthy(); // your own turn is in the transcript
   expect(view.queryByText(/PLACE: cellar/)).toBeNull(); // the referee's notes stay hidden
+}, 30000);
+
+it('leaving while a turn is being written does not bring the old session back when that turn finishes', async () => {
+  const { rtl, view } = mount();
+  let release: () => void = () => undefined;
+  mockHold = new Promise<void>((r) => { release = r; });
+  rtl.fireEvent.changeText(view.getByTestId('roundtable-topic'), 'Should cities ban cars downtown?');
+  rtl.fireEvent.press(view.getByTestId('roundtable-start'));
+  await rtl.waitFor(() => expect(view.getByTestId('roundtable-speaking')).toBeTruthy());
+  rtl.fireEvent.press(view.getByLabelText('Back'));
+  expect(view.getByTestId('roundtable-setup')).toBeTruthy();
+  await rtl.act(async () => { release(); mockHold = null; await new Promise((r) => setTimeout(r, 100)); });
+  expect(view.queryByTestId('roundtable-run')).toBeNull(); // still on the setup screen
+  expect(view.getByTestId('roundtable-setup')).toBeTruthy();
 }, 30000);

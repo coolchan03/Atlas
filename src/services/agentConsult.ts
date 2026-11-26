@@ -82,6 +82,7 @@ export async function consultSpecialist(args: { question?: unknown; agent?: unkn
   if (!ok) return `The user did not want to ask ${specialist.name}. Answer it yourself and do not offer again.`;
   if (signal?.aborted) throw new Error('The question was cancelled before it was asked.');
   const reply = (await askModel(agentPromptWithLessons(specialist), question)).trim();
+  if (signal?.aborted) throw new Error('The question was cancelled before the answer came back.'); // nothing is changed for a turn that was cancelled
   if (!reply) return `${specialist.name} did not answer. Answer it yourself.`;
   let handedOver = '';
   if (handoff) {
