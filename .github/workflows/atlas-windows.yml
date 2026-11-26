@@ -175,4 +175,10 @@ jobs:
         run: |
           VERSION=$(node -p "require('./desktop/package.json').version")
           TAG="atlas-windows-${VERSION}-${{ github.run_number }}"
-          gh release create "$TAG" --target "${{ github.sha }}" --title "Atlas for Windows ${VERSION} (build ${{ github.run_number }})" --notes "Windows installer, portable exe and zip. Install the Setup exe, or run the Portable exe with no install. The AI engine (llama.cpp) is bundled; download a model inside the app." desktop/dist/*.exe desktop/dist/*.zip desktop/dist/latest.yml desktop/dist/*.blockmap
+          FILES="desktop/dist/*.exe desktop/dist/*.zip desktop/dist/latest.yml desktop/dist/*.blockmap"
+          NOTES="Windows installer, portable exe and zip. Install the Setup exe, or run the Portable exe with no install. The AI engine (llama.cpp) is bundled; download a model inside the app."
+          # --latest=false: the Android app's updater reads /releases/latest and must keep finding the Android build there.
+          gh release create "$TAG" --latest=false --target "${{ github.sha }}" --title "Atlas for Windows ${VERSION} (build ${{ github.run_number }})" --notes "$NOTES" $FILES
+          # The installed Windows app looks for updates here, and only here (see desktop/package.json "publish").
+          gh release delete atlas-windows-latest --yes --cleanup-tag || true
+          gh release create atlas-windows-latest --latest=false --target "${{ github.sha }}" --title "Atlas for Windows (latest)" --notes "$NOTES This release is replaced by every Windows build; the app checks it for updates." $FILES

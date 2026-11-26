@@ -106,10 +106,8 @@
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "coolchan03",
-        "repo": "Atlas",
-        "releaseType": "release"
+        "provider": "generic",
+        "url": "https://github.com/coolchan03/Atlas/releases/download/atlas-windows-latest"
       }
     ],
     "protocols": [

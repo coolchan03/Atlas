@@ -74,6 +74,7 @@ jobs:
           node scripts/map-test.mjs http://localhost:4173/ /tmp/monaco.map
           node scripts/video-test.mjs http://localhost:4173/
           node scripts/nearby-ui-test.mjs http://localhost:4173/
+          node scripts/fatal-test.mjs http://localhost:4173/
       - name: WebGPU engine (software GPU; informational, does not block)
         continue-on-error: true
         working-directory: web

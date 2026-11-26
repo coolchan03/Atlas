@@ -242,7 +242,13 @@ function registerIpc() {
   ipcMain.handle('win:close', () => win?.close());
   ipcMain.handle('win:titlebar', () => undefined);
   ipcMain.handle('update:check', async () => checkForUpdates());
-  ipcMain.handle('update:install', () => { try { require('electron-updater').autoUpdater.quitAndInstall(); } catch { /* not packaged */ } });
+  ipcMain.handle('update:install', async () => {
+    try {
+      const { autoUpdater } = require('electron-updater');
+      await autoUpdater.downloadUpdate(); // the download started by the check is shared, not repeated
+      autoUpdater.quitAndInstall();
+    } catch (e) { return { error: String(e.message || e) }; }
+  });
 }
 
 async function checkForUpdates() {

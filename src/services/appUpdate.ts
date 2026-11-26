@@ -37,8 +37,14 @@ export function installedBuild(): number | null {
 
 export interface UpdateCheck { current: number | null; update: UpdateInfo | null }
 
+/** The web and Windows builds set this: they update themselves (service worker / the Windows installer), never with an Android package. */
+interface PlatformUpdater { check(): Promise<UpdateCheck>; install(update: UpdateInfo, onProgress: (fraction: number) => void): Promise<'started' | 'needs-permission'> }
+const platformUpdater = (): PlatformUpdater | undefined => (globalThis as { __ATLAS_UPDATER__?: PlatformUpdater }).__ATLAS_UPDATER__;
+
 /** Asks GitHub for the latest published build. Throws with a readable message when it cannot be reached. */
 export async function checkForUpdate(): Promise<UpdateCheck> {
+  const own = platformUpdater();
+  if (own) return own.check();
   const current = installedBuild();
   const r = await fetch(`https://api.github.com/repos/${ATLAS_REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
   if (r.status === 404) return { current, update: null };
@@ -51,6 +57,8 @@ export class UpdateCancelled extends Error { constructor() { super('Download can
 
 /** `onCancel` is given a function that stops the download (the promise then rejects with UpdateCancelled). */
 export async function downloadAndInstall(update: UpdateInfo, onProgress: (fraction: number) => void, onCancel?: (cancel: () => void) => void): Promise<'started' | 'needs-permission'> {
+  const own = platformUpdater();
+  if (own) return own.install(update, onProgress);
   if (Platform.OS !== 'android' || !NativeModules.AtlasDevice?.installApk) throw new Error('Updating from the app works on Android only.');
   const RNFS = require('react-native-fs');
   const dir = `${RNFS.CachesDirectoryPath}/updates`;
