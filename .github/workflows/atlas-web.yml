@@ -132,6 +132,10 @@ jobs:
         if: steps.pages.outputs.enabled == 'true'
         with:
           path: site
+      # GitHub lists a just-uploaded artifact a moment late; deploying at once fails now and then with "No artifacts named github-pages".
+      - name: Let the uploaded site settle
+        if: steps.pages.outputs.enabled == 'true'
+        run: sleep 20
       - id: deployment
         if: steps.pages.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4

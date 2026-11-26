@@ -32,6 +32,7 @@ describe('Q2 (behavioral) — unquoted-key tool call renders no result bubble', 
     // Correct: the calculator ran, so its result bubble is shown. Today the unquoted-key call is dropped by
     // the parser → the tool never runs → no tool-result bubble → RED. (A quoted key DOES render it — the
     // falsification control confirms this same assertion passes when the key is quoted.)
-    expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull();
+    // Waited for, not read once: on a slow machine the tool loop can finish a little after the settle delay.
+    await h.rtl.waitFor(() => { expect(h.view!.queryByTestId('tool-result-label-calculator')).not.toBeNull(); });
   });
 });
