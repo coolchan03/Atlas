@@ -1,5 +1,6 @@
 import { runPhoto } from '../../../src/photo/service';
 import { modeById, PHOTO_MODES } from '../../../src/photo/modes';
+import { styleKeywords } from '../../../src/skills/photoStyles';
 
 const pic = { uri: 'file:///photo.jpg', mimeType: 'image/jpeg' };
 const scripted = () => {
@@ -46,7 +47,7 @@ describe('photo studio', () => {
   it('a sketch is described and painted from the description in the chosen look, with no passage', async () => {
     const s = scripted();
     const r = await runPhoto({ mode: modeById('sketch'), choiceId: 'watercolor', picture: pic }, s.deps);
-    expect(s.draws).toEqual([{ description: 'A house with a red roof and a tall tree.', style: 'watercolor painting, soft edges' }]);
+    expect(s.draws).toEqual([{ description: 'A house with a red roof and a tall tree.', style: styleKeywords('watercolor') }]);
     expect(r.text).toBe('');
     expect(r.image).toBe('/Documents/painted.png');
   });

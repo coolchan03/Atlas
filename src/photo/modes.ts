@@ -3,7 +3,9 @@
  * narrator, a time for the time machine, a look for the picture). The service reads it and runs the steps.
  */
 
-export interface PhotoChoice { id: string; label: string; /** Goes into the prompt. */ text: string; /** How a drawn picture should look. */ style?: string }
+import { styleById } from '../skills/photoStyles';
+
+export interface PhotoChoice { id: string; label: string; /** Goes into the prompt. */ text: string; /** How a drawn picture should look. */ style?: string; /** One sentence shown under the choice. */ detail?: string }
 
 export type PhotoModeId = 'narrate' | 'time' | 'sketch';
 
@@ -16,6 +18,13 @@ export interface PhotoMode {
   choices: PhotoChoice[];
   /** The mode makes a picture too (when an image model is chosen). */
   draws: boolean;
+}
+
+/** The looks a sketch can be painted in, from the shared style guide (the same one the photo-styles skill carries). */
+const SKETCH_LOOKS = ['realistic', 'anime', 'cartoon', 'watercolor', 'oil', 'pencil', 'pixel', 'render3d', 'comic', 'vector'];
+function lookOf(id: string): PhotoChoice {
+  const s = styleById(id)!;
+  return { id: s.id, label: s.label, text: s.label.toLowerCase(), style: s.keywords, detail: s.summary };
 }
 
 export const PHOTO_MODES: PhotoMode[] = [
@@ -42,12 +51,7 @@ export const PHOTO_MODES: PhotoMode[] = [
   {
     id: 'sketch', label: 'Sketch to picture', blurb: 'Photograph a drawing. Atlas describes it and paints a finished picture from the description. It re-imagines the sketch; it does not trace the lines.',
     choiceLabel: 'LOOK', draws: true,
-    choices: [
-      { id: 'watercolor', label: 'Watercolour', text: 'a watercolour painting', style: 'watercolor painting, soft edges' },
-      { id: 'photo', label: 'Photograph', text: 'a realistic photograph', style: 'realistic photograph, natural light' },
-      { id: 'cartoon', label: 'Cartoon', text: 'a colourful cartoon', style: 'colourful cartoon, clean lines' },
-      { id: 'oil', label: 'Oil painting', text: 'an oil painting', style: 'oil painting, rich colour' },
-    ],
+    choices: SKETCH_LOOKS.map((id) => lookOf(id)),
   },
 ];
 

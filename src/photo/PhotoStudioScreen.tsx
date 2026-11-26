@@ -81,6 +81,7 @@ export const PhotoStudioScreen: React.FC = () => {
             </TouchableOpacity>
           ))}
         </View>
+        {!!choiceOf(mode, choiceId).detail && <Text style={styles.hint} testID="photo-choice-detail">{choiceOf(mode, choiceId).detail}</Text>}
         {!vision.selectedCanSee && (
           <View style={styles.card} testID="photo-vision-hint">
             <Text style={styles.text}>{vision.selectedName ? `${vision.selectedName} cannot see pictures.` : 'No model is selected.'}{vision.others.length ? ' Use one that can:' : ' Download a model with a vision file (the eye icon in My models) to use the Photo studio.'}</Text>

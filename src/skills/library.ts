@@ -3,6 +3,7 @@
  * (nothing is run). Each description says when it fits, because that is what Atlas matches your message against.
  */
 import type { ParsedSkill } from './parseSkill';
+import { photoStyleGuide } from './photoStyles';
 
 const skill = (name: string, description: string, body: string): ParsedSkill => ({ name, description, body, userInvocable: true, needs: [] });
 
@@ -65,6 +66,13 @@ export const SKILL_LIBRARY: ParsedSkill[] = [
     'Do not give the answer or the solution. Reply with one short question that moves the user one step forward, and wait. Start from what they already know. If they are stuck after two questions, give a small hint, not the answer. Praise correct reasoning briefly. If they ask you outright to just tell them, tell them once, then ask a question to check they understood. One question per reply.'),
   skill('morphological-analysis', 'Break a problem into parameters and options in a grid, then combine them to list every possible solution (morphological analysis).',
     'Use morphological analysis. 1) Name the problem. 2) List 4 to 6 independent parameters (the dimensions of any solution). 3) Under each, list 3 to 5 options as a table with one column per parameter. 4) Say which combinations cannot work together and why. 5) Pick 3 to 5 promising combinations from what is left, and describe each in two sentences. Keep the grid in a markdown table so it can be copied. If the full number of combinations is large, say how many there are rather than listing all.'),
+
+  // --- Pictures ---
+  {
+    ...skill('photo-styles', 'Describe or explain what a photo or picture style looks like in detail (realistic, cinematic, vintage, cartoon, anime, manga, comic, watercolor, oil painting, pixel art, 3D render and more), compare them, and write image prompts in a chosen style.',
+      "Use the style guide in the reference file. Name the style the user means. Describe it in this order, in the guide's words: look, colour, light, texture, composition, mood. Then give the prompt line for an image model and what to avoid. If the user wants a picture in a style, write one prompt under 60 words: the subject and what it is doing first, then the style keywords. If two styles could fit, compare them in a table with the rows look, colour, light and best for. If the style is not in the guide, describe it the same way from what you know and say it is not in the guide. Describe traits and techniques; never ask for a living artist's style by name."),
+    resources: [{ name: 'photo-styles.md', text: photoStyleGuide() }],
+  },
 
   // --- Style and formatting ---
   skill('phenomenological-description', 'Describe something only as it is directly observed: sensory, concrete and first-hand, with no explanation, summary or opinion.',

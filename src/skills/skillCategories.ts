@@ -6,6 +6,8 @@ export const SKILL_CATEGORIES: SkillCategory[] = [
     names: ['summarize', 'explain-simply', 'code-explainer', 'socratic-method'] },
   { id: 'make', title: 'Make something', hint: 'Quizzes, flashcards, tables, notes and ideas',
     names: ['study-quiz', 'flashcards', 'text-to-table', 'meeting-notes', 'brainstorm'] },
+  { id: 'pictures', title: 'Pictures', hint: 'Describe image styles in detail and write image prompts',
+    names: ['photo-styles'] },
   { id: 'rewrite', title: 'Rewrite and fix writing', hint: 'Proofread, change the tone, answer messages',
     names: ['proofread', 'rewrite-tone', 'email-reply'] },
   { id: 'language', title: 'Change how it is written', hint: 'Plain, simple or controlled language and special styles',
