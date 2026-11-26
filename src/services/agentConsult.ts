@@ -66,16 +66,28 @@ export function specialistRoster(): string {
 const NO_FIT = 'No other agent fits this question, so answer it yourself.';
 
 /** The tool: choose the specialist, ask the person, ask the specialist, hand the answer back with where it came from. */
-export async function consultSpecialist(args: { question?: unknown; agent?: unknown }, signal?: AbortSignal): Promise<string> {
+export async function consultSpecialist(args: { question?: unknown; agent?: unknown; stay?: unknown }, signal?: AbortSignal): Promise<string> {
   const question = String(args.question ?? '').trim();
   if (!question) throw new Error('Missing required parameter: question');
   const { agents, activeAgentId } = useAgentStore.getState();
   const specialist = pickSpecialist(question, typeof args.agent === 'string' ? args.agent : undefined, consultable(agents, activeAgentId));
   if (!specialist) return NO_FIT;
-  const ok = await confirm(`Ask ${specialist.name}?`, `The assistant wants to ask ${specialist.name}:\n\n"${question.slice(0, 400)}"\n\n${specialist.name} sees only this question, not the rest of your chat.`, 'Ask');
+  // "hand off" moves the rest of the chat to the specialist; the default is a single question that leaves the chat where it is.
+  const handoff = args.stay === false || String(args.stay).toLowerCase() === 'false';
+  const ok = await confirm(
+    handoff ? `Continue with ${specialist.name}?` : `Ask ${specialist.name}?`,
+    `The assistant wants to ask ${specialist.name}:\n\n"${question.slice(0, 400)}"\n\n${specialist.name} sees only this question${handoff ? ', then takes over this chat from your next message' : ', not the rest of your chat'}.`,
+    handoff ? 'Continue' : 'Ask',
+  );
   if (!ok) return `The user did not want to ask ${specialist.name}. Answer it yourself and do not offer again.`;
   if (signal?.aborted) throw new Error('The question was cancelled before it was asked.');
   const reply = (await askModel(agentPromptWithLessons(specialist), question)).trim();
   if (!reply) return `${specialist.name} did not answer. Answer it yourself.`;
-  return `Asked ${specialist.name}. Their answer:\n${reply}\n\nGive this to the user as ${specialist.name}'s answer. Keep numbers, amounts and safety steps exactly as written.`;
+  let handedOver = '';
+  if (handoff) {
+    const { useChatStore } = require('../stores');
+    const id: string | null = useChatStore.getState().activeConversationId;
+    if (id) { useChatStore.getState().setConversationAgent(id, specialist.id); handedOver = ` This chat now continues with ${specialist.name} from the next message: tell the user so in one sentence.`; }
+  }
+  return `Asked ${specialist.name}. Their answer:\n${reply}\n\nGive this to the user as ${specialist.name}'s answer. Keep numbers, amounts and safety steps exactly as written.${handedOver}`;
 }

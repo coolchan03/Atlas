@@ -323,6 +323,7 @@ export const AVAILABLE_TOOLS: ToolDefinition[] = [
     parameters: {
       question: { type: 'string', description: 'The question, written so it makes sense on its own (the other agent does not see this chat)', required: true },
       agent: { type: 'string', description: 'The name of the agent to ask, when you know which one fits' },
+      stay: { type: 'string', description: "'false' to hand the whole conversation over to that agent (when the user is clearly starting a long chat about their subject). Leave out to ask one question and stay in this chat", enum: ['true', 'false'] },
     },
   },
   {

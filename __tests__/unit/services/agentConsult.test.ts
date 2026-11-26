@@ -71,4 +71,24 @@ describe('agent consults', () => {
     expect(consultable(agents()).some((a) => a.id === 'home-chef')).toBe(false);
     useAgentStore.getState().updateAgent(chef.id, { consultable: undefined });
   });
+
+  it('can hand the chat over to the specialist after the person agrees', async () => {
+    const { useChatStore } = require('../../../src/stores');
+    const id = useChatStore.getState().createConversation('m1', 'Dinner');
+    useChatStore.setState({ activeConversationId: id });
+    const alert = answerAlert('Continue');
+    const out = await consultSpecialist({ question: 'Plan dinner for four from rice and eggs', stay: 'false' });
+    expect(alert).toHaveBeenCalledWith('Continue with Home Chef?', expect.stringContaining('takes over this chat'), expect.anything(), expect.anything());
+    expect(useChatStore.getState().conversations.find((c: { id: string }) => c.id === id)?.agentId).toBe('home-chef');
+    expect(out).toMatch(/continues with Home Chef/);
+  });
+
+  it('leaves the chat alone when the person declines the handoff', async () => {
+    const { useChatStore } = require('../../../src/stores');
+    const id = useChatStore.getState().createConversation('m1', 'Dinner 2');
+    useChatStore.setState({ activeConversationId: id });
+    answerAlert('Deny');
+    await consultSpecialist({ question: 'Plan dinner for four from rice and eggs', stay: 'false' });
+    expect(useChatStore.getState().conversations.find((c: { id: string }) => c.id === id)?.agentId).toBeUndefined();
+  });
 });
